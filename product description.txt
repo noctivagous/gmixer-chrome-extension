@@ -1,0 +1,257 @@
+gMixer — Product Description
+=============================
+
+WHAT IT IS
+----------
+gMixer is a simple, focused Opera/Chrome extension for re-theming visited web
+pages. One job: let the user restyle the pages they browse, without having to
+write CSS. Everything else (navigation helpers) is optional and off by default.
+
+Unlike KeyPilot (keyboard-first browsing suite with many popovers/modes),
+gMixer has exactly ONE popover: Settings. That popover lives in popup.html —
+there is no separate options page and no separate launcher/mode UI.
+
+
+CORE PURPOSE
+------------
+Re-theme all web pages: fonts, colors, images, and small visual effects,
+applied consistently as the user browses, without the page "flashing" its
+original look before the skin applies.
+
+
+INJECTION PIPELINE (why timing matters)
+----------------------------------------
+- document_start script
+    Injects the base override stylesheet before the page's own CSS paints.
+    Prevents a flash of the original site theme before gMixer's skin applies.
+
+- document_end script
+    Runs DOM-dependent logic once the initial DOM is built: font application
+    per content category, image discovery for CSS filters, structural
+    restyle (headers/paragraphs/lists) that needs real nodes to target.
+
+- MutationObserver
+    Watches for DOM changes after load (SPA route changes, infinite scroll,
+    lazy-loaded images/sections, ads swapping content) and re-applies the
+    active restyle rules to newly added nodes so the theme doesn't "wear off"
+    as the page changes under the user.
+
+Together: start (prevent flash) -> end (apply to initial DOM) -> observe
+(keep it applied as the page mutates).
+
+
+FEATURE 1: COLOR THEMING & COLOR PICKER (COLOR THEORY)
+---------------------------------------------------------
+Instead of asking the user to pick 4-5 unrelated colors by hand, the picker
+generates a matching palette from ONE base color the user chooses, using
+standard color-theory relationships:
+- Analogous  — hues neighboring the base hue (calm, cohesive palettes)
+- Complementary — base hue + its direct opposite (high contrast, "pop" accents)
+- Split-complementary — base hue + the two hues adjacent to its opposite
+  (contrast with less tension than straight complementary)
+- (Stretch) Triadic / monochromatic as additional scheme options later.
+
+Output of the picker maps onto the same page roles used for restyling:
+background, body text, headings/accent, links, borders. The user picks a
+base color + a scheme; gMixer computes the rest and lets them nudge
+individual roles afterward. An intensity slider (0–100) blends the theme
+palette toward a light sample of the live page's own colors so restyle
+feels like a remix of *this* site rather than a flat paint-over. This
+palette feeds Features 2-6 below (fonts, filters, clipping, effects,
+theme packs) so a "look" is generated from one decision, not five
+separate color pickers.
+
+
+FEATURE 2: FONT LIBRARY & TYPOGRAPHY TARGETS
+-----------------------------------------------
+Font source: an initial batch of a few dozen fonts downloaded from
+Peter Wiegel's font site (https://www.peter-wiegel.de/) — all freeware,
+explicitly licensed for commercial/unrestricted use (per the site's own
+FAQ), including calligraphy/script faces alongside more conventional ones.
+Bundle license files as required and keep an attribution/credits entry in
+the extension (Settings > About) even though the license doesn't strictly
+require it, since Wiegel's FAQ asks that reworked fonts stay freely licensed
+and be renamed if modified — good practice to credit the source.
+
+Fonts are organized into categories for browsing/picking, e.g.:
+- Calligraphy / script
+- Technical / engineering (blueprint, drafting-style faces)
+- Matrix / display (digital, LCD, "hacker terminal" faces)
+- (more categories added over time as the library grows)
+
+Typography targets — the user styles each of these independently, same
+"per-role" model as the color picker:
+- Headers (h1-h6)
+- Paragraph / body text
+- Captions (figcaption, small/caption-like text, list items)
+- Upload your own font (custom @font-face) and assign it to any target
+  above, same as a bundled font.
+
+
+FEATURE 3: IMAGE CSS FILTERS
+------------------------------
+- Apply a CSS filter (grayscale, sepia, invert, duotone, custom filter())
+  to all images and background-images on the page.
+- Single global filter state per page/site, toggleable from Settings.
+- Filter color stops (e.g. duotone shadow/highlight) can pull from the
+  Feature 1 generated palette instead of being picked separately.
+
+
+FEATURE 4: CLIPPING / CORNER SHAPES
+--------------------------------------
+Scoped to Opera GX's current Chromium engine only — no cross-browser CSS
+fallback needed. This lets us use `corner-shape` directly (superellipse/
+squircle/notch corner styles) without a `clip-path`-only compatibility path,
+since we don't need to support Firefox/Safari or older Chromium releases.
+
+A dedicated section for reshaping element corners via CSS clipping
+(`clip-path` and `corner-shape`), independent from color/font/image styling:
+- Round selected corners (e.g. squircle/superellipse rounding on cards,
+  images, buttons) for a softer look.
+- Clip/notch other corners (angled/cut corners) for a sharper, "cyber/HUD"
+  look — the two can be mixed per element (e.g. round top-left, clip
+  bottom-right) for an asymmetric tech aesthetic.
+- Scope selector for which elements it applies to (e.g. images, cards/
+  containers, buttons) similar to the image-filter scope control.
+
+
+FEATURE 5: EFFECTS
+--------------------
+Unlike KeyPilot (which stays deliberately minimal/utilitarian since it's a
+productivity tool), gMixer leans INTO heavier visual effects and animation
+as a selling point for the GX/gaming audience — "defaults are for NPCs" is
+the same audience that installs animated wallpapers and RGB mods, so effects
+here should feel closer to that than to a subtle accessibility feature.
+
+- Glowing (text/element glow via CSS, animated pulse variant available)
+- Flashing (attention/accent flashing effect)
+- Cursor mods (custom cursor styles, including animated/trailing cursors)
+- Animated gradients / background motion (slow shifting hue or gradient pan)
+- More animation presets over time (e.g. flicker, scanline/CRT overlay,
+  chromatic aberration pulse) — still CSS/CSS-animation-driven where
+  possible for performance, but not restricted to "lightweight only" the
+  way a productivity tool would be.
+- Glow color defaults to the Feature 1 accent color when not overridden.
+
+
+FEATURE 6: THEME PACKS
+------------------------
+- A Theme Pack is a precustomized bundle that composes the primitives above
+  (color scheme + fonts per target + image filter + clipping + effects)
+  into one one-click "look."
+- Theme Packs are the install-and-go path; manual per-category tuning
+  (Features 1-5) is the advanced/custom path underneath.
+
+CUSTOMIZATION PHILOSOPHY: defaults-first, not blank-slate.
+Every section (color, fonts, filters, clipping, effects) ships with a
+sensible, already-good-looking default/theme pack active out of the box —
+the user should be able to install and immediately have something that
+looks finished, then discover the underlying controls and start tuning
+individual roles. Nothing should require configuration before it looks
+good; customization is what you do to make it "yours" after the fact, not
+what's required to make it usable at all.
+
+
+FEATURE 7 (OPT-IN, OFF BY DEFAULT): NAVIGATION, IMPORTED FROM KEYPILOT
+------------------------------------------------------------------------
+Everything in this section is disabled by default and lives behind a single
+"Enable navigation keys" checkbox in Settings. Nothing here binds a key
+unless the user explicitly turns it on (avoids the Opera GX Alt-key-style
+complaint of an extension/browser silently owning a key).
+
+- Hover outline algorithm (imported from KeyPilot's highlight-manager):
+  draws an outline around the element under the cursor/keyboard focus.
+  Used both as the visual affordance for "Click Element" below, and
+  available as a general pointer-aid on its own.
+  Difference from KeyPilot: KeyPilot's outline is a static/instant highlight
+  (utilitarian, no animation, keeps focus on speed). gMixer's version adds
+  an animated hover-in transition (e.g. outline draw-on, glow pulse, or
+  color sweep using the Feature 1 palette) — same underlying detection
+  algorithm, restyled to match the "heavier effects" positioning above.
+- Click Element (F key): click the currently outlined/highlighted element
+  without using the mouse.
+- Back / Forward (right-handed layout only, minimal key set — e.g. F/D/R):
+  basic tab history navigation. No full KeyPilot keyboard-layout system,
+  no left-handed layout, no configurable rebinding — just three fixed keys
+  the user can turn on or off.
+
+
+SETTINGS POPOVER (in-page, Popover API)
+----------------------------------------
+The single UI surface for the whole extension. It is NOT the tiny toolbar
+popup — it is a large in-page element using the HTML Popover API
+(`#gmixer-settings` with `popover="manual"`), centered over the page with
+a blurred `::backdrop`. The toolbar action and Alt+M only toggle it open.
+
+Layout (print / baseline grid: 8px module, 24px baseline):
+- Titlebar (48px): brand, per-site toggle, <kbd>Alt</kbd>+<kbd>M</kbd>, close
+- Left rail (192px): vertical section tabs
+- Main column: section controls
+- Preview strip (240px): live mini-page WYSIWYG of current parameters
+
+Sections:
+1. Theme Pack picker (one-click presets + palette swatches)
+2. Color (base color + scheme + intensity + per-role overrides)
+3. Fonts (typeface-rendered listbox per header / paragraph / captions)
+4. Image filter (preset + custom, can pull colors from step 2)
+5. Clipping (corner rounding / clip presets + scope selector)
+6. Effects (glow / flash / cursor, each toggleable)
+7. Navigation (opt-in checkbox + the 3 nav keys, off by default)
+8. Per-site enable/disable toggle (titlebar)
+
+Launch:
+- Toolbar icon → chrome.action.onClicked → content script toggle
+- Alt+M → chrome.commands + content-script keydown fallback
+- Remappable via chrome://extensions/shortcuts (Opera GX: equivalent)
+
+
+ENGINEERING FOUNDATION (set up from the start, not bolted on later)
+----------------------------------------------------------------------
+Even though gMixer has only one popover, that popover has many controls
+(color scheme picker, per-target font pickers, filter presets, clipping
+presets/scope, effect toggles, per-site overrides). KeyPilot's settings.js
+(1000+ lines) grew organically without a binding system; gMixer should not
+repeat that. Put these in place before feature work, not after:
+
+- Build system: a real build step from day one (bundler — e.g. esbuild/
+  Vite — rather than hand-maintained script tags), matching how the
+  KeyPilot repo already has scripts/ for packaging Opera/Chrome builds.
+  Keeps room to add Lit (or any component approach) without a rewrite.
+- UI components: use Lit (small, web-component-native) for the in-page
+  Settings popover controls — left-rail sections, typeface font pickers,
+  and the live theme preview.
+- State/binding layer: define ONE settings state shape up front (e.g. a
+  typed schema: colors, fonts-per-target, filter, clipping, effects,
+  navigation, per-site overrides) with a single binding mechanism between
+  that state and the Lit controls — controls read/write through the
+  binding layer, never directly poke chrome.storage or the DOM. This is
+  the piece KeyPilot skipped initially; build it as its own small module
+  from the start (settings-controller/settings-binder equivalent, but
+  designed in up front rather than retrofitted).
+- Storage: chrome.storage.sync (small values — active theme pack id,
+  color scheme choice, toggles) vs chrome.storage.local (larger values —
+  uploaded custom fonts, per-site override maps) decided per field in the
+  schema, not assumed globally. Design the schema so it's storage-agnostic
+  at the binding layer — swapping sync/local/IndexedDB later for a given
+  field shouldn't require touching the UI components.
+- Per-site overrides (Settings popover item 8) imply keyed storage
+  (by origin/hostname) from day one — build the schema as
+  `{ global: {...}, perSite: { [hostname]: {...partial overrides} } }`
+  rather than a flat single-profile object, so per-site support doesn't
+  require a migration later.
+
+
+NON-GOALS
+---------
+- No remote CSS/JS marketplace or shared "mod" downloads — themes/fonts are
+  local and user-selected only (mirrors the security caution around Opera
+  GX's web-modding mod-fetching flaw).
+- No KeyPilot-style multi-popover suite, mode system, or Function Library.
+- No configurable keyboard layouts, chord/modifier keys, or chrome-level
+  hotkeys — navigation is 3 fixed opt-in keys at most.
+- No full page-navigation/scrolling feature set — this is a theming
+  extension first, with a small opt-in navigation convenience, not a
+  keyboard-browsing extension.
+
+Implemented (opt-in): hover outline (animated), Click Element (F), Back (D),
+Forward (R). Uses page history.back/forward — not a full tab-graph system.

@@ -1,0 +1,22 @@
+{
+  "name": "gmixer-chrome-extension",
+  "version": "0.1.0",
+  "description": "gMixer — re-theme any web page (colors, fonts, image filters, corner clipping, effects) for Opera GX.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "build:minify": "node build.js --minify",
+    "watch": "node build.js --watch",
+    "fonts:fetch": "node scripts/fetch-wiegel-fonts.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@webcomponents/custom-elements": "^1.6.0",
+    "lit": "^3.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

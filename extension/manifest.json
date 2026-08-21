@@ -1,0 +1,63 @@
+{
+    "manifest_version": 3,
+    "name": "gMixer",
+    "version": "0.1.0",
+    "description": "Re-theme any web page: colors, fonts, image filters, corner clipping, and effects. Built for Opera GX.",
+    "action": {
+        "default_title": "gMixer Settings (Alt+M)"
+    },
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "commands": {
+        "toggle-settings": {
+            "suggested_key": {
+                "default": "Alt+M",
+                "mac": "Alt+M"
+            },
+            "description": "Toggle gMixer Settings popover"
+        }
+    },
+    "content_security_policy": {
+        "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'"
+    },
+    "permissions": [
+        "storage"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content-start.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": false
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content-end.js"
+            ],
+            "run_at": "document_end",
+            "all_frames": false
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "fonts/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}
