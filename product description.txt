@@ -49,17 +49,39 @@ standard color-theory relationships:
 - Complementary — base hue + its direct opposite (high contrast, "pop" accents)
 - Split-complementary — base hue + the two hues adjacent to its opposite
   (contrast with less tension than straight complementary)
-- (Stretch) Triadic / monochromatic as additional scheme options later.
+- Triadic — three hues evenly spaced around the color wheel (balanced,
+  energetic variety)
+- Tetradic — two complementary hue pairs (the richest, most flexible
+  relationship; requires careful role assignment)
+- Monochromatic — one hue across controlled lightness and saturation steps
+  (quiet, cohesive palettes)
 
-Output of the picker maps onto the same page roles used for restyling:
-background, body text, headings/accent, links, borders. The user picks a
-base color + a scheme; gMixer computes the rest and lets them nudge
-individual roles afterward. An intensity slider (0–100) blends the theme
-palette toward a light sample of the live page's own colors so restyle
-feels like a remix of *this* site rather than a flat paint-over. This
-palette feeds Features 2-6 below (fonts, filters, clipping, effects,
-theme packs) so a "look" is generated from one decision, not five
-separate color pickers.
+The picker follows a defaults-first model: the user makes one or two decisions
+(base color and scheme), while gMixer calculates a usable semantic palette.
+Generated roles include:
+
+- BG:Primary — the body/page background and primary canvas
+- BG:Secondary — semantic page regions such as headers, footers, navigation,
+  and complementary rails
+- Surface:GUI — buttons, inputs, sliders, selects, and other compact controls
+- Surface:Containers — cards, panels, dialogs, menus, and other raised regions
+- Text — primary content
+- Muted — captions, metadata, and secondary content
+- Accent — headings, active controls, and emphasis
+- Link — hyperlinks
+- Border — dividers and component edges
+- Focus — keyboard focus and selection states
+
+The user can optionally override any generated role afterward; ordinary use
+does not require configuring every well. Generated colors must be checked for
+readable contrast and adjusted when a color-theory relationship produces an
+unusable text or control color. Tone (light, gray, or dark) changes
+lightness/contrast strategy while preserving the selected scheme's personality.
+An intensity slider (0–100) blends the theme palette toward a light sample of
+the live page's own colors so restyle feels like a remix of *this* site rather
+than a flat paint-over. This palette feeds Features 2-6 below (fonts, filters,
+clipping, effects, theme packs) so a "look" is generated from a small number
+of decisions, not a wall of separate color pickers.
 
 
 FEATURE 2: FONT LIBRARY & TYPOGRAPHY TARGETS
@@ -73,28 +95,86 @@ the extension (Settings > About) even though the license doesn't strictly
 require it, since Wiegel's FAQ asks that reworked fonts stay freely licensed
 and be renamed if modified — good practice to credit the source.
 
-Fonts are organized into categories for browsing/picking, e.g.:
-- Calligraphy / script
-- Technical / engineering (blueprint, drafting-style faces)
-- Matrix / display (digital, LCD, "hacker terminal" faces)
-- (more categories added over time as the library grows)
+Fonts are organized into categories for browsing/picking:
+- Calligraphy / Script
+- Blackletter / Fraktur
+- Serif
+- Sans / Technical (DIN, drafting, clean sans faces)
+- Stencil / Industrial
+- Pixel / LED / Matrix
+- Typewriter
+- Display / Decorative
+Categories are curated from DaFont theme tags + Peter Wiegel page cues
+(see scripts/reclassify-fonts.mjs).
 
 Typography targets — the user styles each of these independently, same
-"per-role" model as the color picker:
-- Headers (h1-h6)
-- Paragraph / body text
-- Captions (figcaption, small/caption-like text, list items)
+"per-role" model as the color picker. Six roles (not three) so a theme can
+build real hierarchy instead of one font for "all headers" and one for
+"everything else":
+- Hero / H1 (the page's single biggest heading)
+- Subheadings (h2-h6) — independent from Hero so it can diverge for actual
+  visual hierarchy; defaults to match Hero per theme pack, but is a
+  separate role a user (or a future pack) can size/weight/typeface apart
+  from it.
+- Paragraph / body text (long-form prose: p, li, td/th, blockquote, article)
+- UI chrome (buttons, nav links/items, form controls, labels) — kept apart
+  from Paragraph so controls don't inherit body-copy fonts; matched with
+  higher-specificity selectors (e.g. `nav li`) so it wins over Paragraph's
+  bare `li` regardless of rule order.
+- Code (pre, code, kbd, samp, var) — restricted to monospace-adjacent faces
+  (Sans/Technical, System, Typewriter categories) so code blocks don't get
+  handed a script or display face.
+- Captions (figcaption, small/caption-like text)
 - Upload your own font (custom @font-face) and assign it to any target
   above, same as a bundled font.
+
+Font role heuristics (src/config/font-heuristics.js) — each face has:
+- usage: display | text | both
+- longForm: safe for paragraph-length reading
+- textSafe: false for dingbats / ornaments (e.g. Youbilee)
+- pairGroup: optional pack id (e.g. din)
+
+Pickers filter by target unless the user enables "Show all fonts":
+- Hero / H1, Subheadings → display | both
+- Paragraph → text | both and longForm
+- UI chrome → text | both (no longForm requirement — short strings)
+- Code → Sans/Technical, System, or Typewriter category only
+- Captions → text | both, or personality categories (script / typewriter / display)
+Power users can still force any face onto any role via Show all / Font Browser.
 
 
 FEATURE 3: IMAGE CSS FILTERS
 ------------------------------
-- Apply a CSS filter (grayscale, sepia, invert, duotone, custom filter())
-  to all images and background-images on the page.
+- Apply a CSS filter (grayscale, sepia, invert, duotone, monochrome, custom
+  filter()) to all images and background-images on the page.
 - Single global filter state per page/site, toggleable from Settings.
+- Background-image detection isn't CSS-only: `[style*="background-image"]`
+  only catches inline styles, so most hero/card banners (set via an
+  external stylesheet class) would be invisible to it. When the filter is
+  enabled with a scope that includes backgrounds,
+  src/content/background-image-tagger.js walks the DOM (bounded scan),
+  reads each element's *computed* `background-image`, and stamps a
+  `data-gmixer-bgimg` attribute on matches so the injected CSS selector can
+  reach them too. Re-runs on theme change and (debounced) on DOM mutation;
+  never runs when the filter is off or scoped to images-only.
+- `monochrome` and `duotone` are theme-aware, not fixed presets:
+  `monochrome` brightens slightly on dark themes / stays neutral on light
+  ones (grayscale photos read muddy on a dark background otherwise), and
+  `duotone`'s hue-rotate is computed from the theme's actual accent color
+  (src/content/style-injector.js `imageFilterPresetCss`) so the image wash
+  matches *this* theme instead of a fixed brown/violet default.
+- The "Noir" theme pack (src/config/theme-packs.js) ships with monochrome
+  images enabled by default (scope: both) as the flagship example of the
+  insight that grayscale photography reads as deliberate art direction and
+  makes a single accent color pop far more than competing with color
+  photos.
 - Filter color stops (e.g. duotone shadow/highlight) can pull from the
   Feature 1 generated palette instead of being picked separately.
+- Checkbox: "Reveal original on hover" — while a filter is active, hovering
+  an image transitions it back to its unfiltered/original look (e.g.
+  monochrome → full color). Ships first for monochrome/grayscale; same
+  control applies to duotone, sepia, invert, and other filter presets as
+  those land — one checkbox, not a per-preset toggle.
 
 
 FEATURE 4: CLIPPING / CORNER SHAPES
@@ -113,6 +193,18 @@ A dedicated section for reshaping element corners via CSS clipping
   bottom-right) for an asymmetric tech aesthetic.
 - Scope selector for which elements it applies to (e.g. images, cards/
   containers, buttons) similar to the image-filter scope control.
+
+FEATURE 4b: CORNERS (RADIUS / PER-CORNER OVERRIDES)
+----------------------------------------------------
+Alongside Clipping presets: a manual override for forcing the same corner
+radius on buttons, images, and video thumbs (e.g. radius 0 for sharp
+corners on every site), plus optional per-corner `corner-shape: bevel`
+diagonal cuts (top-left / top-right / bottom-right / bottom-left).
+
+Precedence: when Clipping and Corners both target the same element,
+Corners wins (injected after Clipping; uses !important on border-radius
+and corner-shape). Clipping still applies alone when Corners is off, and
+to elements outside the Corners scope.
 
 
 FEATURE 5: EFFECTS
@@ -180,8 +272,9 @@ SETTINGS POPOVER (in-page, Popover API)
 ----------------------------------------
 The single UI surface for the whole extension. It is NOT the tiny toolbar
 popup — it is a large in-page element using the HTML Popover API
-(`#gmixer-settings` with `popover="manual"`), centered over the page with
-a blurred `::backdrop`. The toolbar action and Alt+M only toggle it open.
+(`#gmixer-settings` with `popover="manual"`), a full-height left slide-out
+with a transparent `::backdrop` so the live page stays visible beside it.
+The toolbar action and Alt+M only toggle it open.
 
 Layout (print / baseline grid: 8px module, 24px baseline):
 - Titlebar (48px): brand, per-site toggle, <kbd>Alt</kbd>+<kbd>M</kbd>, close
@@ -193,11 +286,14 @@ Sections:
 1. Theme Pack picker (one-click presets + palette swatches)
 2. Color (base color + scheme + intensity + per-role overrides)
 3. Fonts (typeface-rendered listbox per header / paragraph / captions)
-4. Image filter (preset + custom, can pull colors from step 2)
+4. Image filter (preset + custom, can pull colors from step 2;
+   "Reveal original on hover" checkbox)
 5. Clipping (corner rounding / clip presets + scope selector)
-6. Effects (glow / flash / cursor, each toggleable)
-7. Navigation (opt-in checkbox + the 3 nav keys, off by default)
-8. Per-site enable/disable toggle (titlebar)
+6. Corners (force border-radius + per-corner bevel cuts on images/video/buttons;
+   when both Clipping and Corners are on, Corners wins on shared properties)
+7. Effects (glow / flash / cursor, each toggleable)
+8. Navigation (opt-in checkbox + the 3 nav keys, off by default)
+9. Per-site enable/disable toggle (titlebar)
 
 Launch:
 - Toolbar icon → chrome.action.onClicked → content script toggle
@@ -221,7 +317,7 @@ repeat that. Put these in place before feature work, not after:
   Settings popover controls — left-rail sections, typeface font pickers,
   and the live theme preview.
 - State/binding layer: define ONE settings state shape up front (e.g. a
-  typed schema: colors, fonts-per-target, filter, clipping, effects,
+  typed schema: colors, fonts-per-target, filter, clipping, corners, effects,
   navigation, per-site overrides) with a single binding mechanism between
   that state and the Lit controls — controls read/write through the
   binding layer, never directly poke chrome.storage or the DOM. This is
@@ -255,3 +351,64 @@ NON-GOALS
 
 Implemented (opt-in): hover outline (animated), Click Element (F), Back (D),
 Forward (R). Uses page history.back/forward — not a full tab-graph system.
+
+
+IMPLEMENTATION TASKS
+--------------------
+
+Palette generation and color theory
+[x] Add `triadic` and `tetradic` to the color-scheme type and picker.
+[x] Keep analogous, complementary, split-complementary, and monochromatic
+    schemes available.
+[x] Generate the semantic palette from one base color plus one scheme choice.
+[x] Generate BG:Primary, BG:Secondary, Surface:GUI, Surface:Containers, Text,
+    Muted, Accent, Link, Border, and Focus
+    roles from the selected palette and Tone.
+[x] Keep BG:Primary scoped to page/background surfaces; use BG:Secondary for
+    semantic page regions and Surface roles for controls and containers.
+[x] Add contrast checks for text, links, controls, borders, and focus states.
+[x] Adjust generated colors when the selected color relationship fails contrast.
+[x] Preserve generated defaults unless the user explicitly creates an override.
+[x] Add optional per-role overrides without requiring users to configure every
+    color well.
+[x] Use BG:Primary and BG:Secondary wells and separate Surface:GUI and
+    Surface:Containers wells.
+
+Tone and theme packs
+[x] Make Light, Gray, and Dark three-segment Tone controls.
+[x] Preserve each theme pack's color personality across all three Tone modes.
+[x] Show labeled Canvas, Surface, Text, Muted, Accent, Link, Border, and Focus
+    wells in each theme preview.
+[x] Make every theme preview show generated typography, surfaces, links, and
+    a sample media image with caption.
+[x] Make each color well open an inline/native color picker.
+[x] Apply a changed well as an override while retaining the other generated
+    roles.
+
+Settings and activation
+[x] Keep accordion expand/collapse state separate from section On/Off state.
+Only one accordion section can be expanded at a time.
+[x] Give every section header a rectangular split On/Off switch on the left.
+[x] Persist section enablement independently from the local accordion UI state.
+[x] Style enabled sections distinctly from disabled and merely expanded sections.
+[x] Keep the dedicated Theme area above the accordion, with Media first inside
+    the guided accordion.
+[x] Keep the titlebar switch as the per-site theming master switch.
+[x] Keep Alt+N synchronized with the titlebar per-site theming switch.
+
+Page application
+[x] Apply Canvas only to page roots and recognized background surfaces.
+[x] Apply Surface to semantic controls and elevated UI without recoloring
+    arbitrary `div` or `span` layout nodes.
+[x] Add generated Muted and Focus variables to the injected role CSS.
+[x] Gate each page-style family by its section enablement state.
+[x] Keep Media enablement separate from the Image Filter panel's controls.
+[x] Verify disabled sections remove their page effects without losing settings.
+[x] Add tests for generated schemes, semantic roles, contrast adjustment,
+    overrides, section enablement, and Canvas/Surface selector boundaries.
+
+Documentation and release
+[x] Update the architecture references to match the guided accordion layout.
+[x] Document the generated-role and optional-override model for contributors.
+[x] Rebuild the extension after each source/config change.
+[ ] Test the unpacked extension in Opera GX and Chromium.

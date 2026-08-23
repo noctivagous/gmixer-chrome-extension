@@ -1,0 +1,58 @@
+[
+  {
+    "id": "playfair-display",
+    "label": "Playfair Display",
+    "family": "\"Playfair Display\"",
+    "file": "google/playfair-display.woff2",
+    "variable": true
+  },
+  {
+    "id": "source-sans-3",
+    "label": "Source Sans 3",
+    "family": "\"Source Sans 3\"",
+    "file": "google/source-sans-3.woff2",
+    "variable": true
+  },
+  {
+    "id": "lora",
+    "label": "Lora",
+    "family": "\"Lora\"",
+    "file": "google/lora.woff2",
+    "variable": true
+  },
+  {
+    "id": "cormorant-garamond",
+    "label": "Cormorant Garamond",
+    "family": "\"Cormorant Garamond\"",
+    "file": "google/cormorant-garamond.woff2",
+    "variable": false
+  },
+  {
+    "id": "raleway",
+    "label": "Raleway",
+    "family": "\"Raleway\"",
+    "file": "google/raleway.woff2",
+    "variable": true
+  },
+  {
+    "id": "space-grotesk",
+    "label": "Space Grotesk",
+    "family": "\"Space Grotesk\"",
+    "file": "google/space-grotesk.woff2",
+    "variable": true
+  },
+  {
+    "id": "dm-sans",
+    "label": "DM Sans",
+    "family": "\"DM Sans\"",
+    "file": "google/dm-sans.woff2",
+    "variable": true
+  },
+  {
+    "id": "outfit",
+    "label": "Outfit",
+    "family": "\"Outfit\"",
+    "file": "google/outfit.woff2",
+    "variable": true
+  }
+]

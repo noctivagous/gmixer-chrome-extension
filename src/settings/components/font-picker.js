@@ -1,14 +1,20 @@
 import { LitElement, html, css } from 'lit';
-import { FONT_CATEGORIES, FONTS, getFontById } from '../../config/fonts.js';
+import { FONT_CATEGORIES, getFontById, getFontsForTarget } from '../../config/fonts.js';
 import { defineElement } from '../../lib/define-element.js';
 
 /**
  * Listbox font picker that renders each option in its own typeface.
  * Native <select>/<option> cannot do this reliably.
+ *
+ * Pass `target` (headers | subheadings | paragraph | ui | code | captions)
+ * to apply role-policy filtering; pair with `showAll` to list every face.
  */
 export class FontPicker extends LitElement {
   static properties = {
     value: { type: String },
+    /** @type {'headers'|'subheadings'|'paragraph'|'ui'|'code'|'captions'|''} */
+    target: { type: String },
+    showAll: { type: Boolean, attribute: 'show-all' },
     open: { state: true },
   };
 
@@ -68,7 +74,10 @@ export class FontPicker extends LitElement {
       opacity: 0.55;
     }
     .option {
-      display: block;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--gm-space-2, 16px);
       width: 100%;
       border: 0;
       background: transparent;
@@ -84,11 +93,42 @@ export class FontPicker extends LitElement {
     .option[aria-selected='true'] {
       background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
     }
+    .option-meta {
+      flex-shrink: 0;
+      font-size: 10px;
+      line-height: var(--gm-baseline, 24px);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      opacity: 0.55;
+      font-family: system-ui, sans-serif;
+    }
+    .trigger-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      min-width: 0;
+    }
+    .trigger-usage {
+      font-size: 10px;
+      line-height: var(--gm-baseline, 24px);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      opacity: 0.55;
+      font-family: system-ui, sans-serif;
+    }
+    .empty {
+      padding: var(--gm-space-1, 8px) var(--gm-space-2, 16px);
+      font-size: 12px;
+      opacity: 0.6;
+    }
   `;
 
   constructor() {
     super();
     this.value = '';
+    this.target = '';
+    this.showAll = false;
     this.open = false;
     this._onDocClick = (e) => {
       if (!this.open) return;
@@ -106,8 +146,28 @@ export class FontPicker extends LitElement {
     document.removeEventListener('click', this._onDocClick, true);
   }
 
+  _fonts() {
+    if (this.target) {
+      return getFontsForTarget(this.target, { showAll: this.showAll });
+    }
+    return getFontsForTarget('paragraph', { showAll: true });
+  }
+
+  _usageBits(font) {
+    if (!font) return '';
+    const bits = [font.usage];
+    if (font.longForm) bits.push('long-form');
+    return bits.join(' · ');
+  }
+
   render() {
-    const current = getFontById(this.value) || FONTS[0];
+    const fonts = this._fonts();
+    const current = getFontById(this.value) || fonts[0];
+    const byCategory = FONT_CATEGORIES.map((category) => ({
+      category,
+      fonts: fonts.filter((f) => f.category === category.id),
+    })).filter((g) => g.fonts.length > 0);
+
     return html`
       <button
         type="button"
@@ -116,33 +176,40 @@ export class FontPicker extends LitElement {
         aria-expanded=${this.open}
         @click=${() => (this.open = !this.open)}
       >
-        <span style="font-family: ${current?.family || 'inherit'}">${current?.label || 'Font'}</span>
+        <span class="trigger-meta">
+          <span style="font-family: ${current?.family || 'inherit'}">${current?.label || 'Font'}</span>
+          ${current?.usage
+            ? html`<span class="trigger-usage">${this._usageBits(current)}</span>`
+            : null}
+        </span>
         <span class="chevron">${this.open ? '▴' : '▾'}</span>
       </button>
       ${this.open
         ? html`
             <ul class="list" role="listbox">
-              ${FONT_CATEGORIES.map(
-                (category) => html`
-                  <li class="group">${category.label}</li>
-                  ${FONTS.filter((f) => f.category === category.id).map(
-                    (font) => html`
-                      <li role="none">
-                        <button
-                          type="button"
-                          class="option"
-                          role="option"
-                          aria-selected=${font.id === this.value}
-                          style="font-family: ${font.family}"
-                          @click=${() => this._pick(font.id)}
-                        >
-                          ${font.label}
-                        </button>
-                      </li>
+              ${byCategory.length === 0
+                ? html`<li class="empty">No fonts for this role — enable Show all.</li>`
+                : byCategory.map(
+                    ({ category, fonts: groupFonts }) => html`
+                      <li class="group">${category.label}</li>
+                      ${groupFonts.map(
+                        (font) => html`
+                          <li role="none">
+                            <button
+                              type="button"
+                              class="option"
+                              role="option"
+                              aria-selected=${font.id === this.value}
+                              @click=${() => this._pick(font.id)}
+                            >
+                              <span style="font-family: ${font.family}">${font.label}</span>
+                              <span class="option-meta">${this._usageBits(font)}</span>
+                            </button>
+                          </li>
+                        `
+                      )}
                     `
                   )}
-                `
-              )}
             </ul>
           `
         : null}

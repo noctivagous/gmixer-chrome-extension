@@ -31,9 +31,54 @@ function isGmixerChrome(el) {
   return !!el.closest?.('#gmixer-hover-outline');
 }
 
-function hasPointerCursor(el) {
+function hasExplicitPointerCursor(el) {
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+  if (el === document.body || el === document.documentElement) return false;
+
   try {
-    return getComputedStyle(el).cursor === 'pointer';
+    if (el.style?.cursor?.toLowerCase() === 'pointer') return true;
+  } catch {
+    // Continue with class/computed-style checks.
+  }
+
+  try {
+    const className =
+      typeof el.className === 'string'
+        ? el.className
+        : el.className && typeof el.className.baseVal === 'string'
+          ? el.className.baseVal
+          : '';
+    if (/\bcursor-pointer\b/i.test(className) || /\bcursorPointer\b/.test(className)) {
+      return true;
+    }
+  } catch {
+    // Continue with computed-style checks.
+  }
+
+  // `cursor` is inherited. Only treat it as an explicit signal when the
+  // nearest parent does not also report pointer; otherwise a page-level
+  // cursor:pointer would make every descendant appear interactive.
+  try {
+    if (getComputedStyle(el).cursor !== 'pointer') return false;
+    let parent = el.parentElement;
+    if (!parent && typeof el.getRootNode === 'function') {
+      const root = el.getRootNode();
+      if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+        parent = root.host || null;
+      }
+    }
+    if (!parent || parent === document.body || parent === document.documentElement) {
+      return true;
+    }
+    return getComputedStyle(parent).cursor !== 'pointer';
+  } catch {
+    return false;
+  }
+}
+
+function matchesSemanticClickable(el) {
+  try {
+    return !!el?.matches?.(CLICKABLE_SELECTOR);
   } catch {
     return false;
   }
@@ -54,20 +99,32 @@ export function findClickableAtPoint(x, y) {
   }
   if (!el || isGmixerChrome(el)) return null;
 
-  // Prefer the nearest semantic clickable.
-  const semantic = el.closest?.(CLICKABLE_SELECTOR);
-  if (semantic && !isGmixerChrome(semantic)) return semantic;
-
-  // Fallback: nearest ancestor advertising cursor:pointer (common for JS widgets).
+  // KeyPilot's important ordering: walk from the hit leaf and return the
+  // nearest semantic target before considering cursor:pointer. `closest()`
+  // gives the same result in ordinary DOM, but does not cross open shadow
+  // roots and makes the ordering less obvious.
   let node = el;
-  for (let depth = 0; node && depth < 8; depth++) {
-    if (node.nodeType === Node.ELEMENT_NODE && hasPointerCursor(node) && !isGmixerChrome(node)) {
+  let depth = 0;
+  let cursorCandidate = null;
+  while (node && node !== document.body && node !== document.documentElement && depth < 20) {
+    if (!isGmixerChrome(node) && matchesSemanticClickable(node)) {
       return node;
     }
-    node = node.parentElement;
+    if (!cursorCandidate && !isGmixerChrome(node) && hasExplicitPointerCursor(node)) {
+      cursorCandidate = node;
+    }
+
+    node =
+      node.parentElement ||
+      (typeof node.getRootNode === 'function' &&
+      typeof ShadowRoot !== 'undefined' &&
+      node.getRootNode() instanceof ShadowRoot
+        ? node.getRootNode().host
+        : null);
+    depth++;
   }
 
-  return null;
+  return cursorCandidate;
 }
 
 /** True when the user is typing in a field — nav keys must not fire. */

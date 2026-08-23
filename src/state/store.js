@@ -8,15 +8,35 @@ import { createDefaultState } from './schema.js';
 import { loadPersistedState, persistState, onPersistedStateChanged } from './storage-adapter.js';
 
 function deepMerge(base, patch) {
+  // Explicit null clears a value (e.g. ui.openSection → all accordions closed).
+  if (patch === null) return null;
   if (Array.isArray(base) || Array.isArray(patch)) return patch ?? base;
   if (typeof base !== 'object' || base === null) return patch ?? base;
-  if (typeof patch !== 'object' || patch === null) return base;
+  if (typeof patch !== 'object') return patch ?? base;
 
   const result = { ...base };
   for (const key of Object.keys(patch)) {
     result[key] = deepMerge(base[key], patch[key]);
   }
   return result;
+}
+
+function migrateTypography(state, persisted) {
+  const persistedFonts = persisted?.global?.fonts;
+  if (!persistedFonts || persistedFonts.headings) return state;
+  const fonts = state.global.fonts;
+  state.global.fonts = {
+    ...fonts,
+    headings: {
+      h1: persistedFonts.headers || fonts.headings.h1,
+      h2: persistedFonts.subheadings || fonts.headings.h2,
+      h3: persistedFonts.subheadings || fonts.headings.h3,
+      h4: persistedFonts.subheadings || fonts.headings.h4,
+      h5: persistedFonts.subheadings || fonts.headings.h5,
+      h6: persistedFonts.subheadings || fonts.headings.h6,
+    },
+  };
+  return state;
 }
 
 export class SettingsStore {
@@ -32,12 +52,12 @@ export class SettingsStore {
   async _init() {
     const persisted = await loadPersistedState();
     if (persisted) {
-      this._state = deepMerge(this._state, persisted);
+      this._state = migrateTypography(deepMerge(this._state, persisted), persisted);
     }
     onPersistedStateChanged(async () => {
       const latest = await loadPersistedState();
       if (latest) {
-        this._state = deepMerge(createDefaultState(), latest);
+        this._state = migrateTypography(deepMerge(createDefaultState(), latest), latest);
         this._notify();
       }
     });

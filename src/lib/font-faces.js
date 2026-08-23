@@ -10,17 +10,26 @@ function fontFormat(path) {
 
 /** Emit @font-face rules for every bundled font. */
 export function fontFaceRules() {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return '';
-  return getBundledFonts()
-    .map((font) => {
-      const url = chrome.runtime.getURL(`fonts/${font.file}`);
-      return `@font-face {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return '';
+    return getBundledFonts()
+      .map((font) => {
+        const url = chrome.runtime.getURL(`fonts/${font.file}`);
+        const weight =
+          font.weightRange != null
+            ? `  font-weight: ${font.weightRange};\n`
+            : '';
+        return `@font-face {
   font-family: ${font.family};
   src: url("${url}") format("${fontFormat(font.file)}");
-  font-display: swap;
+${weight}  font-display: swap;
 }`;
-    })
-    .join('\n\n');
+      })
+      .join('\n\n');
+  } catch {
+    // The old page context may survive briefly after an extension reload.
+    return '';
+  }
 }
 
 /** Ensure a document-level <style> with all bundled @font-face rules exists. */

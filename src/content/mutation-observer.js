@@ -1,49 +1,79 @@
-// Keeps the theme applied as the page changes after initial load — SPA
-// route swaps, infinite scroll, lazy-loaded sections/images, and sites
-// that inject their own <style>/<link> tags after ours (which would
-// otherwise win any same-specificity CSS battle by being later in the
-// document). See product description.txt > "INJECTION PIPELINE".
+// MutationObserver bridge for the ADAPTIVE pass (document_end only).
+//
+// Reacts to post-load DOM growth — SPA route swaps, infinite scroll,
+// lazy sections/images, and sites that inject their own <style>/<link>
+// after ours (which would otherwise win same-specificity by document order).
+//
+// Never imported from content-start.js. Classification of new subtrees is
+// the adaptive pass's job; this module only detects relevant mutations and
+// forwards roots to the caller.
 
 /**
- * @param {() => void} reapply Called (debounced) whenever the DOM changes
- *   in a way that might need the override re-applied/re-asserted.
+ * @typedef {object} MutationHandlers
+ * @property {(roots: Element[]) => void} onSubtree
+ *   New element subtrees that may need classification / tonal / bg tagging.
+ * @property {() => void} onCascadeThreat
+ *   A <style>, <link>, or <head> addition that may out-order our override.
  */
-export function startMutationObserver(reapply) {
+
+/**
+ * @param {MutationHandlers | (() => void)} handlers
+ *   Object form preferred. A bare function is treated as both handlers
+ *   (back-compat for tests).
+ */
+export function startMutationObserver(handlers) {
+  const onSubtree =
+    typeof handlers === 'function' ? handlers : handlers.onSubtree ?? (() => {});
+  const onCascadeThreat =
+    typeof handlers === 'function' ? handlers : handlers.onCascadeThreat ?? onSubtree;
+
   let pending = false;
+  /** @type {Set<Element>} */
+  let pendingRoots = new Set();
+  let cascadeThreat = false;
+
   const isGmixerNode = (node) =>
     node.nodeType === Node.ELEMENT_NODE &&
-    (node.id === 'gmixer-style' || node.id === 'gmixer-settings' ||
+    (node.id === 'gmixer-style' ||
+      node.id === 'gmixer-settings' ||
+      node.id === 'gmixer-hover-outline' ||
+      node.classList?.contains('gmixer-tonal-overlay') ||
       node.closest?.('#gmixer-settings'));
 
-  const scheduleReapply = () => {
+  const flush = () => {
+    pending = false;
+    const roots = Array.from(pendingRoots);
+    const threatened = cascadeThreat;
+    pendingRoots = new Set();
+    cascadeThreat = false;
+
+    if (roots.length) onSubtree(roots);
+    if (threatened) onCascadeThreat();
+  };
+
+  const schedule = () => {
     if (pending) return;
     pending = true;
-    queueMicrotask(() => {
-      pending = false;
-      reapply();
-    });
+    queueMicrotask(flush);
   };
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      let hasRelevantAddition = false;
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
-        // injectStyle() appends its own style tag on every reapply. Ignore
+        // injectStyle() / tonal overlays append their own nodes. Ignore
         // gMixer-owned DOM or this observer schedules itself forever.
         if (isGmixerNode(node)) continue;
-        hasRelevantAddition = true;
+
         const tag = node.tagName;
-        // A newly added <style>/<link> could out-order our override, or new
-        // content (images, cards, headings) needs the same rules re-asserted.
-        if (tag === 'STYLE' || tag === 'LINK' || tag === 'IMG' || tag === 'HEAD') {
-          scheduleReapply();
-          return;
+        if (tag === 'STYLE' || tag === 'LINK' || tag === 'HEAD') {
+          cascadeThreat = true;
+          schedule();
+          continue;
         }
-      }
-      if (hasRelevantAddition) {
-        scheduleReapply();
-        return;
+
+        pendingRoots.add(/** @type {Element} */ (node));
+        schedule();
       }
     }
   });

@@ -25,19 +25,65 @@ describe('mutation-observer', () => {
       disconnect() {}
     };
 
-    let reapplyCount = 0;
-    startMutationObserver(() => {
-      reapplyCount += 1;
+    let cascadeCount = 0;
+    startMutationObserver({
+      onSubtree() {},
+      onCascadeThreat() {
+        cascadeCount += 1;
+      },
     });
 
-    callback([{
-      addedNodes: [
-        { nodeType: 1, id: 'gmixer-style', tagName: 'STYLE' },
-        { nodeType: 1, id: 'page-style', tagName: 'STYLE' },
-      ],
-    }]);
+    callback([
+      {
+        addedNodes: [
+          { nodeType: 1, id: 'gmixer-style', tagName: 'STYLE', classList: { contains: () => false } },
+          {
+            nodeType: 1,
+            id: 'page-style',
+            tagName: 'STYLE',
+            classList: { contains: () => false },
+            closest: () => null,
+          },
+        ],
+      },
+    ]);
 
     await Promise.resolve();
-    assert.equal(reapplyCount, 1);
+    assert.equal(cascadeCount, 1);
+  });
+
+  it('forwards newly added content roots to onSubtree for reclassification', async () => {
+    let callback;
+    globalThis.Node = { ELEMENT_NODE: 1 };
+    globalThis.document = { documentElement: {} };
+    globalThis.MutationObserver = class {
+      constructor(next) {
+        callback = next;
+      }
+      observe() {}
+      disconnect() {}
+    };
+
+    /** @type {Element[]} */
+    let seen = [];
+    startMutationObserver({
+      onSubtree(roots) {
+        seen = roots;
+      },
+      onCascadeThreat() {},
+    });
+
+    const article = {
+      nodeType: 1,
+      id: '',
+      tagName: 'ARTICLE',
+      classList: { contains: () => false },
+      closest: () => null,
+    };
+
+    callback([{ addedNodes: [article] }]);
+    await Promise.resolve();
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0], article);
   });
 });

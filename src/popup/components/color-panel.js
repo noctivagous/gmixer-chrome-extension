@@ -7,15 +7,22 @@ const SCHEMES = [
   { id: 'analog', label: 'Analogous' },
   { id: 'complement', label: 'Complementary' },
   { id: 'splitComplement', label: 'Split-Complementary' },
+  { id: 'triadic', label: 'Triadic' },
+  { id: 'tetradic', label: 'Tetradic' },
   { id: 'monochrome', label: 'Monochrome' },
 ];
 
 const ROLES = [
-  { id: 'background', label: 'Background' },
+  { id: 'background', label: 'BG:Primary' },
+  { id: 'backgroundSecondary', label: 'BG:Secondary' },
+  { id: 'surfaceGui', label: 'Surface: GUI' },
+  { id: 'surfaceContainers', label: 'Surface: Containers' },
   { id: 'text', label: 'Text' },
+  { id: 'muted', label: 'Muted' },
   { id: 'accent', label: 'Accent' },
   { id: 'link', label: 'Link' },
   { id: 'border', label: 'Border' },
+  { id: 'focus', label: 'Focus' },
 ];
 
 export class ColorPanel extends StoreBoundElement {
@@ -83,7 +90,7 @@ export class ColorPanel extends StoreBoundElement {
   render() {
     const color = this.state?.global?.color;
     if (!color) return html``;
-    const palette = buildPalette(color.baseColor, color.scheme);
+    const palette = buildPalette(color.baseColor, color.scheme, this.state?.global?.themeMode || 'dark');
     const intensity = color.intensity ?? 80;
     const overrides = color.overrides ?? {};
 

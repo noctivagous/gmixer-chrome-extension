@@ -1,0 +1,262 @@
+
+gMixer direction: guided defaults with meaningful customization
+=======================================================================
+
+gMixer should make strong design decisions for the user, then let the user
+customize the decisions that matter. The product is not a collection of
+isolated CSS toggles. It is a restyle engine that understands a page's visual
+structure and applies a coherent design system to it.
+
+1. Settings experience
+----------------------
+
+The settings panel is a single-column accordion layout:
+
+- Multiple accordion sections can be open at the same time.
+- The panel normally has vertical overflow scrolling.
+- The scroll container uses a custom dark-pro scrollbar.
+- Every section includes a focused preview GUI for the setting being changed.
+- The global preview pane is removed; previews belong beside their controls.
+- The entire settings interface uses a dark pro visual language: deep
+  charcoal surfaces, elevated panels, restrained borders, purple accent
+  states, and clear keyboard focus.
+
+The accordion sections should reflect the user's mental model:
+
+- Theme direction
+- Color and tonal surfaces
+- Typography roles
+- Image and media treatments
+- Clipping and corners
+- Effects
+- Navigation
+- Font browser
+
+2. Two-pass page transformation
+-------------------------------
+
+`document_start` performs the fast static pass:
+
+- Read the cached CSS for the current hostname.
+- Apply safe, generic styling before the page paints.
+- Avoid expensive DOM analysis.
+- Prevent the unthemed flash while settings are loading.
+
+`document_end` performs the adaptive pass:
+
+- Sample the completed DOM and the page's existing visual roles.
+- Run element and media classifiers.
+- Add semantic gMixer attributes/classes to recognized elements.
+- Apply conditional styling based on page structure and confidence.
+- Start the MutationObserver so SPA navigation, lazy content, and infinite
+  scroll receive the same analysis.
+
+The static pass should always be safe. The adaptive pass is where gMixer earns
+its advantage over a basic dark-mode stylesheet.
+
+3. Semantic page and media classifiers
+--------------------------------------
+
+The restyle engine should identify what a page is about and what it contains,
+not only match broad tags such as `div` or `img`.
+
+The classifier layer should recognize common page conventions using:
+
+- Semantic HTML: `article`, `main`, `figure`, `aside`, and headings.
+- ARIA roles and accessible names.
+- Class and ID tokens such as `card`, `hero`, `sidebar`, `thumbnail`, and
+  `video`.
+- DOM relationships and repeated structures.
+- Image dimensions, aspect ratios, and object-fit behavior.
+- `<picture>`, `<video>`, poster attributes, and play-button overlays.
+- Nearby headings, captions, labels, and article links.
+- Computed styles and whether an element has a real visual surface.
+
+Initial semantic roles should include:
+
+- `article`
+- `article-image`
+- `article-body`
+- `hero`
+- `card`
+- `sidebar`
+- `video-thumbnail`
+- `avatar`
+- `logo`
+- `ad`
+- `background-image`
+- `navigation`
+
+Classifications should produce confidence and reasons, not just a boolean:
+
+```js
+{
+  role: 'video-thumbnail',
+  confidence: 0.91,
+  reasons: ['video descendant', '16:9 image', 'play button overlay']
+}
+```
+
+Only high-confidence classifications should receive aggressive styling.
+Lower-confidence matches should receive conservative styling or no styling.
+This prevents an avatar, advertisement, or logo from accidentally receiving
+article-image treatment.
+
+The classifier and renderer should remain separate:
+
+- Classifier: what is this element?
+- Theme: what should this category look like?
+- Renderer: how can that style be applied safely?
+
+Recognized elements may receive attributes such as:
+
+```html
+<article data-gmixer-role="article">
+  <img data-gmixer-media="article-image">
+</article>
+```
+
+4. Theme package model
+----------------------
+
+Every theme package has three tonal modes:
+
+- `light`
+- `gray`
+- `dark`
+
+The modes share the theme's personality. They are not three unrelated themes.
+Changing mode should preserve the same typography, accent relationships,
+shape language, and media direction while changing the tonal surfaces and
+contrast strategy.
+
+A theme package should eventually have a structure like:
+
+```js
+{
+  id: 'noir',
+  label: 'Noir',
+  modes: {
+    light: {
+      background: '#f4f4f4',
+      surface: '#ffffff',
+      text: '#171717'
+    },
+    gray: {
+      background: '#777777',
+      surface: '#8b8b8b',
+      text: '#f4f4f4'
+    },
+    dark: {
+      background: '#101010',
+      surface: '#1c1c1c',
+      text: '#eeeeee'
+    }
+  },
+  media: {
+    defaultFilter: 'grayscale(1)',
+    articleImage: {
+      filter: 'grayscale(1)',
+      outline: 'none'
+    },
+    videoThumbnail: {
+      filter: 'grayscale(1) contrast(1.12)',
+      outline: 'accent'
+    }
+  }
+}
+```
+
+Shared theme properties may include:
+
+- Typography pairings and semantic font roles.
+- Accent and link relationships.
+- Card and panel surface treatment.
+- Border, outline, clipping, and corner language.
+- Image treatment: original, monochrome, sepia, or duotone.
+- Category-specific treatment for article images, video thumbnails, avatars,
+  logos, ads, and background media.
+- Hover/reveal behavior for filtered media.
+
+5. Category-specific styling
+----------------------------
+
+The user should be able to customize recognized categories instead of only
+choosing a global image filter. For example:
+
+- All video thumbnails receive a purple outline.
+- Article images become monochrome while logos remain in color.
+- Sidebar cards use a slightly raised surface.
+- Hero images receive a stronger duotone treatment.
+- Avatars receive a restrained circular treatment.
+- Ads are left conservative or visually de-emphasized.
+
+This is the reason for analyzing media ownership. An image should not be
+treated identically merely because it is an `<img>`; its surrounding content
+and visual role determine the appropriate styling.
+
+6. Safety and performance rules
+-------------------------------
+
+- Never style every `div`, `span`, or image with an aggressive treatment.
+- Bound classifier scans and cache results for the current page state.
+- Reclassify only changed or newly added subtrees when possible.
+- Keep gMixer settings UI and extension-owned nodes excluded.
+- Preserve pointer behavior, accessibility, layout, and stacking order.
+- Use confidence thresholds for effects that alter contrast, outlines, or
+  media filters.
+- Maintain a conservative fallback for pages whose structure cannot be
+  recognized.
+
+
+Tasks
+=====
+
+Settings experience
+[x] Confirm single-column multi-open accordion is the only settings layout
+[x] Confirm each accordion section includes a focused preview GUI
+[x] Confirm custom dark-pro scrollbar on the settings overflow container
+[x] Align accordion section order with: Theme, Color, Typography, Media,
+    Clipping/Corners, Effects, Navigation, Font browser
+[x] Remove remaining global preview-pane UI and state if any still exists
+
+Two-pass page transformation
+[x] Keep document_start as a cached/static safe CSS pass only
+[x] Move expensive DOM sampling and classification into document_end
+[x] Wire MutationObserver to re-run adaptive classification on new subtrees
+[x] Document and enforce the static-vs-adaptive boundary in code comments
+
+Semantic classifiers
+[x] Create a classifier module that returns role, confidence, and reasons
+[x] Recognize article, article-image, article-body, hero, card, sidebar
+[x] Recognize video-thumbnail, avatar, logo, ad, background-image, navigation
+[x] Combine semantic HTML, ARIA, class/id tokens, relationships, and media cues
+[x] Stamp high-confidence matches with data-gmixer-role / data-gmixer-media
+[x] Skip low-confidence matches or apply only conservative styling
+[x] Exclude gMixer UI and extension-owned nodes from classification
+
+Theme package model
+[x] Define a theme package schema with shared personality + three modes
+[x] Support light, gray, and dark modes per theme
+[x] Keep typography, accent, shape, and media personality shared across modes
+[x] Add media defaults: original / monochrome / sepia / duotone
+[x] Add category style slots for article-image, video-thumbnail, avatar, logo,
+    ad, hero, card, and sidebar
+[x] Migrate existing theme packs into the new package structure
+
+Category-specific styling
+[x] Render styles from classified roles rather than only global selectors
+[x] Let users outline all video thumbnails independently of article images
+[x] Let users keep logos/avatars in color while article images are filtered
+[x] Add settings controls for per-category media/surface treatments
+[x] Preserve hover/reveal behavior for filtered media where appropriate
+
+Safety and performance
+[x] Bound classifier scans and cache results per page state
+[x] Reclassify only changed or newly added subtrees when possible
+[x] Add confidence thresholds for contrast, outline, and media-filter effects
+[x] Keep a conservative fallback for unrecognized page structures
+[x] Add tests for classifier roles, confidence thresholds, and theme schema
+[x] Rebuild extension after classifier/theme package changes
+
+[ ] add "min/max height | fixed height | page default" under each section including body, caption, etc.  min/max height allows the user to select the minimum height for each 

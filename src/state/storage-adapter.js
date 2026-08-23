@@ -15,12 +15,19 @@ const STORAGE_KEY = 'gmixer_state';
  */
 const FIELD_STORAGE_AREAS = {
   activeThemePackId: 'sync',
+  themeMode: 'sync',
   color: 'sync',
   fonts: 'local', // customFonts can hold data: URLs — keep off sync quota
   imageFilter: 'sync',
+  mediaStyles: 'sync',
   clipping: 'sync',
+  corners: 'sync',
   effects: 'sync',
   navigation: 'sync',
+  sections: 'sync',
+  // Panel chrome (open, scroll, accordion expand) — local so every open tab
+  // on this device stays in lockstep without waiting on sync.
+  ui: 'local',
 };
 
 const PER_SITE_AREA = 'local';
@@ -43,18 +50,33 @@ function hasChromeStorage() {
 export async function loadPersistedState() {
   if (!hasChromeStorage()) return null;
 
-  const [syncData, localData] = await Promise.all([
-    chrome.storage.sync.get(STORAGE_KEY),
-    chrome.storage.local.get(STORAGE_KEY),
-  ]);
+  let syncData;
+  let localData;
+  try {
+    [syncData, localData] = await Promise.all([
+      chrome.storage.sync.get(STORAGE_KEY),
+      chrome.storage.local.get(STORAGE_KEY),
+    ]);
+  } catch {
+    // A content script can outlive an extension reload. Its context is no
+    // longer usable, so let the caller continue with defaults.
+    return null;
+  }
 
   const syncState = syncData[STORAGE_KEY];
   const localState = localData[STORAGE_KEY];
   if (!syncState && !localState) return null;
 
+  const global = { ...(localState?.global ?? {}), ...(syncState?.global ?? {}) };
+  // UI chrome lives in local; keep it from being overwritten by older sync
+  // payloads that still carried a `ui` bag before the split.
+  if (localState?.global?.ui !== undefined) {
+    global.ui = localState.global.ui;
+  }
+
   return {
     version: syncState?.version ?? localState?.version,
-    global: { ...(localState?.global ?? {}), ...(syncState?.global ?? {}) },
+    global,
     perSite: localState?.perSite ?? {},
   };
 }
@@ -73,10 +95,14 @@ export async function persistState(state) {
     },
   };
 
-  await Promise.all([
-    chrome.storage.sync.set(syncPayload),
-    chrome.storage.local.set(localPayload),
-  ]);
+  try {
+    await Promise.all([
+      chrome.storage.sync.set(syncPayload),
+      chrome.storage.local.set(localPayload),
+    ]);
+  } catch {
+    // Ignore writes from a stale content/popup context after extension reload.
+  }
 }
 
 /** Subscribe to external storage changes (e.g. settings edited in another tab/window). */
@@ -85,9 +111,21 @@ export function onPersistedStateChanged(callback) {
 
   const listener = (changes, area) => {
     if ((area === 'sync' || area === 'local') && STORAGE_KEY in changes) {
-      callback();
+      // Do not leave an async storage callback unhandled when the extension
+      // is reloaded while this content script is still resident.
+      Promise.resolve().then(callback).catch(() => {});
     }
   };
-  chrome.storage.onChanged.addListener(listener);
-  return () => chrome.storage.onChanged.removeListener(listener);
+  try {
+    chrome.storage.onChanged.addListener(listener);
+  } catch {
+    return () => {};
+  }
+  return () => {
+    try {
+      chrome.storage.onChanged.removeListener(listener);
+    } catch {
+      // The extension context may have been invalidated already.
+    }
+  };
 }

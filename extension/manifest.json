@@ -17,6 +17,13 @@
                 "mac": "Alt+M"
             },
             "description": "Toggle gMixer Settings popover"
+        },
+        "toggle-site": {
+            "suggested_key": {
+                "default": "Alt+N",
+                "mac": "Alt+N"
+            },
+            "description": "Toggle gMixer theming on this site"
         }
     },
     "content_security_policy": {
@@ -53,7 +60,8 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "fonts/*"
+                "fonts/*",
+                "fonts/*/*"
             ],
             "matches": [
                 "<all_urls>"

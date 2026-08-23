@@ -57,6 +57,50 @@ export function hslToHex({ h, s, l }) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+function relativeLuminance(hex) {
+  const normalized = hex.replace('#', '');
+  const channels = [0, 2, 4].map((offset) => parseInt(normalized.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((channel) =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+/** @returns {number} WCAG contrast ratio between two hex colors. */
+export function contrastRatio(firstHex, secondHex) {
+  const first = relativeLuminance(firstHex);
+  const second = relativeLuminance(secondHex);
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Preserve a generated color's hue where possible while meeting a contrast
+ * threshold. User overrides are applied outside this function and are never
+ * adjusted.
+ */
+function ensureContrast(foreground, background, minimumRatio) {
+  if (contrastRatio(foreground, background) >= minimumRatio) return foreground;
+
+  const source = hexToHsl(foreground);
+  let best = null;
+  let bestDistance = Infinity;
+  for (let lightness = 0; lightness <= 100; lightness += 1) {
+    const candidate = hslToHex({ ...source, l: lightness });
+    if (contrastRatio(candidate, background) < minimumRatio) continue;
+    const distance = Math.abs(lightness - source.l);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  if (best) return best;
+  return contrastRatio('#ffffff', background) >= contrastRatio('#000000', background)
+    ? '#ffffff'
+    : '#000000';
+}
+
 function rotate(h, degrees) {
   return (h + degrees + 360) % 360;
 }
@@ -75,6 +119,10 @@ function accentHueOffsets(scheme) {
       return [180];
     case 'splitComplement':
       return [150, 210];
+    case 'triadic':
+      return [120, 240];
+    case 'tetradic':
+      return [90, 180, 270];
     case 'monochrome':
       return [];
     default:
@@ -83,25 +131,94 @@ function accentHueOffsets(scheme) {
 }
 
 /**
- * @param {string} baseColorHex
- * @param {'analog'|'complement'|'splitComplement'|'monochrome'} scheme
- * @returns {{ background: string, text: string, accent: string, link: string, border: string, isDark: boolean }}
+ * Elevated surface color derived from a lower visual layer. Used first for
+ * GUI controls, then once more for cards and other larger containers.
+ * Keeps hue with the page bg so themed shells do not read as leftover slabs.
  */
-export function buildPalette(baseColorHex, scheme) {
+export function deriveSurface(backgroundHex, _isDark) {
+  const { h, s, l } = hexToHsl(backgroundHex);
+  const surfaceIsDark = l < 50;
+  return hslToHex({
+    h,
+    s: Math.min(s, 25),
+    l: surfaceIsDark ? Math.min(l + 10, 88) : Math.max(l - 8, 12),
+  });
+}
+
+/**
+ * @param {string} baseColorHex
+ * @param {'analog'|'complement'|'splitComplement'|'triadic'|'tetradic'|'monochrome'} scheme
+ * @param {'light'|'gray'|'dark'} [mode='dark']
+ * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, border: string, focus: string, isDark: boolean }}
+ */
+export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   const base = hexToHsl(baseColorHex);
   const offsets = accentHueOffsets(scheme);
   const accentHue = offsets.length ? rotate(base.h, offsets[0]) : base.h;
   const linkHue = offsets.length > 1 ? rotate(base.h, offsets[1]) : accentHue;
 
-  // Lean dark by default (gx-er / cyber aesthetic per audience research),
-  // deriving lightness from the base rather than hardcoding pure black/white.
-  const isDark = true;
+  const isDark = mode !== 'light';
+  const backgroundLightness = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
+  const textLightness = isDark ? 92 : 12;
+  const mutedLightness = isDark ? 66 : 44;
+  const accentLightness = isDark ? 62 : 45;
+  const linkLightness = isDark ? 68 : 42;
+  const borderLightness = isDark ? 22 : 84;
+  const focusLightness = isDark ? 74 : 50;
 
-  const background = hslToHex({ h: base.h, s: Math.min(base.s, 25), l: isDark ? 8 : 96 });
-  const text = hslToHex({ h: base.h, s: Math.min(base.s, 10), l: isDark ? 92 : 12 });
-  const accent = hslToHex({ h: accentHue, s: Math.max(base.s, 65), l: isDark ? 62 : 45 });
-  const link = hslToHex({ h: linkHue, s: Math.max(base.s, 60), l: isDark ? 68 : 42 });
-  const border = hslToHex({ h: base.h, s: Math.min(base.s, 20), l: isDark ? 22 : 84 });
+  const background = hslToHex({
+    h: base.h,
+    s: Math.min(base.s, mode === 'gray' ? 18 : 25),
+    l: backgroundLightness,
+  });
+  const backgroundSecondary = deriveSurface(background, isDark);
+  const surfaceGui = deriveSurface(backgroundSecondary, isDark);
+  const surfaceContainers = deriveSurface(surfaceGui, isDark);
+  const text = ensureContrast(
+    hslToHex({ h: base.h, s: Math.min(base.s, 10), l: textLightness }),
+    background,
+    4.5
+  );
+  const muted = ensureContrast(
+    hslToHex({ h: base.h, s: Math.min(base.s, 12), l: mutedLightness }),
+    background,
+    4.5
+  );
+  const accent = ensureContrast(
+    hslToHex({ h: accentHue, s: Math.max(base.s, 65), l: accentLightness }),
+    background,
+    4.5
+  );
+  const link = ensureContrast(
+    hslToHex({ h: linkHue, s: Math.max(base.s, 60), l: linkLightness }),
+    background,
+    4.5
+  );
+  const border = ensureContrast(
+    hslToHex({ h: base.h, s: Math.min(base.s, 20), l: borderLightness }),
+    background,
+    3
+  );
+  const focus = ensureContrast(
+    hslToHex({ h: accentHue, s: Math.max(base.s, 65), l: focusLightness }),
+    surfaceGui,
+    3
+  );
 
-  return { background, text, accent, link, border, isDark };
+  return {
+    background,
+    backgroundSecondary,
+    // `surface` remains as a compatibility alias for saved state and callers
+    // that predate the GUI/container split.
+    surface: surfaceGui,
+    surfaceGui,
+    surfaceContainers,
+    text,
+    muted,
+    accent,
+    link,
+    border,
+    focus,
+    isDark,
+  };
 }

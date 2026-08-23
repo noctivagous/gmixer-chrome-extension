@@ -1,15 +1,26 @@
-// document_start: inject override CSS before the page paints.
+// document_start: STATIC PASS ONLY.
 //
-// Flash mitigation: race a chrome.storage.session CSS cache (last CSS we
-// applied for this host) against the full settings load. Cache usually
-// wins first and paints immediately; store.ready then refreshes with the
-// true current settings (still without page sampling — that runs at
-// document_end when the DOM exists).
+// BOUNDARY — do not cross:
+// ✓ chrome.storage.session CSS cache for this host
+// ✓ buildCss(resolved, null) from theme settings alone
+// ✓ inject/remove the override <style>
+// ✗ samplePageRoles / page sampling
+// ✗ classifyPage / classifySubtree
+// ✗ tonal surface layers
+// ✗ background-image tagging
+// ✗ MutationObserver
+//
+// Those adaptive steps live in adaptive-pass.js and run from content-end.js
+// (and the MutationObserver) once the DOM exists.
+//
+// Flash mitigation: race the session CSS cache against the full settings
+// load. Cache usually wins first and paints immediately; store.ready then
+// refreshes with the true current settings (still without page sampling).
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle, STYLE_ELEMENT_ID } from './style-injector.js';
 import { readCssCache, writeCssCache, clearCssCache } from './css-cache.js';
 
-async function applyInitialTheme() {
+async function applyStaticTheme() {
   const hostname = location.hostname;
 
   // Kick the cache read immediately — don't wait for store merge.
@@ -28,10 +39,10 @@ async function applyInitialTheme() {
     return;
   }
 
-  // No page sample yet (DOM may not exist) — pure theme palette.
+  // Static only: pure theme palette, no live page sample.
   const css = buildCss(resolved, null);
   injectStyle(css);
   await writeCssCache(hostname, css);
 }
 
-applyInitialTheme();
+applyStaticTheme();

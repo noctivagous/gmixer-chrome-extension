@@ -2,7 +2,7 @@
 // PAGE_RESTYLE / color theming notes). Keep this cheap: a handful of
 // getComputedStyle calls, no full CSSOM walk.
 
-import { hexToHsl, hslToHex } from '../lib/color-theory.js';
+import { deriveSurface, hexToHsl, hslToHex } from '../lib/color-theory.js';
 
 function rgbToHex(r, g, b) {
   const toHex = (v) =>
@@ -50,6 +50,51 @@ function querySample(selector, limit = 8) {
   }
 }
 
+function isTransparentColor(value) {
+  return !value || value === 'transparent' || value === 'rgba(0, 0, 0, 0)';
+}
+
+/**
+ * Select the most likely primary page background instead of assuming body.
+ * Large semantic/app roots are useful for SPAs whose body is transparent.
+ */
+export function findPrimaryBackground(doc = document) {
+  const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+  const candidates = [
+    doc.documentElement,
+    doc.body,
+    ...Array.from(
+      doc.querySelectorAll(
+        'main, [role="main"], [role="application"], #app, #root, [data-app], [data-reactroot]'
+      )
+    ),
+  ].filter(Boolean);
+
+  const scored = candidates
+    .map((element) => {
+      const style = getComputedStyle(element);
+      const color = parseCssColor(style.backgroundColor);
+      if (isTransparentColor(style.backgroundColor) || !color) return null;
+      const rect = element.getBoundingClientRect();
+      const area = Math.max(0, rect.width * rect.height);
+      const areaRatio = Math.min(1, area / viewportArea);
+      const isSemanticRoot =
+        element === doc.body ||
+        element === doc.documentElement ||
+        /^(MAIN)$/.test(element.tagName) ||
+        element.getAttribute('role') === 'main' ||
+        element.getAttribute('role') === 'application' ||
+        ['app', 'root'].includes(element.id);
+      // Prefer roots that cover the viewport, with body/html as safe ties.
+      const score = areaRatio * 10 + (isSemanticRoot ? 1 : 0);
+      return { color, score };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.color || null;
+}
+
 /**
  * Sample the live page's role colors + header size hierarchy.
  * Safe to call only after DOM is available (document_end+).
@@ -73,6 +118,7 @@ export function samplePageRoles() {
   const bordered = querySample('hr, button, input, .card, [class*="card"]', 6);
 
   const background =
+    findPrimaryBackground(document) ||
     pickFirstColor(roots, 'backgroundColor') ||
     pickFirstColor(roots, 'background') ||
     '#ffffff';
@@ -96,6 +142,7 @@ export function samplePageRoles() {
 
   return {
     background,
+    backgroundSecondary: deriveSurface(background, isDark),
     text,
     accent,
     link,
@@ -115,13 +162,18 @@ export function blendWithPageSample(themePalette, pageSample, intensity = 80) {
 
   const mixHex = (themeHex, pageHex) => {
     if (!pageHex) return themeHex;
+    if (t === 0) return pageHex;
+    if (t === 1) return themeHex;
     const a = hexToHsl(themeHex);
     const b = hexToHsl(pageHex);
+    // Interpolate through the shortest path around the hue wheel. A plain
+    // numeric average makes hues near 0°/360° travel through green.
+    const hueDelta = ((a.h - b.h + 540) % 360) - 180;
     // Prefer theme hue/sat, keep some of the page's lightness relationship.
     return hslToHex({
-      h: a.h * t + b.h * (1 - t),
+      h: (b.h + hueDelta * t + 360) % 360,
       s: a.s * t + b.s * (1 - t),
-      l: a.l * (0.55 + 0.45 * t) + b.l * (0.45 * (1 - t)),
+      l: a.l * t + b.l * (1 - t),
     });
   };
 
@@ -130,14 +182,18 @@ export function blendWithPageSample(themePalette, pageSample, intensity = 80) {
   const accent = mixHex(themePalette.accent, pageSample.accent);
   const link = mixHex(themePalette.link, pageSample.link);
   const border = mixHex(themePalette.border, pageSample.border);
+  const isDark = luminance(background) < 50;
 
   return {
     background,
+    surface: deriveSurface(background, isDark),
+    surfaceGui: deriveSurface(background, isDark),
+    surfaceContainers: deriveSurface(deriveSurface(background, isDark), isDark),
     text,
     accent,
     link,
     border,
-    isDark: luminance(background) < 50,
+    isDark,
     headerSizeVariance: pageSample.headerSizeVariance ?? 0.35,
   };
 }

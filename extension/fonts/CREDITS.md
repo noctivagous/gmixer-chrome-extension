@@ -1,6 +1,32 @@
 # Font credits
 
-The bundled typefaces in `extension/fonts/` were created by **Peter Wiegel**
+## Google Fonts (default theme packs)
+
+Bundled under `extension/fonts/google/` for the Editorial, Atelier, and Studio
+theme packs. All are licensed under the **SIL Open Font License 1.1** (OFL).
+
+| Face | Designer / foundry | Pairing role |
+|------|--------------------|--------------|
+| Playfair Display | Claus Eggers Sørensen | Editorial headers |
+| Source Sans 3 | Paul D. Hunt (Adobe) | Editorial body |
+| Lora | Cyreal | Editorial captions |
+| Cormorant Garamond | Christian Thalmann | Atelier headers / captions |
+| Raleway | Matt McInerney et al. | Atelier body |
+| Space Grotesk | Florian Karsten | Studio headers |
+| DM Sans | Colophon Foundry / Google | Studio body |
+| Outfit | Rodrigo Fuenzalida | Studio captions |
+
+Sources: [fonts.google.com](https://fonts.google.com/) · OFL FAQ: https://scripts.sil.org/OFL
+
+Refresh downloads:
+
+```bash
+npm run fonts:google
+```
+
+## Peter Wiegel (expanded library)
+
+The remaining typefaces in `extension/fonts/` were created by **Peter Wiegel**
 and downloaded from [peter-wiegel.de](https://www.peter-wiegel.de/).
 
 Per the site FAQ (as of 2021+):
@@ -18,8 +44,15 @@ each download are kept next to the font file as `*-LICENSE.*` where present.
 Source: https://www.peter-wiegel.de/
 Contact: wiegel@peter-wiegel.de
 
-To refresh or expand the set:
+To refresh or expand the Wiegel set:
 
 ```bash
-node scripts/fetch-wiegel-fonts.mjs
+npm run fonts:fetch
+```
+
+To reclassify existing Wiegel files into the current category taxonomy
+(DaFont theme tags + Wiegel cues — see `scripts/reclassify-fonts.mjs`):
+
+```bash
+npm run fonts:reclassify
 ```

@@ -5,7 +5,8 @@
 
 export const SCHEMA_VERSION = 1;
 
-/** @typedef {'analog' | 'complement' | 'splitComplement' | 'monochrome'} ColorScheme */
+/** @typedef {'analog' | 'complement' | 'splitComplement' | 'triadic' | 'tetradic' | 'monochrome'} ColorScheme */
+/** @typedef {'light' | 'gray' | 'dark'} ThemeMode */
 
 /**
  * Default state for a fresh install. Ships "good out of the box" per the
@@ -16,27 +17,50 @@ export function createDefaultState() {
   return {
     version: SCHEMA_VERSION,
     global: {
-      activeThemePackId: 'gx-default',
+      activeThemePackId: 'editorial',
+      themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {
-        baseColor: '#7c3aed', // violet — neutral starting point, themepacks override
-        scheme: /** @type {ColorScheme} */ ('splitComplement'),
+        baseColor: '#a08a7f', // warm taupe — Editorial theme pack default
+        scheme: /** @type {ColorScheme} */ ('analog'),
         // 0 = stay close to sampled page colors; 100 = full theme paint.
         intensity: 80,
         // Per-role overrides. Empty string = "use the generated/blended palette value".
         overrides: {
           background: '',
+          backgroundSecondary: '',
+          // `surface` is the legacy general-purpose override. New settings
+          // split GUI controls from larger containers.
+          surface: '',
+          surfaceGui: '',
+          surfaceContainers: '',
           text: '',
+          muted: '',
           accent: '',
           link: '',
           border: '',
+          focus: '',
         },
       },
       fonts: {
-        // Defaults-first: ship a finished look out of the box (matrix display
-        // headers + technical body + calligraphy captions), not blank system UI.
-        headers: { fontId: 'ring-matrix', customFontId: null },
-        paragraph: { fontId: 'fundamental', customFontId: null },
-        captions: { fontId: 'euro-script', customFontId: null },
+        // Defaults-first: Editorial Google Font pairing (Playfair + Source Sans 3 + Lora).
+        // Heading slots are independent so h1-h6 can each have their own
+        // face. The settings UI can still apply one face to a selected group.
+        // `headers` and `subheadings` remain as compatibility fallbacks for
+        // state saved before individual heading customization existed.
+        headers: { fontId: 'playfair-display', customFontId: null },
+        subheadings: { fontId: 'playfair-display', customFontId: null },
+        headings: {
+          h1: { fontId: 'playfair-display', customFontId: null },
+          h2: { fontId: 'playfair-display', customFontId: null },
+          h3: { fontId: 'playfair-display', customFontId: null },
+          h4: { fontId: 'playfair-display', customFontId: null },
+          h5: { fontId: 'playfair-display', customFontId: null },
+          h6: { fontId: 'playfair-display', customFontId: null },
+        },
+        paragraph: { fontId: 'source-sans-3', customFontId: null },
+        ui: { fontId: 'source-sans-3', customFontId: null },
+        code: { fontId: 'system-mono', customFontId: null },
+        captions: { fontId: 'lora', customFontId: null },
         // User-uploaded @font-face definitions, keyed by generated id.
         customFonts: {},
       },
@@ -45,11 +69,29 @@ export function createDefaultState() {
         preset: 'monochrome',
         customFilter: '',
         scope: 'both', // 'images' | 'backgrounds' | 'both'
+        revealOnHover: false,
       },
+      // Empty category entries inherit the active theme pack's media slots.
+      // User changes are stored here as explicit per-category overrides.
+      mediaStyles: {},
       clipping: {
         enabled: false,
         preset: 'none', // 'round' | 'notch' | 'mixed' | 'none'
         scope: 'cards', // 'images' | 'cards' | 'buttons' | 'all'
+      },
+      // Manual radius + per-corner bevel overrides. When both Clipping and
+      // Corners are enabled on overlapping elements, Corners wins (emitted
+      // later with !important on border-radius / corner-shape).
+      corners: {
+        enabled: false,
+        radius: 0, // px, 0–48
+        bevel: {
+          topLeft: false,
+          topRight: false,
+          bottomRight: false,
+          bottomLeft: false,
+        },
+        scope: 'all', // 'images' | 'buttons' | 'all'
       },
       effects: {
         glow: { enabled: false, animated: true, color: '' },
@@ -63,6 +105,26 @@ export function createDefaultState() {
         back: true,
         forward: true,
         hoverOutlineAnimated: true,
+      },
+      // Accordion section masters — independent from expand/collapse UI state.
+      // Tone/color/fonts ship on so a fresh install looks finished; opt-in
+      // layers stay off until the user flips their header switch.
+      sections: {
+        tone: true,
+        filter: false,
+        color: true,
+        fonts: true,
+        shape: false,
+        effects: false,
+        navigation: false,
+        'font-browser': true,
+      },
+      // Panel open/scroll/accordion expand — local so every open tab on this
+      // device stays in lockstep. Setting values still sync via their fields.
+      ui: {
+        openSection: /** @type {string|null} */ (null),
+        settingsOpen: false,
+        settingsScrollTop: 0,
       },
     },
     // Per-site overrides layered on top of `global`. Keyed by hostname so

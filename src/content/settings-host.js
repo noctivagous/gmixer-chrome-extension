@@ -1,19 +1,28 @@
-// In-page Settings host: native Popover API + backdrop blur.
-// Toolbar / Alt+M only toggle this; the Lit UI mounts inside the popover.
+// In-page Settings host: native Popover API as a left slide-out panel.
+// Toolbar / Alt+M toggle this; Alt+N toggles per-site theming (titlebar switch).
+// The Lit UI mounts inside the popover.
 //
 // The Custom Elements polyfill patches core DOM methods and scans the
 // document. Keep it, and the Lit UI bundle, out of the normal page-load path.
 // They are loaded only when the user actually opens Settings.
+//
+// Open/closed + settings UI state are store-backed so every tab stays in sync:
+// opening the panel on one tab opens it on the others; accordion, scroll, and
+// setting changes propagate through chrome.storage.
 
 import { GRID, GRID_CSS_VARS } from '../settings/tokens.js';
 import { ensureDocumentFontFaces } from '../lib/font-faces.js';
-import { MSG_TOGGLE_SETTINGS } from '../messaging/messages.js';
+import { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE } from '../messaging/messages.js';
+import { toggleSiteTheming } from '../state/site-enable.js';
+import { store } from '../state/store.js';
 
 export const SETTINGS_POPOVER_ID = 'gmixer-settings';
-export { MSG_TOGGLE_SETTINGS };
+export { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE };
 
 const HOST_STYLE_ID = 'gmixer-settings-host-style';
 let settingsUiPromise;
+/** @type {(() => void) | null} */
+let unsubscribeStore = null;
 
 function loadSettingsUi() {
   if (!settingsUiPromise) {
@@ -25,6 +34,17 @@ function loadSettingsUi() {
   return settingsUiPromise;
 }
 
+async function persistSettingsOpen(open) {
+  try {
+    await store.ready;
+    const current = store.getState()?.global?.ui?.settingsOpen;
+    if (current === open) return;
+    await store.update({ ui: { settingsOpen: open } });
+  } catch {
+    // Stale extension context after reload — ignore.
+  }
+}
+
 function ensureHostStyles() {
   if (document.getElementById(HOST_STYLE_ID)) return;
   const style = document.createElement('style');
@@ -33,31 +53,46 @@ function ensureHostStyles() {
     #${SETTINGS_POPOVER_ID} {
       ${GRID_CSS_VARS}
       box-sizing: border-box;
-      width: min(${GRID.panelWidth}px, calc(100vw - ${GRID.panelMaxInset}px));
-      height: min(${GRID.panelHeight}px, calc(100vh - ${GRID.panelMaxInset}px));
-      max-width: calc(100vw - ${GRID.panelMaxInset}px);
-      max-height: calc(100vh - ${GRID.panelMaxInset}px);
-      margin: auto;
-      border: 1px solid var(--gm-border);
-      border-radius: var(--gm-space-2);
+      position: fixed;
+      inset: 0 auto 0 0;
+      margin: 0;
+      width: min(${GRID.panelWidth}px, calc(100vw - ${GRID.panelPagePeek}px));
+      height: 100vh;
+      height: 100dvh;
+      max-width: calc(100vw - ${GRID.panelPagePeek}px);
+      max-height: none;
+      border: 0;
+      border-right: 1px solid var(--gm-border);
+      border-radius: 0;
       padding: 0;
       overflow: hidden;
       background: var(--gm-bg);
       color: var(--gm-text);
       font: 13px/var(--gm-line) system-ui, sans-serif;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-      inset: 0;
+      box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+      transform: translateX(-100%);
+      transition:
+        transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
+        overlay 280ms allow-discrete,
+        display 280ms allow-discrete;
     }
 
     #${SETTINGS_POPOVER_ID}:popover-open {
       display: flex;
       flex-direction: column;
+      transform: translateX(0);
     }
 
+    @starting-style {
+      #${SETTINGS_POPOVER_ID}:popover-open {
+        transform: translateX(-100%);
+      }
+    }
+
+    /* Transparent, non-blocking — page stays visible for live theme feedback. */
     #${SETTINGS_POPOVER_ID}::backdrop {
-      background: rgba(8, 6, 14, 0.45);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: transparent;
+      pointer-events: none;
     }
 
     #${SETTINGS_POPOVER_ID} gmixer-settings {
@@ -90,28 +125,67 @@ export async function ensureSettingsPopover() {
   return el;
 }
 
-export async function openSettingsPopover() {
-  const el = await ensureSettingsPopover();
-  if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
-    el.showPopover();
+/**
+ * Apply popover visibility to match store state without writing storage.
+ * Used for cross-tab follow and for the local DOM side of open/close.
+ * @param {boolean} open
+ */
+async function applySettingsOpenDom(open) {
+  if (open) {
+    const el = await ensureSettingsPopover();
+    if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
+      el.showPopover();
+    }
+    return;
   }
-  return el;
-}
-
-export function closeSettingsPopover() {
   const el = document.getElementById(SETTINGS_POPOVER_ID);
   if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) {
     el.hidePopover();
   }
 }
 
+function isPopoverOpen() {
+  const el = document.getElementById(SETTINGS_POPOVER_ID);
+  return !!el?.matches?.(':popover-open');
+}
+
+/**
+ * Keep this tab's popover aligned with store.ui.settingsOpen (other tabs,
+ * reload restore, and local toggles all flow through the store).
+ * @param {ReturnType<typeof store.getState>} state
+ */
+function syncPopoverFromStore(state) {
+  const wantOpen = !!state?.global?.ui?.settingsOpen;
+  const isOpen = isPopoverOpen();
+  if (wantOpen === isOpen) {
+    // Closed and never mounted — nothing to do.
+    if (!wantOpen) return;
+    // Want open but element missing (first remote open on this tab).
+    if (!document.getElementById(SETTINGS_POPOVER_ID)) {
+      void applySettingsOpenDom(true);
+    }
+    return;
+  }
+  void applySettingsOpenDom(wantOpen);
+}
+
+export async function openSettingsPopover() {
+  await applySettingsOpenDom(true);
+  await persistSettingsOpen(true);
+  return document.getElementById(SETTINGS_POPOVER_ID);
+}
+
+export async function closeSettingsPopover() {
+  await applySettingsOpenDom(false);
+  await persistSettingsOpen(false);
+}
+
 export async function toggleSettingsPopover() {
-  const el = await ensureSettingsPopover();
-  if (el.matches(':popover-open')) {
-    el.hidePopover();
+  if (isPopoverOpen()) {
+    await closeSettingsPopover();
     return false;
   }
-  el.showPopover();
+  await openSettingsPopover();
   return true;
 }
 
@@ -125,25 +199,54 @@ function isTypingTarget(target) {
 
 async function onKeyDown(e) {
   if (!(e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)) return;
-  if (e.key !== 'm' && e.key !== 'M') return;
   if (isTypingTarget(e.target)) return;
-  e.preventDefault();
-  e.stopPropagation();
-  await toggleSettingsPopover();
+
+  const key = e.key?.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === 'm') {
+    e.preventDefault();
+    e.stopPropagation();
+    await toggleSettingsPopover();
+    return;
+  }
+  if (key === 'n') {
+    e.preventDefault();
+    e.stopPropagation();
+    await toggleSiteTheming();
+  }
 }
 
 function onRuntimeMessage(message, _sender, sendResponse) {
-  if (message?.type !== MSG_TOGGLE_SETTINGS) return;
-  toggleSettingsPopover()
-    .then((open) => sendResponse({ ok: true, open }))
-    .catch((err) => sendResponse({ ok: false, error: String(err) }));
-  return true;
+  if (message?.type === MSG_TOGGLE_SETTINGS) {
+    toggleSettingsPopover()
+      .then((open) => sendResponse({ ok: true, open }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+  if (message?.type === MSG_TOGGLE_SITE) {
+    toggleSiteTheming()
+      .then((enabled) => sendResponse({ ok: true, enabled }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
 }
 
 /** Call once from content-end. */
 export function initSettingsHost() {
   document.addEventListener('keydown', onKeyDown, true);
-  if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-    chrome.runtime.onMessage.addListener(onRuntimeMessage);
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener(onRuntimeMessage);
+    }
+  } catch {
+    // A content script may remain briefly after the extension is reloaded.
   }
+
+  store.ready
+    .then(() => {
+      unsubscribeStore?.();
+      unsubscribeStore = store.subscribe(syncPopoverFromStore);
+      // Align with persisted open state (reload + already-open other tabs).
+      syncPopoverFromStore(store.getState());
+    })
+    .catch(() => {});
 }
