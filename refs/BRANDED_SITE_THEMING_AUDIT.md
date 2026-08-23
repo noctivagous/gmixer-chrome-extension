@@ -3,11 +3,13 @@
 Audit of the current gMixer color/theme analyzer against
 [`BRANDED_SITE_THEMING.md`](./BRANDED_SITE_THEMING.md).
 
-**Verdict:** The checklist items are implemented. Settings can focus Tone /
-Media / full Theme. The adaptive pipeline settles before sampling, scores
-visible regions into structural vs identity tokens, clusters with HSL buckets,
-and applies preserve / harmonize / restyle. Remaining polish: Lab clustering,
-brand-family hover CSS, and contrast-aware identity scoring.
+**Verdict:** The analyzer checklist is implemented: settings can focus Tone /
+Media / full Theme, the adaptive pipeline settles before sampling, scores
+visible regions into structural versus identity tokens with Lab ΔE clustering
+and contrast-aware identity scoring, and derives preserve / harmonize /
+restyle palettes. The application gap has now been closed for sampled semantic
+mastheads and navigation bars: their identity colors are emitted as dedicated
+tokens and painted back to classified/semantic chrome.
 
 ---
 
@@ -17,12 +19,12 @@ brand-family hover CSS, and contrast-aware identity scoring.
 |---|---|---|
 | Structural vs identity palettes | Present | `samplePageRoles()` returns `structural` + `identity` |
 | `getComputedStyle` after stabilize | Present | `waitForPageSettle()` before first adaptive pass |
-| Sample + semantics, area, position, frequency, contrast | Present | Scored region samples; cluster repetition boost |
-| Perceptual clustering + identity confidence | Partial | HSL bucket clustering (Lab still open) |
+| Sample + semantics, area, position, frequency, contrast | Present | Scored regions; text-on-brand contrast bonus/penalty |
+| Perceptual clustering + identity confidence | Present | Lab ΔE clustering (`COLOR_CLUSTER_DELTA_E`) |
 | Preserve site identity | Present | `color.identityMode: 'preserve'` (default) |
 | Harmonize identity hue → theme accent | Present | `harmonizeHue()` + `identityMode: 'harmonize'` |
 | Fully restyle | Present | `identityMode: 'restyle'` (legacy intensity blend) |
-| Brand family (tint/shade/text-on-brand/hover) | Partial | Derived in blend; CSS hover/active wiring still open |
+| Brand family (tint/shade/text-on-brand/hover) | Present | Derived tokens + `--gmixer-brand-*` hover/active CSS |
 | Remove gMixer styles before sample | Present | Style + tonal + bgimg overlays cleared |
 | Targeted CSS overrides; leave originals underneath | Present | `#gmixer-style` + semantic selectors |
 | Image overlays (don’t replace `background-image`) | Present | `background-image-tagger.js` |
@@ -34,50 +36,47 @@ brand-family hover CSS, and contrast-aware identity scoring.
 
 ### Sampling — `src/content/page-sampler.js`
 
-Takes a handful of `getComputedStyle` picks (`pickFirstColor`), not a scored
-region census. Primary background is the one place with geometry + semantic
-scoring (`findPrimaryBackgroundCandidates`).
-
-Accent is “first heading color,” not masthead/nav brand. Link and border are
-likewise first-match from bounded selector lists.
+Scores visible regions by area, viewport position, semantics, Lab ΔE
+repetition, and text-on-brand contrast. Returns flat role hexes plus
+`structural` / `identity` token bags (masthead, nav, link, accent vs
+backgrounds, text, borders).
 
 ### Roles — `src/content/page-classifier.js`
 
 Stamps structural/media attrs (`header`, `nav`, `card`, etc.). Those drive CSS
-selectors, not color-identity assignment.
+selectors; identity colors come from the scored sampler.
 
 ### Blend — `blendWithPageSample`
 
-The only “how much site vs theme” control. Intensity 0 ≈ page, 100 ≈ theme;
-every sampled role moves together. This is not preserve-identity or
-hue-harmonize.
+Intensity blends structural roles. `identityMode` controls brand colors:
+preserve, harmonize (hue remap), or restyle. Derives a brand family for CSS.
 
 ### Apply — `src/content/style-injector.js` + bgimg overlays
 
 Matches the plan’s application strategy well: dedicated override stylesheet,
-semantic selectors, originals left underneath, overlays for background images
-instead of replacing `background-image`.
+semantic selectors, masthead/nav identity selectors, originals left underneath,
+and overlays for background images instead of replacing `background-image`.
 
 ### Timing — `adaptive-pass.js`, `content-end.js`, `mutation-observer.js`
 
 - Full sample (`runAdaptivePass`) on `document_end` / settings reapply.
 - Incremental classify only (`runAdaptiveSubtreePass`) on mutations; reuses
   last color sample.
-- No stabilize wait, no significant-layout resample, no dedicated SPA
-  navigation resample.
-- `removeStyle()` + `removeTonalSurfaceLayers()` run before sampling;
-  background-image overlays are not cleared first.
+- Full resample after page settle, settings reapply, significant layout change,
+  History API navigation, and URL changes observed alongside route DOM changes.
+- `removeStyle()`, tonal layers, and background-image overlays are cleared
+  before sampling.
 
 ---
 
-## Pipeline gap
+## Remaining coverage limits
 
 ```text
-Plan:   computed → visible regions → perceptual clusters → identity scoring
-        → preserve | harmonize | fully restyle → targeted overrides
+Implemented: computed styles → visible regions → Lab clusters → identity scoring
+             → preserve | harmonize | restyle → semantic/classified CSS + overlays
 
-Actual: first-match getComputedStyle → flat role hexes
-        → HSL blend by intensity → semantic CSS + bgimg overlays
+Not covered: cross-origin frames, shadow-root internals, gradients/SVG paint,
+             arbitrary component chrome, or arbitrary below-fold page regions.
 ```
 
 ---
@@ -145,6 +144,6 @@ in `refs/`.
 
 ### Follow-ups (not blocking the checklist)
 
-- [ ] Upgrade HSL bucket clustering to Lab / OKLCH distance
-- [ ] Emit brand-family hover/active CSS from derived tokens
-- [ ] Contrast-aware identity scoring (text-on-brand pairs in the sampler)
+- [x] Upgrade HSL bucket clustering to Lab / OKLCH distance
+- [x] Emit brand-family hover/active CSS from derived tokens
+- [x] Contrast-aware identity scoring (text-on-brand pairs in the sampler)

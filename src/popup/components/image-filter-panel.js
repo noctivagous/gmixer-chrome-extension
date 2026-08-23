@@ -40,10 +40,46 @@ export class ImageFilterPanel extends StoreBoundElement {
       align-items: center;
       gap: 6px;
     }
-    .category-heading {
-      margin: 20px 0 4px;
+    .media-categories {
+      margin: 16px 0 0;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.14);
+    }
+    .media-categories > summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 8px 10px;
       font-size: 12px;
       font-weight: 600;
+      user-select: none;
+    }
+    .media-categories > summary::-webkit-details-marker {
+      display: none;
+    }
+    .media-categories > summary::before {
+      content: '▸';
+      display: inline-block;
+      width: 1em;
+      margin-right: 4px;
+      opacity: 0.7;
+      transition: transform 120ms ease;
+    }
+    .media-categories[open] > summary::before {
+      transform: rotate(90deg);
+    }
+    .media-categories[open] > summary {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .category-body {
+      padding: 8px 10px 10px;
+    }
+    .hint {
+      margin: 0 0 8px;
+      font-size: 10px;
+      opacity: 0.65;
+      line-height: 1.4;
     }
     .category {
       display: grid;
@@ -113,50 +149,54 @@ export class ImageFilterPanel extends StoreBoundElement {
         )}
       </select>
 
-      <p class="category-heading">Recognized media categories</p>
-      <p class="hint">
-        Category overrides win over the global filter. “Auto” follows the global setting.
-      </p>
-      ${MEDIA_ROLES.map(([role, label]) => {
-        const current = {
-          filter: 'auto',
-          outline: 'none',
-          ...(pack?.media?.[role] || {}),
-          ...(overrides[role] || {}),
-        };
-        return html`
-          <div class="category">
-            <span>${label}</span>
-            <select
-              aria-label=${`${label} filter`}
-              @change=${(e) =>
-                this.updateGlobal({ mediaStyles: { [role]: { filter: e.target.value } } })}
-            >
-              ${['auto', 'none', 'monochrome', 'grayscale', 'sepia', 'duotone'].map(
-                (preset) =>
-                  html`<option value=${preset} ?selected=${preset === current.filter}>
-                    ${preset}
-                  </option>`
-              )}
-            </select>
-          </div>
-          <div class="category">
-            <span>${label} outline</span>
-            <select
-              aria-label=${`${label} outline`}
-              @change=${(e) =>
-                this.updateGlobal({ mediaStyles: { [role]: { outline: e.target.value } } })}
-            >
-              ${['none', 'accent'].map(
-                (outline) =>
-                  html`<option value=${outline} ?selected=${outline === current.outline}>
-                    ${outline}
-                  </option>`
-              )}
-            </select>
-          </div>
-        `;
-      })}
+      <details class="media-categories">
+        <summary>Recognized media categories</summary>
+        <div class="category-body">
+          <p class="hint">
+            Category overrides win over the global filter. “Auto” follows the global setting.
+          </p>
+          ${MEDIA_ROLES.map(([role, label]) => {
+            const current = {
+              filter: 'auto',
+              outline: 'none',
+              ...(pack?.media?.[role] || {}),
+              ...(overrides[role] || {}),
+            };
+            return html`
+              <div class="category">
+                <span>${label}</span>
+                <select
+                  aria-label=${`${label} filter`}
+                  @change=${(e) =>
+                    this.updateGlobal({ mediaStyles: { [role]: { filter: e.target.value } } })}
+                >
+                  ${['auto', 'none', 'monochrome', 'grayscale', 'sepia', 'duotone'].map(
+                    (preset) =>
+                      html`<option value=${preset} ?selected=${preset === current.filter}>
+                        ${preset}
+                      </option>`
+                  )}
+                </select>
+              </div>
+              <div class="category">
+                <span>${label} outline</span>
+                <select
+                  aria-label=${`${label} outline`}
+                  @change=${(e) =>
+                    this.updateGlobal({ mediaStyles: { [role]: { outline: e.target.value } } })}
+                >
+                  ${['none', 'accent'].map(
+                    (outline) =>
+                      html`<option value=${outline} ?selected=${outline === current.outline}>
+                        ${outline}
+                      </option>`
+                  )}
+                </select>
+              </div>
+            `;
+          })}
+        </div>
+      </details>
     `;
   }
 }

@@ -13,6 +13,7 @@
 import { GRID, GRID_CSS_VARS } from '../settings/tokens.js';
 import { ensureDocumentFontFaces } from '../lib/font-faces.js';
 import { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE } from '../messaging/messages.js';
+import { drainEarlyMessageQueue } from '../messaging/early-message-queue.js';
 import { toggleSiteTheming } from '../state/site-enable.js';
 import { store } from '../state/store.js';
 
@@ -239,6 +240,9 @@ export function initSettingsHost() {
     }
   } catch {
     // A content script may remain briefly after the extension is reloaded.
+  }
+  for (const type of drainEarlyMessageQueue()) {
+    void onRuntimeMessage({ type }, null, () => {});
   }
 
   store.ready

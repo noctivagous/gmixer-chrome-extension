@@ -33,3 +33,52 @@ export function preferredOpenSectionForFocus(focus) {
   if (focus === 'media') return 'filter';
   return null;
 }
+
+/**
+ * Whether a section may paint / run while this settings focus is active.
+ * "Only" modes hard-gate other layers even if their section switches are On.
+ * @param {SettingsFocus|string|null|undefined} focus
+ * @param {string} sectionId
+ */
+export function sectionAllowedByFocus(focus, sectionId) {
+  if (focus === 'media') return sectionId === 'filter';
+  if (focus === 'tone') return sectionId === 'tone';
+  return true;
+}
+
+/**
+ * Store patch applied when the user picks a settings focus.
+ * Media focus turns on the Media accordion + monochrome filter + reveal-on-hover.
+ * Tone focus turns on the Tone accordion.
+ * Other layers stay as stored; paint is gated by {@link sectionAllowedByFocus}.
+ *
+ * @param {SettingsFocus|string|null|undefined} focus
+ * @returns {Record<string, unknown>}
+ */
+export function patchForSettingsFocus(focus) {
+  const preferred = preferredOpenSectionForFocus(focus);
+  /** @type {Record<string, unknown>} */
+  const ui = { settingsFocus: focus };
+  if (preferred) ui.openSection = preferred;
+
+  if (focus === 'media') {
+    return {
+      ui,
+      sections: { filter: true },
+      imageFilter: {
+        enabled: true,
+        preset: 'monochrome',
+        revealOnHover: true,
+      },
+    };
+  }
+
+  if (focus === 'tone') {
+    return {
+      ui,
+      sections: { tone: true },
+    };
+  }
+
+  return { ui };
+}

@@ -8,6 +8,7 @@ import { getThemePackById } from '../config/theme-packs.js';
 import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
+import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
 
@@ -101,17 +102,25 @@ export function imageFilterPresetCss(preset, palette, customFilter) {
 
 function imageFilterRule(filter, palette) {
   if (!filter?.enabled) return '';
-  const bgSelector = `[style*="background-image"], [${BACKGROUND_IMAGE_ATTR}]`;
-  const targets =
-    filter.scope === 'images'
-      ? 'img, video, picture source'
-      : filter.scope === 'backgrounds'
-        ? ''
-        : `img, video, picture source`;
-
+  const applyToImages = filter.scope !== 'backgrounds';
+  const applyToBackgrounds = filter.scope !== 'images';
   const value = imageFilterPresetCss(filter.preset, palette, filter.customFilter);
-  const imageRule = targets ? `${targets} { filter: ${value} !important; }` : '';
-  if (filter.scope === 'images') return imageRule;
+  const rules = [];
+
+  if (applyToImages) {
+    // Filter the visible replaced elements — not <source>, which never paints.
+    rules.push(`img, video { filter: ${value} !important; }`);
+    if (filter.revealOnHover) {
+      rules.push(`img:hover, video:hover,
+picture:hover img, picture:hover video,
+a:hover img, a:hover video,
+figure:hover img, figure:hover video {
+  filter: none !important;
+}`);
+    }
+  }
+
+  if (!applyToBackgrounds) return rules.join('\n');
 
   // Never put filter/background declarations on the element that owns the
   // page's background-image: that also filters its text and can replace the
@@ -128,7 +137,7 @@ function imageFilterRule(filter, palette) {
       : filter.preset === 'sepia' || filter.preset === 'duotone'
         ? 'color'
         : 'saturation';
-  const overlayRule = `
+  rules.push(`
     [${BACKGROUND_IMAGE_ATTR}] {
       position: relative !important;
       isolation: isolate !important;
@@ -146,9 +155,14 @@ function imageFilterRule(filter, palette) {
       position: relative;
       z-index: 1;
     }
-    ${filter.revealOnHover ? `[${BACKGROUND_IMAGE_ATTR}]:hover > .gmixer-bgimg-overlay { opacity: 0 !important; }` : ''}
-  `;
-  return [imageRule, overlayRule].filter(Boolean).join('\n');
+    ${
+      filter.revealOnHover
+        ? `[${BACKGROUND_IMAGE_ATTR}]:hover > .gmixer-bgimg-overlay { opacity: 0 !important; }`
+        : ''
+    }
+  `);
+
+  return rules.filter(Boolean).join('\n');
 }
 
 function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHover) {
@@ -227,13 +241,13 @@ function effectsRules(effects, palette) {
   if (effects.flash.enabled) {
     rules.push(
       `@keyframes gmixer-flash { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
-       .gmixer-flash-target { animation: gmixer-flash 3s linear infinite; }`
+       a, button, [role="button"] { animation: gmixer-flash 3s linear infinite; }`
     );
   }
 
   if (effects.cursor.enabled) {
     rules.push(
-      `html, body { cursor: ${effects.cursor.style === 'default' ? 'pointer' : effects.cursor.style}; }`
+      `html, body { cursor: ${effects.cursor.style || 'default'}; }`
     );
   }
 
@@ -258,8 +272,30 @@ function effectsRules(effects, palette) {
  * @param {string} surfaceContainers
  * @param {boolean} isDark
  * @param {ReturnType<typeof deriveBrandFamily>} brandFamily
+ * @param {{ masthead: boolean, nav: boolean }} identityRegions
  */
-function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) {
+function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, identityRegions) {
+  const identityChromeRules = [
+    identityRegions.masthead
+      ? `
+    body header, body [role="banner"], body .masthead, body #header, body #masthead,
+    body [data-gmixer-role="header"] {
+      background-color: var(--gmixer-masthead) !important;
+      color: var(--gmixer-masthead-text) !important;
+    }`
+      : '',
+    identityRegions.nav
+      ? `
+    body nav, body [role="navigation"], body .nav, body .navbar,
+    body [data-gmixer-role="navigation"] {
+      background-color: var(--gmixer-nav) !important;
+      color: var(--gmixer-nav-text) !important;
+    }`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   return `
     :root {
       --gmixer-bg-primary: ${role('background')};
@@ -279,6 +315,10 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) {
       --gmixer-brand-text: ${brandFamily.textOnBrand};
       --gmixer-brand-hover: ${brandFamily.hover};
       --gmixer-brand-active: ${brandFamily.active};
+      --gmixer-masthead: ${role('masthead') || role('accent')};
+      --gmixer-masthead-text: ${deriveBrandFamily(role('masthead') || role('accent'), isDark).textOnBrand};
+      --gmixer-nav: ${role('nav') || role('accent')};
+      --gmixer-nav-text: ${deriveBrandFamily(role('nav') || role('accent'), isDark).textOnBrand};
       color-scheme: ${isDark ? 'dark' : 'light'};
     }
 
@@ -438,6 +478,8 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) {
       color: var(--gmixer-brand-text) !important;
     }
 
+    ${identityChromeRules}
+
     hr, fieldset, input, textarea, select, button,
     .card, [class*="card"] {
       border-color: var(--gmixer-border) !important;
@@ -456,10 +498,12 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) {
 /**
  * Whether an accordion section's page effects are active.
  * Expand/collapse is UI-only; this is the persisted On/Off master.
+ * Settings focus ("Only: Media" / "Only: Tone") hard-gates other layers.
  * @param {ReturnType<import('../state/schema.js').createDefaultState>['global']} resolved
  * @param {string} id
  */
 export function isSectionEnabled(resolved, id) {
+  if (!sectionAllowedByFocus(resolved?.ui?.settingsFocus, id)) return false;
   if (id === 'navigation') return !!resolved?.navigation?.enabled;
   const sections = resolved?.sections;
   if (!sections || sections[id] === undefined) {
@@ -493,10 +537,14 @@ export function buildCss(resolved, pageSample = null) {
   const paintEffects = isSectionEnabled(resolved, 'effects');
   const brandFamily =
     blended.brandFamily || deriveBrandFamily(role('accent') || themePalette.accent, isDark);
+  const identityRegions = {
+    masthead: Boolean(pageSample?.masthead),
+    nav: Boolean(pageSample?.nav),
+  };
 
   return [
     fontFaceRules(),
-    paintTone ? roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) : '',
+    paintTone ? roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, identityRegions) : '',
     paintFonts ? headingScaleRules(blended.headerSizeVariance) : '',
     paintFonts ? headingFontRules(resolved.fonts) : '',
     paintFonts ? fontRule('paragraph', resolved.fonts.paragraph) : '',

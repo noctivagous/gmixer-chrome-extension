@@ -5,11 +5,13 @@ import { startMutationObserver } from '../src/content/mutation-observer.js';
 const originalNode = globalThis.Node;
 const originalMutationObserver = globalThis.MutationObserver;
 const originalDocument = globalThis.document;
+const originalLocation = globalThis.location;
 
 afterEach(() => {
   globalThis.Node = originalNode;
   globalThis.MutationObserver = originalMutationObserver;
   globalThis.document = originalDocument;
+  globalThis.location = originalLocation;
 });
 
 describe('mutation-observer', () => {
@@ -85,5 +87,39 @@ describe('mutation-observer', () => {
     await Promise.resolve();
     assert.equal(seen.length, 1);
     assert.equal(seen[0], article);
+  });
+
+  it('signals a URL change arriving with router DOM mutations', async () => {
+    let callback;
+    globalThis.Node = { ELEMENT_NODE: 1 };
+    globalThis.document = { documentElement: {} };
+    globalThis.location = { href: 'https://example.test/first' };
+    globalThis.MutationObserver = class {
+      constructor(next) {
+        callback = next;
+      }
+      observe() {}
+      disconnect() {}
+    };
+
+    let navigationCount = 0;
+    startMutationObserver({
+      onSubtree() {},
+      onCascadeThreat() {},
+      onNavigation() {
+        navigationCount += 1;
+      },
+    });
+
+    globalThis.location = { href: 'https://example.test/second' };
+    callback([
+      {
+        addedNodes: [
+          { nodeType: 1, id: '', tagName: 'MAIN', classList: { contains: () => false }, closest: () => null },
+        ],
+      },
+    ]);
+    await Promise.resolve();
+    assert.equal(navigationCount, 1);
   });
 });

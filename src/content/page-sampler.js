@@ -274,6 +274,10 @@ function collectScored(elements, prop, opts = {}) {
   /** @type {Array<NonNullable<ReturnType<typeof sampleElementColor>> & { score: number }>} */
   const scored = [];
   for (const el of elements) {
+    // Classifier annotations are available during the full adaptive pass.
+    // Advertiser creative is often saturated and large, but must not become a
+    // site's preserved or harmonized identity color.
+    if (opts.identity && el.closest?.('[data-gmixer-role="ad"]')) continue;
     const sample = sampleElementColor(el, prop);
     if (!sample) continue;
     const semanticBonus = opts.semanticBonus?.(el) ?? 0;
@@ -487,19 +491,29 @@ export function blendWithPageSample(
 
   let accent;
   let link;
+  let masthead;
+  let nav;
   if (mode === 'preserve') {
     accent = identity.accent || pageSample.accent || themePalette.accent;
     link = identity.link || pageSample.link || themePalette.link;
+    masthead = identity.masthead || accent;
+    nav = identity.nav || accent;
   } else if (mode === 'harmonize') {
     const pageAccent = identity.accent || pageSample.accent;
     const pageLink = identity.link || pageSample.link;
+    const pageMasthead = identity.masthead || pageAccent;
+    const pageNav = identity.nav || pageAccent;
     accent = pageAccent
       ? harmonizeHue(pageAccent, themePalette.accent)
       : themePalette.accent;
     link = pageLink ? harmonizeHue(pageLink, themePalette.accent) : themePalette.link;
+    masthead = pageMasthead ? harmonizeHue(pageMasthead, themePalette.accent) : accent;
+    nav = pageNav ? harmonizeHue(pageNav, themePalette.accent) : accent;
   } else {
     accent = mixHex(themePalette.accent, pageSample.accent);
     link = mixHex(themePalette.link, pageSample.link);
+    masthead = mixHex(themePalette.accent, identity.masthead || pageSample.accent);
+    nav = mixHex(themePalette.accent, identity.nav || pageSample.accent);
   }
 
   const isDark = luminance(background) < 50;
@@ -513,6 +527,8 @@ export function blendWithPageSample(
     text,
     accent,
     link,
+    masthead,
+    nav,
     border,
     isDark,
     headerSizeVariance: pageSample.headerSizeVariance ?? 0.35,

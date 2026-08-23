@@ -44,6 +44,15 @@ export class EffectsPanel extends StoreBoundElement {
               />
               <label>Animated pulse</label>
             </div>
+            <div class="sub toggle-row">
+              <label for="glow-color">Glow color</label>
+              <input
+                id="glow-color"
+                type="color"
+                .value=${effects.glow.color || '#a08a7f'}
+                @change=${(e) => this.updateGlobal({ effects: { glow: { color: e.target.value } } })}
+              />
+            </div>
           `
         : html``}
 
@@ -64,6 +73,24 @@ export class EffectsPanel extends StoreBoundElement {
         />
         <label>Cursor mods</label>
       </div>
+      ${effects.cursor.enabled
+        ? html`
+            <div class="sub toggle-row">
+              <label for="cursor-style">Cursor style</label>
+              <select
+                id="cursor-style"
+                .value=${effects.cursor.style || 'default'}
+                @change=${(e) => this.updateGlobal({ effects: { cursor: { style: e.target.value } } })}
+              >
+                <option value="default">Default</option>
+                <option value="pointer">Pointer</option>
+                <option value="crosshair">Crosshair</option>
+                <option value="help">Help</option>
+                <option value="wait">Wait</option>
+              </select>
+            </div>
+          `
+        : html``}
 
       <div class="toggle-row">
         <input

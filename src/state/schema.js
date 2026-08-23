@@ -119,6 +119,7 @@ export function createDefaultState() {
       // Tone/color/fonts ship on so a fresh install looks finished; opt-in
       // layers stay off until the user flips their header switch.
       sections: {
+        preview: true,
         tone: true,
         filter: false,
         color: true,

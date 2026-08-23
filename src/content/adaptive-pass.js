@@ -41,8 +41,10 @@ export function runAdaptivePass(resolved) {
   removeStyle();
   removeTonalSurfaceLayers();
   removeBackgroundImageOverlays();
-  const sample = samplePageRoles();
   const classification = classifyPage();
+  // Classification marks ads before the sample walk so identity scoring can
+  // reject sponsor/creative colors that are unrelated to the site's brand.
+  const sample = samplePageRoles();
 
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements();

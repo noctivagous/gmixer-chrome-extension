@@ -19,6 +19,7 @@
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle, STYLE_ELEMENT_ID } from './style-injector.js';
 import { readCssCache, writeCssCache, clearCssCache } from './css-cache.js';
+import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
 
 async function applyStaticTheme() {
   const hostname = location.hostname;
@@ -45,4 +46,5 @@ async function applyStaticTheme() {
   await writeCssCache(hostname, css);
 }
 
+installEarlyMessageQueue();
 applyStaticTheme();

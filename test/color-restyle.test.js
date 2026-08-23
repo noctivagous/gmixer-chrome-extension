@@ -315,6 +315,25 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /\[data-gmixer-bgimg\][^{]*\{[^}]*filter:/);
   });
 
+  it('reveals original images and background overlays on hover when enabled', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.imageFilter.enabled = true;
+    global.imageFilter.preset = 'monochrome';
+    global.imageFilter.revealOnHover = true;
+    global.imageFilter.scope = 'both';
+    const css = buildCss(global, null);
+
+    assert.match(css, /img, video \{ filter: grayscale\(1\)/);
+    assert.match(css, /img:hover, video:hover/);
+    assert.match(css, /a:hover img, a:hover video/);
+    assert.match(css, /filter: none !important/);
+    assert.match(
+      css,
+      /\[data-gmixer-bgimg\]:hover > \.gmixer-bgimg-overlay \{ opacity: 0 !important; \}/
+    );
+  });
+
   it('omits media CSS when the Media section is off', () => {
     const global = createDefaultState().global;
     global.sections.filter = false;
@@ -325,6 +344,36 @@ describe('buildCss page paint', () => {
     const css = buildCss(global, null);
     assert.doesNotMatch(css, /\[data-gmixer-media="videoThumbnail"\]/);
     assert.doesNotMatch(css, /img, video, picture source/);
+  });
+
+  it('media-only focus paints filters without tone/color/font restyle', () => {
+    const global = createDefaultState().global;
+    global.ui.settingsFocus = 'media';
+    global.sections = {
+      ...global.sections,
+      tone: true,
+      color: true,
+      fonts: true,
+      filter: true,
+    };
+    global.imageFilter.enabled = true;
+    global.imageFilter.preset = 'monochrome';
+    const css = buildCss(global, null);
+    assert.match(css, /img, video \{ filter:/);
+    assert.match(css, /grayscale\(1\)/);
+    assert.doesNotMatch(css, /--gmixer-bg-primary:/);
+    assert.doesNotMatch(css, /--gmixer-text:/);
+    assert.doesNotMatch(css, /font-family:/);
+  });
+
+  it('tone-only focus paints surfaces without media filters', () => {
+    const global = createDefaultState().global;
+    global.ui.settingsFocus = 'tone';
+    global.sections.filter = true;
+    global.imageFilter.enabled = true;
+    const css = buildCss(global, null);
+    assert.match(css, /--gmixer-bg-primary:/);
+    assert.doesNotMatch(css, /img, video \{ filter:/);
   });
 });
 

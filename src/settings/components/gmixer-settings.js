@@ -5,6 +5,7 @@ import { buildPalette } from '../../lib/color-theory.js';
 import { getFontById } from '../../config/fonts.js';
 
 import '../../popup/components/theme-pack-panel.js';
+import '../../popup/components/theme-preview-panel.js';
 import '../../popup/components/palette-swatches.js';
 import '../../popup/components/color-panel.js';
 import '../../popup/components/fonts-panel.js';
@@ -20,6 +21,7 @@ import { defineElement } from '../../lib/define-element.js';
 import {
   SETTINGS_FOCUS_OPTIONS,
   preferredOpenSectionForFocus,
+  patchForSettingsFocus,
   visibleSectionsForFocus,
 } from '../settings-focus.js';
 
@@ -60,6 +62,13 @@ const NAV_ICONS = {
     <path
       d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"
     />
+  `),
+  // layout / preview card
+  preview: navIcon(html`
+    <rect width="18" height="14" x="3" y="5" rx="2" />
+    <path d="M7 5V3h10v2" />
+    <path d="M7 15h4" />
+    <path d="M7 11h10" />
   `),
   // droplet
   color: navIcon(html`
@@ -108,8 +117,84 @@ const NAV_ICONS = {
 };
 
 /**
- * Accordion order: Tone first, then Media → Color → Typography →
- * Clipping/Corners → Effects → Navigation → Font browser.
+ * Decorative section artwork. These stay intentionally abstract so they
+ * communicate the section's purpose without looking like another control.
+ */
+const SECTION_ART = {
+  preview: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <rect x="20" y="12" width="148" height="48" rx="6" fill="none" stroke="currentColor" stroke-width="2" />
+      <path d="M20 25h148M42 12v48" stroke="currentColor" stroke-width="1.5" />
+      <path d="M54 36h46M54 44h74" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+      <circle cx="31" cy="18" r="2" fill="currentColor" />
+      <circle cx="37" cy="18" r="2" fill="currentColor" />
+    </svg>
+  `,
+  tone: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <circle cx="142" cy="36" r="25" fill="currentColor" opacity=".18" />
+      <path d="M142 11a25 25 0 0 1 0 50z" fill="currentColor" opacity=".5" />
+      <path d="M142 11a25 25 0 0 0 0 50" fill="none" stroke="currentColor" stroke-width="2" />
+      <path d="M103 20h18M103 36h25M103 52h18" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+    </svg>
+  `,
+  filter: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <rect x="38" y="13" width="118" height="46" rx="5" fill="currentColor" opacity=".14" />
+      <circle cx="70" cy="29" r="7" fill="currentColor" opacity=".52" />
+      <path d="m43 53 29-20 16 11 17-15 45 24" fill="none" stroke="currentColor" stroke-width="2" />
+      <path d="M169 19h25M169 36h17M169 53h25" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+    </svg>
+  `,
+  color: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <circle cx="100" cy="36" r="22" fill="#a78bfa" opacity=".62" />
+      <circle cx="132" cy="25" r="18" fill="#38bdf8" opacity=".48" />
+      <circle cx="148" cy="49" r="19" fill="#f472b6" opacity=".5" />
+      <path d="M48 18h26M48 36h18M48 54h26" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+    </svg>
+  `,
+  fonts: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <text x="42" y="50" fill="currentColor" font-family="Georgia,serif" font-size="48" font-weight="700">Aa</text>
+      <path d="M122 20h54M122 36h42M122 52h60" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+    </svg>
+  `,
+  shape: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <rect x="40" y="14" width="58" height="44" rx="14" fill="none" stroke="currentColor" stroke-width="3" />
+      <path d="M120 14h55v44h-55z" fill="currentColor" opacity=".2" />
+      <path d="M120 14h55L120 58z" fill="none" stroke="currentColor" stroke-width="2" />
+    </svg>
+  `,
+  effects: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <path d="m116 10 5 18 18 5-18 5-5 18-5-18-18-5 18-5z" fill="currentColor" opacity=".62" />
+      <path d="M64 20v16M56 28h16M158 43v12M152 49h12" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+      <circle cx="171" cy="19" r="3" fill="currentColor" />
+    </svg>
+  `,
+  navigation: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <rect x="41" y="16" width="48" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="2" />
+      <path d="M51 28h28M51 38h20M51 48h24" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+      <path d="m124 20 22 20-11 2 7 15-7 3-7-15-8 8z" fill="currentColor" opacity=".5" />
+    </svg>
+  `,
+  'font-browser': html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <path d="M45 57V15h40M45 15v42M45 36h28" fill="none" stroke="currentColor" stroke-width="3" />
+      <path d="M112 20h58M112 36h42M112 52h64" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+      <circle cx="96" cy="20" r="3" fill="currentColor" />
+      <circle cx="96" cy="36" r="3" fill="currentColor" />
+      <circle cx="96" cy="52" r="3" fill="currentColor" />
+    </svg>
+  `,
+};
+
+/**
+ * Accordion order: Theme Preview first, then Tone → Media → Color →
+ * Typography → Clipping/Corners → Effects → Navigation → Font browser.
  *
  * Header On/Off is persisted section enablement (page effects).
  * Expand/collapse is local UI state only — never the same bit.
@@ -117,6 +202,7 @@ const NAV_ICONS = {
  * @type {{ id: string, label: string, tags: string[] }[]}
  */
 const SECTIONS = [
+  { id: 'preview', label: 'Theme Preview', tags: ['gmixer-theme-preview-panel'] },
   { id: 'tone', label: 'Tone', tags: ['gmixer-theme-pack-panel'] },
   { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'color', label: 'Color', tags: ['gmixer-color-panel'] },
@@ -162,6 +248,35 @@ export class GmixerSettings extends StoreBoundElement {
     gmixer-palette-swatches {
       flex: 0 0 auto;
       width: 100%;
+    }
+
+    .settings-focus-picker {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: var(--gm-space-2, 16px);
+      padding: var(--gm-space-1, 8px) var(--gm-space-2, 16px);
+      border-bottom: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+      box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .settings-focus-picker label {
+      font-size: 11px;
+      opacity: 0.78;
+      white-space: nowrap;
+    }
+
+    .settings-focus-picker select {
+      width: 100%;
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.18));
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.22);
+      color: inherit;
+      box-sizing: border-box;
     }
 
     h1 {
@@ -292,29 +407,24 @@ export class GmixerSettings extends StoreBoundElement {
       box-sizing: border-box;
     }
 
-    .settings-focus-picker {
-      max-width: 48rem;
-      display: grid;
-      gap: 4px;
-      margin: 0 0 var(--gm-space-2, 16px);
-    }
-
-    .settings-focus-picker label {
-      font-size: 11px;
-      opacity: 0.78;
-    }
-
-    .settings-focus-picker select {
-      width: 100%;
-      padding: 7px 8px;
-      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.18));
-      border-radius: 6px;
-      background: rgba(0, 0, 0, 0.22);
-      color: inherit;
-      box-sizing: border-box;
-    }
-
     .section {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      gap: var(--gm-space-1, 8px);
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    .section[data-enableable='false'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .section-panel {
+      position: relative;
+      min-width: 0;
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px;
@@ -327,8 +437,45 @@ export class GmixerSettings extends StoreBoundElement {
         opacity 160ms ease;
     }
 
+    .section-art {
+      position: absolute;
+      z-index: 0;
+      inset: 0 0 0 34%;
+      display: flex;
+      justify-content: flex-end;
+      pointer-events: none;
+      color: var(--gm-accent, #8b5cf6);
+      opacity: 0.14;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 30%, black 100%);
+      mask-image: linear-gradient(90deg, transparent 0%, black 30%, black 100%);
+      transition: opacity 160ms ease;
+    }
+
+    .section-art svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .section[data-enabled='true'] .section-art {
+      opacity: 0.22;
+    }
+
+    .section[data-enabled='false'] .section-art {
+      opacity: 0.08;
+    }
+
+    .section[open] .section-art {
+      opacity: 0.12;
+    }
+
+    .section[data-enabled='true'][open] .section-art {
+      opacity: 0.18;
+    }
+
     /* Enabled = layer is applying to the page (switch On). */
-    .section[data-enabled='true'] {
+    .section[data-enabled='true'] .section-panel {
       border-color: rgba(139, 92, 246, 0.72);
       background:
         linear-gradient(90deg, rgba(124, 58, 237, 0.22), transparent 76px),
@@ -356,8 +503,8 @@ export class GmixerSettings extends StoreBoundElement {
       border-color: rgba(167, 139, 250, 0.55);
     }
 
-    /* Disabled = switch Off; quieter than enabled regardless of expand. */
-    .section[data-enabled='false'] {
+    /* Disabled = switch Off; quieter panel regardless of expand. */
+    .section[data-enabled='false'] .section-panel {
       opacity: 0.78;
       border-color: rgba(255, 255, 255, 0.07);
       background: rgba(255, 255, 255, 0.02);
@@ -373,12 +520,16 @@ export class GmixerSettings extends StoreBoundElement {
       color: rgba(242, 238, 252, 0.38);
     }
 
+    .section[data-enabled='false'] .section-switch {
+      opacity: 0.85;
+    }
+
     /* Expanded is independent of enabled — lift the panel, keep enable chrome. */
-    .section[open] {
+    .section[open] .section-panel {
       box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
     }
 
-    .section[data-enabled='true'][open] {
+    .section[data-enabled='true'][open] .section-panel {
       border-color: rgba(167, 139, 250, 0.9);
       box-shadow:
         0 16px 40px rgba(0, 0, 0, 0.36),
@@ -386,7 +537,7 @@ export class GmixerSettings extends StoreBoundElement {
         inset 3px 0 0 #a78bfa;
     }
 
-    .section[data-enabled='false'][open] {
+    .section[data-enabled='false'][open] .section-panel {
       opacity: 0.92;
       border-color: rgba(255, 255, 255, 0.14);
       background: rgba(255, 255, 255, 0.035);
@@ -395,10 +546,11 @@ export class GmixerSettings extends StoreBoundElement {
 
     .section-toggle {
       display: grid;
+      position: relative;
+      z-index: 1;
       grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
       gap: var(--gm-space-2, 16px);
-      flex: 1;
       width: 100%;
       min-height: 64px;
       padding: var(--gm-space-1, 8px) var(--gm-space-2, 16px);
@@ -407,13 +559,7 @@ export class GmixerSettings extends StoreBoundElement {
       color: var(--gm-text, #f2eefc);
       text-align: left;
       cursor: pointer;
-    }
-
-    .section-header {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      min-height: 64px;
+      box-sizing: border-box;
     }
 
     .section-switch {
@@ -421,10 +567,10 @@ export class GmixerSettings extends StoreBoundElement {
       display: grid;
       grid-template-columns: 1fr 1fr;
       flex: 0 0 auto;
-      align-self: center;
+      align-self: start;
       width: 72px;
       height: 28px;
-      margin: 4pt;
+      margin: 18px 0 0;
       padding: 0;
       border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.18));
       border-radius: 3px;
@@ -521,6 +667,8 @@ export class GmixerSettings extends StoreBoundElement {
     }
 
     .section-content {
+      position: relative;
+      z-index: 1;
       padding: 0 var(--gm-space-2, 16px) var(--gm-space-2, 16px);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
@@ -566,6 +714,15 @@ export class GmixerSettings extends StoreBoundElement {
 
     .section-content > *:last-child {
       margin-bottom: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .section-panel,
+      .section-art,
+      .chevron,
+      .section-switch .switch-thumb {
+        transition: none;
+      }
     }
 
     @media (max-width: 560px) {
@@ -650,18 +807,14 @@ export class GmixerSettings extends StoreBoundElement {
   _selectThemePack(packId) {
     const pack = getThemePackById(packId);
     if (!pack) return;
-    this.updateGlobal({ activeThemePackId: packId, themeMode: 'dark', ...pack.patch });
+    this.updateGlobal({ activeThemePackId: packId, ...pack.patch });
   }
 
   /**
    * @param {import('../../state/schema.js').SettingsFocus|string} focus
    */
   _setSettingsFocus(focus) {
-    const preferred = preferredOpenSectionForFocus(focus);
-    /** @type {Record<string, unknown>} */
-    const ui = { settingsFocus: focus };
-    if (preferred) ui.openSection = preferred;
-    this.updateGlobal({ ui });
+    this.updateGlobal(patchForSettingsFocus(focus));
   }
 
   /** @returns {import('../../state/schema.js').SettingsFocus} */
@@ -687,21 +840,23 @@ export class GmixerSettings extends StoreBoundElement {
           ×
         </button>
       </header>
-      <gmixer-palette-swatches></gmixer-palette-swatches>
+      <div class="settings-focus-picker">
+        <label for="settings-focus">Settings</label>
+        <select
+          id="settings-focus"
+          @change=${(e) => this._setSettingsFocus(e.target.value)}
+        >
+          ${SETTINGS_FOCUS_OPTIONS.map(
+            (option) => html`<option value=${option.id} ?selected=${option.id === settingsFocus}>
+              ${option.label}
+            </option>`
+          )}
+        </select>
+      </div>
+      ${settingsFocus === 'theme'
+        ? html`<gmixer-palette-swatches></gmixer-palette-swatches>`
+        : null}
       <main class="body">
-        <div class="settings-focus-picker">
-          <label for="settings-focus">Settings</label>
-          <select
-            id="settings-focus"
-            @change=${(e) => this._setSettingsFocus(e.target.value)}
-          >
-            ${SETTINGS_FOCUS_OPTIONS.map(
-              (option) => html`<option value=${option.id} ?selected=${option.id === settingsFocus}>
-                ${option.label}
-              </option>`
-            )}
-          </select>
-        </div>
         ${settingsFocus === 'theme'
           ? html`
               <div class="theme-pack-picker">
@@ -722,29 +877,38 @@ export class GmixerSettings extends StoreBoundElement {
         <div class="accordion">
           ${visibleSections.map((section) => {
             const isOpen = openSection === section.id;
-            const isEnabled = this._isSectionEnabled(section.id);
+            const hasEnableSwitch = this._sectionHasEnableSwitch(section.id);
+            const isEnabled = hasEnableSwitch ? this._isSectionEnabled(section.id) : true;
             return html`
               <section
                 class="section"
                 ?open=${isOpen}
                 data-enabled=${isEnabled ? 'true' : 'false'}
+                data-enableable=${hasEnableSwitch ? 'true' : 'false'}
               >
-                <div class="section-header">
-                  <button
-                    type="button"
-                    class="section-switch"
-                    role="switch"
-                    aria-checked=${isEnabled}
-                    aria-label=${`${isEnabled ? 'Disable' : 'Enable'} ${section.label}`}
-                    @click=${(e) => {
-                      e.stopPropagation();
-                      this._setSectionEnabled(section.id, !isEnabled);
-                    }}
-                  >
-                    <span class="switch-thumb" aria-hidden="true"></span>
-                    <span class="switch-label switch-off">Off</span>
-                    <span class="switch-label switch-on">On</span>
-                  </button>
+                ${hasEnableSwitch
+                  ? html`
+                      <button
+                        type="button"
+                        class="section-switch"
+                        role="switch"
+                        aria-checked=${isEnabled}
+                        aria-label=${`${isEnabled ? 'Disable' : 'Enable'} ${section.label}`}
+                        @click=${(e) => {
+                          e.stopPropagation();
+                          this._setSectionEnabled(section.id, !isEnabled);
+                        }}
+                      >
+                        <span class="switch-thumb" aria-hidden="true"></span>
+                        <span class="switch-label switch-off">Off</span>
+                        <span class="switch-label switch-on">On</span>
+                      </button>
+                    `
+                  : null}
+                <div class="section-panel">
+                  <div class="section-art" aria-hidden="true">
+                    ${SECTION_ART[section.id]}
+                  </div>
                   <button
                     type="button"
                     class="section-toggle"
@@ -752,28 +916,36 @@ export class GmixerSettings extends StoreBoundElement {
                     aria-controls=${`section-${section.id}`}
                     @click=${() => this._toggleExpanded(section.id)}
                   >
-                    ${NAV_ICONS[section.id === 'tone' ? 'theme' : section.id]}
+                    ${NAV_ICONS[section.id === 'tone' ? 'color' : section.id === 'preview' ? 'preview' : section.id]}
                     <span class="section-heading">
                       <span class="section-label">${section.label}</span>
                       <span class="section-hint">${this._sectionHint(section.id)}</span>
                     </span>
                     <span class="chevron" aria-hidden="true">⌄</span>
                   </button>
+                  ${isOpen
+                    ? html`
+                        <div class="section-content" id=${`section-${section.id}`}>
+                          ${this._renderPreview(section.id)}
+                          ${this._renderSection(section)}
+                        </div>
+                      `
+                    : null}
                 </div>
-                ${isOpen
-                  ? html`
-                      <div class="section-content" id=${`section-${section.id}`}>
-                        ${this._renderPreview(section.id)}
-                        ${this._renderSection(section)}
-                      </div>
-                    `
-                  : null}
               </section>
             `;
           })}
         </div>
       </main>
     `;
+  }
+
+  /**
+   * Theme Preview and Font browser are browse/inspect UI only — no page-layer switch.
+   * @param {string} id
+   */
+  _sectionHasEnableSwitch(id) {
+    return id !== 'preview' && id !== 'font-browser';
   }
 
   /** @returns {string|null} */
@@ -803,7 +975,7 @@ export class GmixerSettings extends StoreBoundElement {
     if (g.sections && g.sections[id] !== undefined) {
       return g.sections[id] === true;
     }
-    return id === 'tone' || id === 'color' || id === 'fonts' || id === 'font-browser';
+    return id === 'tone' || id === 'color' || id === 'fonts';
   }
 
   /**
@@ -811,6 +983,7 @@ export class GmixerSettings extends StoreBoundElement {
    * @param {boolean} enabled
    */
   _setSectionEnabled(id, enabled) {
+    if (!this._sectionHasEnableSwitch(id)) return;
     /** @type {Record<string, unknown>} */
     const patch = { sections: { [id]: enabled } };
     if (id === 'navigation') {
@@ -821,7 +994,8 @@ export class GmixerSettings extends StoreBoundElement {
 
   _sectionHint(id) {
     const hints = {
-      tone: 'Live preview, tone, and type sample',
+      preview: 'Live sample of the active theme pack',
+      tone: 'Light, gray, or dark visual direction',
       filter: 'Style images, video, and background media',
       color: 'Palette, contrast, and tonal surfaces',
       fonts: 'Separate roles for hierarchy and UI',
@@ -834,8 +1008,8 @@ export class GmixerSettings extends StoreBoundElement {
   }
 
   _renderPreview(id) {
-    // Theme accordion hosts the full theme-pack preview — no mini strip.
-    if (id === 'tone') return null;
+    // Theme Preview hosts the full live blurb — no mini strip.
+    if (id === 'preview' || id === 'tone') return null;
     const g = this.state?.global;
     const palette = g?.color
       ? buildPalette(g.color.baseColor, g.color.scheme, g.themeMode || 'dark')
@@ -910,6 +1084,8 @@ export class GmixerSettings extends StoreBoundElement {
 
   _renderPanel(tag) {
     switch (tag) {
+      case 'gmixer-theme-preview-panel':
+        return html`<gmixer-theme-preview-panel></gmixer-theme-preview-panel>`;
       case 'gmixer-theme-pack-panel':
         return html`<gmixer-theme-pack-panel></gmixer-theme-pack-panel>`;
       case 'gmixer-color-panel':

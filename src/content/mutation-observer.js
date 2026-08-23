@@ -14,6 +14,9 @@
  *   New element subtrees that may need classification / tonal / bg tagging.
  * @property {() => void} onCascadeThreat
  *   A <style>, <link>, or <head> addition that may out-order our override.
+ * @property {() => void} [onNavigation]
+ *   The page URL changed while DOM mutations were arriving (for routers that
+ *   do not use History APIs directly).
  */
 
 /**
@@ -26,8 +29,10 @@ export function startMutationObserver(handlers) {
     typeof handlers === 'function' ? handlers : handlers.onSubtree ?? (() => {});
   const onCascadeThreat =
     typeof handlers === 'function' ? handlers : handlers.onCascadeThreat ?? onSubtree;
+  const onNavigation = typeof handlers === 'function' ? () => {} : handlers.onNavigation ?? (() => {});
 
   let pending = false;
+  let lastUrl = globalThis.location?.href ?? '';
   /** @type {Set<Element>} */
   let pendingRoots = new Set();
   let cascadeThreat = false;
@@ -42,11 +47,15 @@ export function startMutationObserver(handlers) {
 
   const flush = () => {
     pending = false;
+    const currentUrl = globalThis.location?.href ?? '';
+    const urlChanged = currentUrl !== lastUrl;
+    lastUrl = currentUrl;
     const roots = Array.from(pendingRoots);
     const threatened = cascadeThreat;
     pendingRoots = new Set();
     cascadeThreat = false;
 
+    if (urlChanged) onNavigation();
     if (roots.length) onSubtree(roots);
     if (threatened) onCascadeThreat();
   };

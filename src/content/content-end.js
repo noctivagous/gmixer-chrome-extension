@@ -55,6 +55,17 @@ async function main() {
   await waitForPageSettle();
   reapply();
 
+  const scheduleSpaResample = watchLayoutAndSpa(reapply, {
+    getLastKey: () => lastLayoutKey,
+    setLastKey: (key) => {
+      lastLayoutKey = key;
+    },
+    getTimer: () => layoutTimer,
+    setTimer: (id) => {
+      layoutTimer = id;
+    },
+  });
+
   startMutationObserver({
     // New page content: reclassify / retag the added subtree, then reassert CSS.
     onSubtree(roots) {
@@ -79,20 +90,14 @@ async function main() {
       }
       injectStyle(buildCss(resolved, sample));
     },
+    // Covers routers that mutate the route without invoking the History APIs
+    // patched below. Run a full pass after its new DOM has had a chance to
+    // paint instead of retaining the prior route's identity sample.
+    onNavigation: scheduleSpaResample,
   });
 
   store.subscribe(reapply);
   initSettingsHost();
-  watchLayoutAndSpa(reapply, {
-    getLastKey: () => lastLayoutKey,
-    setLastKey: (key) => {
-      lastLayoutKey = key;
-    },
-    getTimer: () => layoutTimer,
-    setTimer: (id) => {
-      layoutTimer = id;
-    },
-  });
 
   // Compile-time flag from build.js (--debug). False builds drop this import.
   if (__GMIXER_DEBUG__) {
@@ -131,8 +136,12 @@ function watchLayoutAndSpa(reapply, layout) {
 
   window.addEventListener('resize', scheduleLayoutResample, { passive: true });
 
+  let routeTimer = 0;
   const onSpaNav = () => {
-    window.setTimeout(reapply, 50);
+    clearTimeout(routeTimer);
+    routeTimer = window.setTimeout(() => {
+      void waitForPageSettle().then(reapply);
+    }, 100);
   };
   window.addEventListener('popstate', onSpaNav);
   window.addEventListener('hashchange', onSpaNav);
@@ -149,6 +158,7 @@ function watchLayoutAndSpa(reapply, layout) {
     onSpaNav();
     return result;
   };
+  return onSpaNav;
 }
 
 main();

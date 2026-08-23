@@ -3,7 +3,7 @@ import { StoreBoundElement } from './store-bound-element.js';
 import { isMasterThemingEnabled, toggleSiteTheming } from '../../state/site-enable.js';
 import { defineElement } from '../../lib/define-element.js';
 
-/** Per-site enable/disable — rectangular GUI switch inset in the settings titlebar. */
+/** Master theming enable/disable for every tab, inset in the settings titlebar. */
 export class SiteToggle extends StoreBoundElement {
   static properties = {
     ...StoreBoundElement.properties,
@@ -158,8 +158,8 @@ export class SiteToggle extends StoreBoundElement {
       <span class="switch-shortcut" aria-hidden="true" title="Alt+N toggles theming on all tabs">
         <kbd>Alt</kbd>+<kbd>N</kbd>
       </span>
-      <span class="host" title=${`${this._hostname} — theming master applies to every tab`}>
-        <span class="host-name">${this._hostname}</span>
+      <span class="host" title="Theming master applies to every tab">
+        <span class="host-name">All tabs</span>
       </span>
     `;
   }

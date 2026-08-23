@@ -7,8 +7,6 @@ extension/content-end.js
 extension/content-end.js.map
 extension/background.js
 extension/background.js.map
-extension/popup.js
-extension/popup.js.map
 
 # Scratch directory used by scripts/fetch-wiegel-fonts.mjs
 .tmp-fonts/
