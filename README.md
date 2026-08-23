@@ -9,17 +9,19 @@ for the full spec.
 
 ```bash
 npm install
-npm run build       # one-off build
+npm run build        # one-off build
+npm run build:debug  # build with window.gmixerDebug for evaluate_script
 npm run watch        # rebuild on change
+npm run watch:debug  # watch with debug API enabled
 npm run build:minify # production build
 ```
 
 Load `extension/` as an unpacked extension (`opera://extensions` or
 `chrome://extensions` → Developer mode → Load unpacked).
 
-Open Settings: **toolbar icon** or **Alt+M**. Toggle theming on the current
-site: **Alt+N** (same control as the titlebar On/Off switch). Both are
-remappable in extension shortcuts.
+Open Settings: **toolbar icon** or **Alt+M**. Toggle theming on **all tabs**:
+**Alt+N** (same control as the titlebar On/Off switch). Both are remappable
+in extension shortcuts.
 
 ## Repo layout
 
@@ -48,11 +50,15 @@ gmixer-chrome-extension/
     state/                   # schema + store + storage-adapter
     lib/                     # color-theory, font-faces
     config/                  # fonts + theme-packs
+    debug/                   # optional gmixerDebug API (build:debug)
+    refs/                    # design notes
   build.js
 ```
 
 ## Architecture notes
 
+- **Debug API**: `npm run build:debug` installs `window.gmixerDebug` for
+  CDP / `evaluate_script` (see `refs/GMIXER_DEBUG_MODE.md`). Off by default.
 - **Settings UI**: full-height left slide-out `popover` (`#gmixer-settings`)
   with a single-column, one-open-at-a-time guided accordion. Every section has
   an independent rectangular On/Off switch and every open section includes a

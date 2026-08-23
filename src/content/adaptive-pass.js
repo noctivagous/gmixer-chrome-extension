@@ -10,7 +10,11 @@
 
 import { samplePageRoles } from './page-sampler.js';
 import { classifyPage, classifySubtree } from './page-classifier.js';
-import { shouldTagBackgroundImages, tagBackgroundImageElements } from './background-image-tagger.js';
+import {
+  shouldTagBackgroundImages,
+  tagBackgroundImageElements,
+  removeBackgroundImageOverlays,
+} from './background-image-tagger.js';
 import {
   removeTonalSurfaceLayers,
 } from './tonal-surface-layer.js';
@@ -40,8 +44,10 @@ export function runAdaptivePass(resolved) {
   const sample = samplePageRoles();
   const classification = classifyPage();
 
-  if (shouldTagBackgroundImages(resolved.imageFilter)) {
+  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements();
+  } else {
+    removeBackgroundImageOverlays();
   }
 
   return { sample, classification };
@@ -58,7 +64,7 @@ export function runAdaptivePass(resolved) {
 export function runAdaptiveSubtreePass(root, resolved) {
   const classification = classifySubtree(root);
 
-  if (shouldTagBackgroundImages(resolved.imageFilter)) {
+  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements(root);
   }
 
@@ -68,4 +74,5 @@ export function runAdaptiveSubtreePass(root, resolved) {
 /** Tear down adaptive DOM annotations when gMixer is disabled for the host. */
 export function clearAdaptivePass() {
   removeTonalSurfaceLayers();
+  removeBackgroundImageOverlays();
 }

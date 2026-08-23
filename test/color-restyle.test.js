@@ -301,6 +301,20 @@ describe('buildCss page paint', () => {
     assert.match(css, /:hover \{ filter: none !important; \}/);
   });
 
+  it('uses a separate overlay for background images instead of filtering their owner', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.imageFilter.enabled = true;
+    global.imageFilter.scope = 'backgrounds';
+    global.imageFilter.preset = 'monochrome';
+    const css = buildCss(global, null);
+
+    assert.match(css, /\.gmixer-bgimg-overlay/);
+    assert.match(css, /mix-blend-mode: saturation/);
+    assert.match(css, /background: #808080 !important/);
+    assert.doesNotMatch(css, /\[data-gmixer-bgimg\][^{]*\{[^}]*filter:/);
+  });
+
   it('omits media CSS when the Media section is off', () => {
     const global = createDefaultState().global;
     global.sections.filter = false;

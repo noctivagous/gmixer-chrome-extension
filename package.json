@@ -7,8 +7,10 @@
   "private": true,
   "scripts": {
     "build": "node build.js",
+    "build:debug": "node build.js --debug",
     "build:minify": "node build.js --minify",
     "watch": "node build.js --watch",
+    "watch:debug": "node build.js --watch --debug",
     "fonts:fetch": "node scripts/fetch-wiegel-fonts.mjs",
     "fonts:google": "node scripts/fetch-google-fonts.mjs",
     "fonts:reclassify": "node scripts/reclassify-fonts.mjs",

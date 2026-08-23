@@ -6,6 +6,7 @@ import { mkdirSync } from 'node:fs';
 const OUT_DIR = 'extension';
 const WATCH = process.argv.includes('--watch');
 const MINIFY = process.argv.includes('--minify');
+const DEBUG = process.argv.includes('--debug') || process.env.GMIXER_DEBUG === '1';
 
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -21,6 +22,9 @@ const shared = {
   conditions: ['browser', 'import', 'module', 'default'],
   mainFields: ['browser', 'module', 'main'],
   logLevel: 'info',
+  define: {
+    __GMIXER_DEBUG__: DEBUG ? 'true' : 'false',
+  },
 };
 
 const entries = [
@@ -43,6 +47,13 @@ const entries = [
     format: 'esm',
     ...shared,
   },
+  {
+    // Page main-world stub for window.gmixerDebug (debug builds inject it).
+    entryPoints: ['src/debug/main-world-bridge.js'],
+    outfile: `${OUT_DIR}/debug-bridge.js`,
+    format: 'iife',
+    ...shared,
+  },
 ];
 
 async function run() {
@@ -50,13 +61,15 @@ async function run() {
 
   if (WATCH) {
     await Promise.all(contexts.map((ctx) => ctx.watch()));
-    console.log('gMixer: watching for changes... (Ctrl+C to stop)');
+    console.log(
+      `gMixer: watching for changes... debug=${DEBUG} (Ctrl+C to stop)`
+    );
   } else {
     for (const ctx of contexts) {
       await ctx.rebuild();
       await ctx.dispose();
     }
-    console.log(`gMixer: build complete -> ${OUT_DIR}/`);
+    console.log(`gMixer: build complete -> ${OUT_DIR}/ (debug=${DEBUG})`);
   }
 }
 

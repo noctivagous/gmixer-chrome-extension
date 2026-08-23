@@ -23,7 +23,7 @@
                 "default": "Alt+N",
                 "mac": "Alt+N"
             },
-            "description": "Toggle gMixer theming on this site"
+            "description": "Toggle gMixer theming on all tabs"
         }
     },
     "content_security_policy": {
@@ -61,7 +61,8 @@
         {
             "resources": [
                 "fonts/*",
-                "fonts/*/*"
+                "fonts/*/*",
+                "debug-bridge.js"
             ],
             "matches": [
                 "<all_urls>"

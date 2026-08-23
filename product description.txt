@@ -1,6 +1,22 @@
 gMixer — Product Description
 =============================
 
+--------------------------------------------------
+
+Settings: [select dropdown]
+> Only: Monochrome Page Media
+--- only shows the accordion item for Media
+> Only: Light | Gray | Dark Mode (Tone)
+--- only shows the accordion item for Tone
+> Theme (Select Settings)
+--- shows all of the theme accordions.
+
+
+The user may want to use the Tone section
+and nothing else.
+
+--------------------------------------------------
+
 WHAT IT IS
 ----------
 gMixer is a simple, focused Opera/Chrome extension for re-theming visited web
@@ -277,7 +293,7 @@ with a transparent `::backdrop` so the live page stays visible beside it.
 The toolbar action and Alt+M only toggle it open.
 
 Layout (print / baseline grid: 8px module, 24px baseline):
-- Titlebar (48px): brand, per-site toggle, <kbd>Alt</kbd>+<kbd>M</kbd>, close
+- Titlebar (48px): brand, all-tabs theming toggle, <kbd>Alt</kbd>+<kbd>M</kbd>, close
 - Left rail (192px): vertical section tabs
 - Main column: section controls
 - Preview strip (240px): live mini-page WYSIWYG of current parameters
@@ -293,7 +309,7 @@ Sections:
    when both Clipping and Corners are on, Corners wins on shared properties)
 7. Effects (glow / flash / cursor, each toggleable)
 8. Navigation (opt-in checkbox + the 3 nav keys, off by default)
-9. Per-site enable/disable toggle (titlebar)
+9. All-tabs enable/disable toggle (titlebar / Alt+N)
 
 Launch:
 - Toolbar icon → chrome.action.onClicked → content script toggle
@@ -393,8 +409,8 @@ Only one accordion section can be expanded at a time.
 [x] Style enabled sections distinctly from disabled and merely expanded sections.
 [x] Keep the dedicated Theme area above the accordion, with Media first inside
     the guided accordion.
-[x] Keep the titlebar switch as the per-site theming master switch.
-[x] Keep Alt+N synchronized with the titlebar per-site theming switch.
+[x] Keep the titlebar switch as the master theming switch (all tabs).
+[x] Keep Alt+N synchronized with the titlebar theming switch across tabs.
 
 Page application
 [x] Apply Canvas only to page roots and recognized background surfaces.

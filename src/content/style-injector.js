@@ -106,11 +106,49 @@ function imageFilterRule(filter, palette) {
     filter.scope === 'images'
       ? 'img, video, picture source'
       : filter.scope === 'backgrounds'
-        ? bgSelector
-        : `img, video, picture source, ${bgSelector}`;
+        ? ''
+        : `img, video, picture source`;
 
   const value = imageFilterPresetCss(filter.preset, palette, filter.customFilter);
-  return `${targets} { filter: ${value} !important; }`;
+  const imageRule = targets ? `${targets} { filter: ${value} !important; }` : '';
+  if (filter.scope === 'images') return imageRule;
+
+  // Never put filter/background declarations on the element that owns the
+  // page's background-image: that also filters its text and can replace the
+  // site's image. A separate layer blends over the original image instead.
+  const overlayColor =
+    filter.preset === 'invert'
+      ? '#ffffff'
+      : filter.preset === 'sepia' || filter.preset === 'duotone'
+        ? palette.accent
+        : '#808080';
+  const blendMode =
+    filter.preset === 'invert'
+      ? 'difference'
+      : filter.preset === 'sepia' || filter.preset === 'duotone'
+        ? 'color'
+        : 'saturation';
+  const overlayRule = `
+    [${BACKGROUND_IMAGE_ATTR}] {
+      position: relative !important;
+      isolation: isolate !important;
+    }
+    [${BACKGROUND_IMAGE_ATTR}] > .gmixer-bgimg-overlay {
+      position: absolute !important;
+      inset: 0 !important;
+      z-index: 0 !important;
+      pointer-events: none !important;
+      background: ${overlayColor} !important;
+      opacity: ${filter.preset === 'invert' ? 1 : 0.72} !important;
+      mix-blend-mode: ${blendMode} !important;
+    }
+    [${BACKGROUND_IMAGE_ATTR}] > .gmixer-bgimg-overlay ~ * {
+      position: relative;
+      z-index: 1;
+    }
+    ${filter.revealOnHover ? `[${BACKGROUND_IMAGE_ATTR}]:hover > .gmixer-bgimg-overlay { opacity: 0 !important; }` : ''}
+  `;
+  return [imageRule, overlayRule].filter(Boolean).join('\n');
 }
 
 function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHover) {
@@ -125,10 +163,16 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
     .filter(([role]) => role !== 'defaultFilter')
     .map(([role, style]) => {
       const selector = `[data-gmixer-media="${role}"], [data-gmixer-role="${role}"]`;
+      const filterSelector = selector
+        .split(',')
+        .map((part) => `${part.trim()}:not([${BACKGROUND_IMAGE_ATTR}])`)
+        .join(', ');
       const declarations = [];
       const rules = [];
       if (style?.filter && style.filter !== 'auto' && style.filter !== 'original') {
-        declarations.push(`filter: ${imageFilterPresetCss(style.filter, palette, '')} !important;`);
+        rules.push(
+          `${filterSelector} { filter: ${imageFilterPresetCss(style.filter, palette, '')} !important; }`
+        );
       }
       if (style?.outline === 'accent') {
         declarations.push('outline: 2px solid var(--gmixer-accent) !important; outline-offset: 2px;');
@@ -137,7 +181,7 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
         rules.push(`${selector} { ${declarations.join(' ')} }`);
       }
       if (revealOnHover && style?.filter && style.filter !== 'auto' && style.filter !== 'original') {
-        rules.push(`${selector}:hover { filter: none !important; }`);
+        rules.push(`${filterSelector}:hover { filter: none !important; }`);
       }
       return rules.join('\n');
     })

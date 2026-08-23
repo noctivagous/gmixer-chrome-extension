@@ -14,6 +14,7 @@ const STORAGE_KEY = 'gmixer_state';
  *   per-site override map) that shouldn't burn the sync quota.
  */
 const FIELD_STORAGE_AREAS = {
+  enabled: 'local',
   activeThemePackId: 'sync',
   themeMode: 'sync',
   color: 'sync',
@@ -68,10 +69,13 @@ export async function loadPersistedState() {
   if (!syncState && !localState) return null;
 
   const global = { ...(localState?.global ?? {}), ...(syncState?.global ?? {}) };
-  // UI chrome lives in local; keep it from being overwritten by older sync
-  // payloads that still carried a `ui` bag before the split.
+  // UI chrome and the master enable flag live in local; keep them from being
+  // overwritten by older sync payloads that still carried those keys.
   if (localState?.global?.ui !== undefined) {
     global.ui = localState.global.ui;
+  }
+  if (localState?.global?.enabled !== undefined) {
+    global.enabled = localState.global.enabled;
   }
 
   return {

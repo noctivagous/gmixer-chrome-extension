@@ -55,10 +55,12 @@ function isTransparentColor(value) {
 }
 
 /**
- * Select the most likely primary page background instead of assuming body.
+ * Score candidates for the most likely primary page background.
  * Large semantic/app roots are useful for SPAs whose body is transparent.
+ * @param {Document} [doc]
+ * @returns {{ color: string, score: number, tag: string, id: string, role: string|null, areaRatio: number }[]}
  */
-export function findPrimaryBackground(doc = document) {
+export function findPrimaryBackgroundCandidates(doc = document) {
   const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
   const candidates = [
     doc.documentElement,
@@ -70,7 +72,7 @@ export function findPrimaryBackground(doc = document) {
     ),
   ].filter(Boolean);
 
-  const scored = candidates
+  return candidates
     .map((element) => {
       const style = getComputedStyle(element);
       const color = parseCssColor(style.backgroundColor);
@@ -78,21 +80,35 @@ export function findPrimaryBackground(doc = document) {
       const rect = element.getBoundingClientRect();
       const area = Math.max(0, rect.width * rect.height);
       const areaRatio = Math.min(1, area / viewportArea);
+      const role = element.getAttribute?.('role') || null;
       const isSemanticRoot =
         element === doc.body ||
         element === doc.documentElement ||
         /^(MAIN)$/.test(element.tagName) ||
-        element.getAttribute('role') === 'main' ||
-        element.getAttribute('role') === 'application' ||
+        role === 'main' ||
+        role === 'application' ||
         ['app', 'root'].includes(element.id);
-      // Prefer roots that cover the viewport, with body/html as safe ties.
       const score = areaRatio * 10 + (isSemanticRoot ? 1 : 0);
-      return { color, score };
+      return {
+        color,
+        score,
+        tag: element.tagName,
+        id: element.id || '',
+        role,
+        areaRatio: Number(areaRatio.toFixed(3)),
+      };
     })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score);
+}
 
-  return scored[0]?.color || null;
+/**
+ * Select the most likely primary page background instead of assuming body.
+ * @param {Document} [doc]
+ * @returns {string|null}
+ */
+export function findPrimaryBackground(doc = document) {
+  return findPrimaryBackgroundCandidates(doc)[0]?.color || null;
 }
 
 /**

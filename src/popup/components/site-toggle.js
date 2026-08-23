@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
-import { isSiteThemingEnabled, toggleSiteTheming } from '../../state/site-enable.js';
+import { isMasterThemingEnabled, toggleSiteTheming } from '../../state/site-enable.js';
 import { defineElement } from '../../lib/define-element.js';
 
 /** Per-site enable/disable — rectangular GUI switch inset in the settings titlebar. */
@@ -139,7 +139,7 @@ export class SiteToggle extends StoreBoundElement {
 
   render() {
     if (!this._hostname) return html``;
-    const enabled = isSiteThemingEnabled(this._hostname);
+    const enabled = isMasterThemingEnabled();
 
     return html`
       <button
@@ -147,18 +147,18 @@ export class SiteToggle extends StoreBoundElement {
         class="switch"
         role="switch"
         aria-checked=${enabled}
-        aria-label=${`Enable gMixer on ${this._hostname}`}
-        title=${`Toggle gMixer theming on ${this._hostname} (Alt+N)`}
-        @click=${() => toggleSiteTheming(this._hostname)}
+        aria-label=${enabled ? 'Disable gMixer theming on all tabs' : 'Enable gMixer theming on all tabs'}
+        title=${`Toggle gMixer theming on all tabs (Alt+N)`}
+        @click=${() => toggleSiteTheming()}
       >
         <span class="thumb" aria-hidden="true"></span>
         <span class="label label-off">Off</span>
         <span class="label label-on">On</span>
       </button>
-      <span class="switch-shortcut" aria-hidden="true" title="Alt+N toggles theming">
+      <span class="switch-shortcut" aria-hidden="true" title="Alt+N toggles theming on all tabs">
         <kbd>Alt</kbd>+<kbd>N</kbd>
       </span>
-      <span class="host" title=${this._hostname}>
+      <span class="host" title=${`${this._hostname} — theming master applies to every tab`}>
         <span class="host-name">${this._hostname}</span>
       </span>
     `;

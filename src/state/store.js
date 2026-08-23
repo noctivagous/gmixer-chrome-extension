@@ -77,11 +77,16 @@ export class SettingsStore {
    * Resolve `global` settings with the current site's `perSite` overrides
    * applied on top, for content scripts that only care about "what should
    * apply on this page right now."
+   * The master `global.enabled` flag always wins when false (Alt+N / titlebar).
    */
   getResolvedStateForHost(hostname) {
+    const base = this._state.global;
     const override = this._state.perSite[hostname];
-    if (!override) return this._state.global;
-    return deepMerge(this._state.global, override);
+    const merged = override ? deepMerge(base, override) : base;
+    if (base?.enabled === false) {
+      return { ...merged, enabled: false };
+    }
+    return merged;
   }
 
   /**

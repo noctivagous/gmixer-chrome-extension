@@ -17,6 +17,9 @@ export function createDefaultState() {
   return {
     version: SCHEMA_VERSION,
     global: {
+      // Master theming switch (titlebar / Alt+N). Off disables paint on every
+      // tab; stored in local so all open tabs stay in lockstep immediately.
+      enabled: true,
       activeThemePackId: 'editorial',
       themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {

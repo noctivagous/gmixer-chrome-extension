@@ -77,6 +77,12 @@ async function main() {
 
   store.subscribe(reapply);
   initSettingsHost();
+
+  // Compile-time flag from build.js (--debug). False builds drop this import.
+  if (__GMIXER_DEBUG__) {
+    const { installDebugApi } = await import('../debug/install-debug.js');
+    installDebugApi(store, reapply);
+  }
 }
 
 main();
