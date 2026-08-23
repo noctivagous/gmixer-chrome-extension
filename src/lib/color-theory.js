@@ -164,13 +164,22 @@ function rotate(h, degrees) {
   return (h + degrees + 360) % 360;
 }
 
+export const SCHEMES = [
+  { id: 'analog', label: 'Analogous' },
+  { id: 'complement', label: 'Complementary' },
+  { id: 'splitComplement', label: 'Split-Complementary' },
+  { id: 'triadic', label: 'Triadic' },
+  { id: 'tetradic', label: 'Tetradic' },
+  { id: 'monochrome', label: 'Monochrome' },
+];
+
 /**
  * Given a base color + scheme name, returns hue offsets (in degrees, from
  * the base hue) for a small set of "accent" hues. Lightness/saturation
  * shaping for actual page roles (bg/text/accent/link/border) happens in
  * buildPalette below.
  */
-function accentHueOffsets(scheme) {
+export function accentHueOffsets(scheme) {
   switch (scheme) {
     case 'analog':
       return [-30, 30];
@@ -190,6 +199,34 @@ function accentHueOffsets(scheme) {
 }
 
 /**
+ * Generates a scale of variations for a color.
+ * @param {string} hex
+ * @param {'tint'|'shade'|'tone'} type
+ * @param {number} steps
+ * @returns {string[]}
+ */
+export function getColorScale(hex, type, steps = 5) {
+  const { h, s, l } = hexToHsl(hex);
+  const scale = [];
+  for (let i = 0; i < steps; i++) {
+    const factor = i / (steps - 1);
+    let newS = s;
+    let newL = l;
+
+    if (type === 'tint') {
+      newL = l + (100 - l) * factor;
+    } else if (type === 'shade') {
+      newL = l * (1 - factor);
+    } else if (type === 'tone') {
+      newS = s * (1 - factor);
+    }
+
+    scale.push(hslToHex({ h, s: newS, l: newL }));
+  }
+  return scale;
+}
+
+/**
  * Elevated surface color derived from a lower visual layer. Used first for
  * GUI controls, then once more for cards and other larger containers.
  * Keeps hue with the page bg so themed shells do not read as leftover slabs.
@@ -202,6 +239,28 @@ export function deriveSurface(backgroundHex, _isDark) {
     s: Math.min(s, 25),
     l: surfaceIsDark ? Math.min(l + 10, 88) : Math.max(l - 8, 12),
   });
+}
+
+/**
+ * Build an ordered elevated-surface ladder from a page background.
+ * Index 0 = darkest elevated stop; higher indices are progressively raised.
+ * Used to remap a page's native light/dark surface ranking into Light|Gray|Dark.
+ *
+ * @param {string} backgroundHex
+ * @param {boolean} isDark
+ * @param {number} [steps=3]
+ * @returns {string[]}
+ */
+export function deriveSurfaceLadder(backgroundHex, isDark, steps = 3) {
+  const count = Math.max(1, Math.min(6, steps | 0));
+  /** @type {string[]} */
+  const ladder = [];
+  let current = backgroundHex;
+  for (let i = 0; i < count; i += 1) {
+    current = deriveSurface(current, isDark);
+    ladder.push(current);
+  }
+  return ladder;
 }
 
 /**
@@ -233,6 +292,9 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   const backgroundSecondary = deriveSurface(background, isDark);
   const surfaceGui = deriveSurface(backgroundSecondary, isDark);
   const surfaceContainers = deriveSurface(surfaceGui, isDark);
+  // Three ranked elevated stops for preserving on-page tonal steps
+  // (e.g. white post body vs #f2f2f2 meta strip vs darker secondary nav).
+  const surfaceLadder = deriveSurfaceLadder(background, isDark, 3);
   const text = ensureContrast(
     hslToHex({ h: base.h, s: Math.min(base.s, 10), l: textLightness }),
     background,
@@ -272,6 +334,7 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     surface: surfaceGui,
     surfaceGui,
     surfaceContainers,
+    surfaceLadder,
     text,
     muted,
     accent,

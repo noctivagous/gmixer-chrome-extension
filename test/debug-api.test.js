@@ -30,6 +30,12 @@ function makeStore(initial = {}) {
       if (patch.navigation) {
         state.global.navigation = { ...state.global.navigation, ...patch.navigation };
       }
+      if (patch.themeMode) {
+        state.global.themeMode = patch.themeMode;
+      }
+      if (patch.imageFilter) {
+        state.global.imageFilter = { ...(state.global.imageFilter || {}), ...patch.imageFilter };
+      }
     },
   };
 }
@@ -69,9 +75,9 @@ describe('debug-api', () => {
     await api.setSectionEnabled('filter', true);
     assert.equal(store.getState().global.sections.filter, true);
 
-    await api.toggleSection('tone');
-    assert.equal(store.getState().global.ui.openSection, 'tone');
-    await api.toggleSection('tone');
+    await api.toggleSection('color');
+    assert.equal(store.getState().global.ui.openSection, 'color');
+    await api.toggleSection('color');
     assert.equal(store.getState().global.ui.openSection, null);
 
     const rebuilt = api.rebuildCss();
@@ -82,6 +88,13 @@ describe('debug-api', () => {
     assert.equal(dump.primaryBackground, '#112233');
     assert.equal(dump.debugEnabled, true);
     assert.equal(dump.openSection, null);
+
+    await api.setThemeMode('light');
+    assert.equal(store.getState().global.themeMode, 'light');
+
+    await api.setSettingsFocus('tone');
+    assert.equal(store.getState().global.ui.settingsFocus, 'tone');
+    assert.equal(store.getState().global.sections.color, true);
   });
 
   it('rebuildCss prefers reapply when provided', () => {

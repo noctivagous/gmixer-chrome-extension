@@ -9,9 +9,8 @@ import {
 } from '../src/settings/settings-focus.js';
 
 const SECTIONS = [
-  { id: 'tone' },
-  { id: 'filter' },
   { id: 'color' },
+  { id: 'filter' },
   { id: 'fonts' },
 ];
 
@@ -23,10 +22,10 @@ describe('settings-focus', () => {
     );
   });
 
-  it('shows only Tone for tone focus', () => {
+  it('shows Color (tone-only UI) for tone focus', () => {
     assert.deepEqual(
       visibleSectionsForFocus(SECTIONS, 'tone').map((section) => section.id),
-      ['tone']
+      ['color']
     );
   });
 
@@ -44,7 +43,7 @@ describe('settings-focus', () => {
   });
 
   it('prefers opening the focused section', () => {
-    assert.equal(preferredOpenSectionForFocus('tone'), 'tone');
+    assert.equal(preferredOpenSectionForFocus('tone'), 'color');
     assert.equal(preferredOpenSectionForFocus('media'), 'filter');
     assert.equal(preferredOpenSectionForFocus('theme'), null);
   });
@@ -59,10 +58,13 @@ describe('settings-focus', () => {
     assert.equal(patch.imageFilter.revealOnHover, true);
   });
 
-  it('enables Tone accordion for tone focus', () => {
+  it('enables Color (Tone) for tone focus with full restyle defaults', () => {
     const patch = patchForSettingsFocus('tone');
+    assert.equal(patch.sections.color, true);
     assert.equal(patch.sections.tone, true);
-    assert.equal(patch.ui.openSection, 'tone');
+    assert.equal(patch.ui.openSection, 'color');
+    assert.equal(patch.color.identityMode, 'restyle');
+    assert.equal(patch.color.intensity, 100);
   });
 
   it('gates non-Media sections when focus is media-only', () => {
@@ -73,14 +75,15 @@ describe('settings-focus', () => {
     assert.equal(sectionAllowedByFocus('media', 'navigation'), false);
   });
 
-  it('gates non-Tone sections when focus is tone-only', () => {
+  it('gates non-Color sections when focus is tone-only', () => {
+    assert.equal(sectionAllowedByFocus('tone', 'color'), true);
     assert.equal(sectionAllowedByFocus('tone', 'tone'), true);
     assert.equal(sectionAllowedByFocus('tone', 'filter'), false);
-    assert.equal(sectionAllowedByFocus('tone', 'color'), false);
+    assert.equal(sectionAllowedByFocus('tone', 'fonts'), false);
   });
 
   it('allows all sections under Theme focus', () => {
-    assert.equal(sectionAllowedByFocus('theme', 'tone'), true);
+    assert.equal(sectionAllowedByFocus('theme', 'color'), true);
     assert.equal(sectionAllowedByFocus('theme', 'filter'), true);
     assert.equal(sectionAllowedByFocus(null, 'fonts'), true);
   });

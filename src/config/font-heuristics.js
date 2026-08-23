@@ -7,8 +7,8 @@
  * - pairGroup: optional pack id (e.g. DIN family)
  *
  * Role policy (when showAll is false):
- * - headers:      usage display | both               (hero / h1)
- * - subheadings:  usage display | both                (h2-h6 — same policy as headers,
+ * - headers:      usage display | both, except script (hero / h1)
+ * - subheadings:  usage display | both, except script (h2-h6 — same policy as headers,
  *                 kept as its own role so a theme can size/weight-differentiate it)
  * - paragraph:    usage text | both, and longForm       (long-form prose)
  * - ui:           usage text | both                     (buttons/nav/forms — short strings,
@@ -122,7 +122,7 @@ export function isFontSuitableForTarget(font, target, opts = {}) {
   }
 
   if (target === 'headers' || target === 'subheadings') {
-    return font.usage === 'display' || font.usage === 'both';
+    return font.category !== 'script' && (font.usage === 'display' || font.usage === 'both');
   }
 
   if (target === 'ui') {
@@ -154,6 +154,9 @@ export function unsuitableReason(font, target) {
   }
   if ((target === 'headers' || target === 'subheadings') && font.usage === 'text') {
     return 'Body-oriented face — headers prefer display (enable Show all to force)';
+  }
+  if ((target === 'headers' || target === 'subheadings') && font.category === 'script') {
+    return 'Calligraphy / Script — not recommended for headers (enable Show all to force)';
   }
   if (target === 'ui' && font.usage === 'display') {
     return 'Display face — UI chrome prefers text/both (enable Show all to force)';

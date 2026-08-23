@@ -96,8 +96,13 @@ export const THEME_PACKS = [
       imageFilter: { enabled: false },
       sections: { filter: false },
       effects: {
-        glow: { enabled: false },
-        flash: { enabled: false },
+        categories: {
+          images: { effect: 'none' },
+          videos: { effect: 'none' },
+          navigation: { effect: 'none' },
+          articles: { effect: 'none' },
+        },
+        glow: { animated: true, color: '' },
         backgroundMotion: { enabled: false },
       },
     },
@@ -123,8 +128,13 @@ export const THEME_PACKS = [
       imageFilter: { enabled: false },
       sections: { filter: false },
       effects: {
-        glow: { enabled: false },
-        flash: { enabled: false },
+        categories: {
+          images: { effect: 'none' },
+          videos: { effect: 'none' },
+          navigation: { effect: 'none' },
+          articles: { effect: 'none' },
+        },
+        glow: { animated: true, color: '' },
         backgroundMotion: { enabled: false },
       },
     },
@@ -150,40 +160,62 @@ export const THEME_PACKS = [
       imageFilter: { enabled: false },
       sections: { filter: false },
       effects: {
-        glow: { enabled: false },
-        flash: { enabled: false },
+        categories: {
+          images: { effect: 'none' },
+          videos: { effect: 'none' },
+          navigation: { effect: 'none' },
+          articles: { effect: 'none' },
+        },
+        glow: { animated: true, color: '' },
         backgroundMotion: { enabled: false },
       },
     },
   },
   {
     id: 'noir',
-    label: 'Noir',
+    label: 'gMixer Default',
     description:
-      'High-contrast monochrome — Space Grotesk headers, DM Sans body, and every image/photo desaturated to grayscale so color comes only from the theme accent. Turns any page into a consistent, print-like black & white layout.',
+      'gMixer Default — Media + Typography only. Monochrome images with original-on-hover; DIN Breitschrift h1, Raleway h2, Outfit h3–h6, DM Sans body, Tippa captions.',
     modes: modeSet(),
     media: mediaSet('monochrome'),
     patch: {
       themeMode: 'dark',
       color: { baseColor: '#8a8a8a', scheme: 'monochrome' },
       fonts: {
-        headers: { fontId: 'space-grotesk', customFontId: null },
-        subheadings: { fontId: 'space-grotesk', customFontId: null },
+        headers: { fontId: 'din-breit', customFontId: null },
+        subheadings: { fontId: 'raleway', customFontId: null },
+        headings: {
+          h1: { fontId: 'din-breit', customFontId: null },
+          h2: { fontId: 'raleway', customFontId: null },
+          h3: { fontId: 'outfit', customFontId: null },
+          h4: { fontId: 'outfit', customFontId: null },
+          h5: { fontId: 'outfit', customFontId: null },
+          h6: { fontId: 'outfit', customFontId: null },
+        },
         paragraph: { fontId: 'dm-sans', customFontId: null },
         ui: { fontId: 'dm-sans', customFontId: null },
         code: { fontId: 'system-mono', customFontId: null },
-        captions: { fontId: 'dm-sans', customFontId: null },
+        captions: { fontId: 'tippa', customFontId: null },
       },
-      // The insight this pack exists to demonstrate: grayscale photos read
-      // as deliberate art direction, not a bug — and they make the theme's
-      // single accent color (headers/links) pop far more than color photos
-      // competing with it. Scope 'both' so it also catches CSS
-      // background-image hero banners (see background-image-tagger.js).
-      imageFilter: { enabled: true, preset: 'monochrome', scope: 'both' },
-      sections: { filter: true },
+      imageFilter: { enabled: true, preset: 'monochrome', scope: 'both', revealOnHover: true },
+      // Page layers: Media + Typography only.
+      sections: {
+        tone: false,
+        filter: true,
+        color: false,
+        fonts: true,
+        shape: false,
+        effects: false,
+        navigation: false,
+      },
       effects: {
-        glow: { enabled: false },
-        flash: { enabled: false },
+        categories: {
+          images: { effect: 'none' },
+          videos: { effect: 'none' },
+          navigation: { effect: 'none' },
+          articles: { effect: 'none' },
+        },
+        glow: { animated: true, color: '' },
         backgroundMotion: { enabled: false },
       },
     },

@@ -4,7 +4,6 @@ import { store } from '../../state/store.js';
 import { buildPalette } from '../../lib/color-theory.js';
 import { getFontById } from '../../config/fonts.js';
 
-import '../../popup/components/theme-pack-panel.js';
 import '../../popup/components/theme-preview-panel.js';
 import '../../popup/components/palette-swatches.js';
 import '../../popup/components/color-panel.js';
@@ -193,7 +192,7 @@ const SECTION_ART = {
 };
 
 /**
- * Accordion order: Theme Preview first, then Tone → Media → Color →
+ * Accordion order: Theme Preview first, then Color (includes Tone) → Media →
  * Typography → Clipping/Corners → Effects → Navigation → Font browser.
  *
  * Header On/Off is persisted section enablement (page effects).
@@ -203,9 +202,8 @@ const SECTION_ART = {
  */
 const SECTIONS = [
   { id: 'preview', label: 'Theme Preview', tags: ['gmixer-theme-preview-panel'] },
-  { id: 'tone', label: 'Tone', tags: ['gmixer-theme-pack-panel'] },
-  { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'color', label: 'Color', tags: ['gmixer-color-panel'] },
+  { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'fonts', label: 'Typography', tags: ['gmixer-fonts-panel'] },
   {
     id: 'shape',
@@ -916,9 +914,13 @@ export class GmixerSettings extends StoreBoundElement {
                     aria-controls=${`section-${section.id}`}
                     @click=${() => this._toggleExpanded(section.id)}
                   >
-                    ${NAV_ICONS[section.id === 'tone' ? 'color' : section.id === 'preview' ? 'preview' : section.id]}
+                    ${NAV_ICONS[section.id === 'preview' ? 'preview' : section.id]}
                     <span class="section-heading">
-                      <span class="section-label">${section.label}</span>
+                      <span class="section-label"
+                        >${section.id === 'color' && settingsFocus === 'tone'
+                          ? 'Tone'
+                          : section.label}</span
+                      >
                       <span class="section-hint">${this._sectionHint(section.id)}</span>
                     </span>
                     <span class="chevron" aria-hidden="true">⌄</span>
@@ -975,7 +977,7 @@ export class GmixerSettings extends StoreBoundElement {
     if (g.sections && g.sections[id] !== undefined) {
       return g.sections[id] === true;
     }
-    return id === 'tone' || id === 'color' || id === 'fonts';
+    return id === 'color' || id === 'fonts';
   }
 
   /**
@@ -989,18 +991,21 @@ export class GmixerSettings extends StoreBoundElement {
     if (id === 'navigation') {
       patch.navigation = { enabled };
     }
+    // Color owns Tone; keep legacy `tone` bit in lockstep for older paint paths.
+    if (id === 'color') {
+      patch.sections = { .../** @type {object} */ (patch.sections), tone: enabled };
+    }
     this.updateGlobal(patch);
   }
 
   _sectionHint(id) {
     const hints = {
       preview: 'Live sample of the active theme pack',
-      tone: 'Light, gray, or dark visual direction',
       filter: 'Style images, video, and background media',
-      color: 'Palette, contrast, and tonal surfaces',
+      color: 'Tone (Light|Gray|Dark), palette, and identity',
       fonts: 'Separate roles for hierarchy and UI',
       shape: 'Clip paths, radius, and corner geometry',
-      effects: 'Glow, motion, and interaction energy',
+      effects: 'Per-category glow, pan & scan, flash, and page motion',
       navigation: 'Keyboard-first page navigation',
       'font-browser': 'Browse the complete type catalog',
     };
@@ -1009,7 +1014,7 @@ export class GmixerSettings extends StoreBoundElement {
 
   _renderPreview(id) {
     // Theme Preview hosts the full live blurb — no mini strip.
-    if (id === 'preview' || id === 'tone') return null;
+    if (id === 'preview') return null;
     const g = this.state?.global;
     const palette = g?.color
       ? buildPalette(g.color.baseColor, g.color.scheme, g.themeMode || 'dark')
@@ -1086,10 +1091,10 @@ export class GmixerSettings extends StoreBoundElement {
     switch (tag) {
       case 'gmixer-theme-preview-panel':
         return html`<gmixer-theme-preview-panel></gmixer-theme-preview-panel>`;
-      case 'gmixer-theme-pack-panel':
-        return html`<gmixer-theme-pack-panel></gmixer-theme-pack-panel>`;
       case 'gmixer-color-panel':
-        return html`<gmixer-color-panel></gmixer-color-panel>`;
+        return html`<gmixer-color-panel
+          ?tone-only=${this._settingsFocus() === 'tone'}
+        ></gmixer-color-panel>`;
       case 'gmixer-fonts-panel':
         return html`<gmixer-fonts-panel></gmixer-fonts-panel>`;
       case 'gmixer-image-filter-panel':

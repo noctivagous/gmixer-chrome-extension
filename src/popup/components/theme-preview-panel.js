@@ -40,7 +40,7 @@ const SAMPLE_IMAGE_SRC = `data:image/svg+xml,${SAMPLE_IMAGE_SVG}`;
 
 /**
  * Live theme pack preview (type, surfaces, sample media).
- * Tone Light/Gray/Dark controls live in gmixer-theme-pack-panel.
+ * Tone Light/Gray/Dark controls live in gmixer-color-panel (merged Color module).
  */
 export class ThemePreviewPanel extends StoreBoundElement {
   static styles = css`

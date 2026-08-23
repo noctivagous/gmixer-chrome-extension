@@ -1,12 +1,16 @@
 // Settings focus / prioritization — which accordion sections the panel shows.
 // See product description.txt lines 6–12 and BRANDED_SITE_THEMING_AUDIT.md.
+//
+// Tone (Light | Gray | Dark) lives inside the Color module. "Only: Tone" still
+// focuses that layer: the Color accordion opens in tone-only UI, and paint uses
+// full Light|Gray|Dark restyle (same as Color with identity = Fully restyle).
 
 /** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
 
 /** @type {{ id: SettingsFocus, label: string }[]} */
 export const SETTINGS_FOCUS_OPTIONS = [
   { id: 'media', label: 'Only: Monochrome Page Media' },
-  { id: 'tone', label: 'Only: Light | Gray | Dark Mode (Tone)' },
+  { id: 'tone', label: 'Only: Tone Light | Gray | Dark Mode' },
   { id: 'theme', label: 'Theme (Select Settings)' },
 ];
 
@@ -18,7 +22,8 @@ export const SETTINGS_FOCUS_OPTIONS = [
  * @returns {T[]}
  */
 export function visibleSectionsForFocus(sections, focus) {
-  if (focus === 'tone') return sections.filter((section) => section.id === 'tone');
+  // Tone focus shows the Color module (tone-only chrome); Color owns Tone UI.
+  if (focus === 'tone') return sections.filter((section) => section.id === 'color');
   if (focus === 'media') return sections.filter((section) => section.id === 'filter');
   return sections;
 }
@@ -29,7 +34,7 @@ export function visibleSectionsForFocus(sections, focus) {
  * @returns {string|null}
  */
 export function preferredOpenSectionForFocus(focus) {
-  if (focus === 'tone') return 'tone';
+  if (focus === 'tone') return 'color';
   if (focus === 'media') return 'filter';
   return null;
 }
@@ -42,14 +47,15 @@ export function preferredOpenSectionForFocus(focus) {
  */
 export function sectionAllowedByFocus(focus, sectionId) {
   if (focus === 'media') return sectionId === 'filter';
-  if (focus === 'tone') return sectionId === 'tone';
+  // Tone focus paints through the Color section (merged Tone + Color module).
+  if (focus === 'tone') return sectionId === 'color' || sectionId === 'tone';
   return true;
 }
 
 /**
  * Store patch applied when the user picks a settings focus.
  * Media focus turns on the Media accordion + monochrome filter + reveal-on-hover.
- * Tone focus turns on the Tone accordion.
+ * Tone focus turns on Color (Tone lives there) for full Light|Gray|Dark paint.
  * Other layers stay as stored; paint is gated by {@link sectionAllowedByFocus}.
  *
  * @param {SettingsFocus|string|null|undefined} focus
@@ -76,7 +82,8 @@ export function patchForSettingsFocus(focus) {
   if (focus === 'tone') {
     return {
       ui,
-      sections: { tone: true },
+      sections: { color: true, tone: true },
+      color: { identityMode: 'restyle', intensity: 100 },
     };
   }
 

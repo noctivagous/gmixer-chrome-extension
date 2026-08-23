@@ -20,6 +20,13 @@ import { waitForPageSettle } from '../src/content/page-settle.js';
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
 
+function withTonePaint(global) {
+  global.sections.tone = true;
+  global.sections.color = true;
+  global.color.identityMode = 'preserve';
+  return global;
+}
+
 describe('page-sampler branded roles', () => {
   it('keeps far hues on different Lab cluster keys', () => {
     assert.notEqual(colorClusterKey('#006666'), colorClusterKey('#990066'));
@@ -172,7 +179,25 @@ describe('page-sampler branded roles', () => {
       masthead: '#006666',
       nav: '#004444',
     };
-    const css = buildCss(createDefaultState().global, page);
+    const css = buildCss(withTonePaint(createDefaultState().global), page);
+    assert.match(css, /--gmixer-masthead: #006666;/);
+    assert.match(css, /--gmixer-nav: #004444;/);
+    assert.match(css, /body \.masthead/);
+    assert.match(css, /body \.navbar/);
+    assert.match(css, /--site-header-background-color: var\(--gmixer-masthead\)/);
+  });
+
+  it('reads masthead/nav from nested identity when top-level keys are absent', () => {
+    const page = {
+      background: '#ffffff',
+      text: '#111111',
+      accent: '#006666',
+      link: '#008888',
+      border: '#cccccc',
+      structural: { background: '#ffffff', text: '#111111', border: '#cccccc' },
+      identity: { accent: '#006666', link: '#008888', masthead: '#006666', nav: '#004444' },
+    };
+    const css = buildCss(withTonePaint(createDefaultState().global), page);
     assert.match(css, /--gmixer-masthead: #006666;/);
     assert.match(css, /--gmixer-nav: #004444;/);
     assert.match(css, /body \.masthead/);
@@ -180,7 +205,7 @@ describe('page-sampler branded roles', () => {
   });
 
   it('emits brand-family hover/active CSS variables and rules', () => {
-    const css = buildCss(createDefaultState().global, null);
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /--gmixer-brand:/);
     assert.match(css, /--gmixer-brand-hover:/);
     assert.match(css, /--gmixer-brand-active:/);

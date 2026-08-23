@@ -2,13 +2,17 @@
 // page. Deliberately CSS-only (no per-element JS styling) so it can be
 // generated once per state change and applies live to any element the
 // selectors match — including nodes added later, without extra JS work.
-import { buildPalette, deriveSurface, hexToHsl } from '../lib/color-theory.js';
+import { buildPalette, deriveSurface, deriveSurfaceLadder, hexToHsl } from '../lib/color-theory.js';
+import { resolveImageFilterPreset } from '../config/image-filter-presets.js';
+import { normalizeEffects } from '../config/effects-catalog.js';
 import { getFontById } from '../config/fonts.js';
 import { getThemePackById } from '../config/theme-packs.js';
 import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
+
+export { PALETTE_FILTER_PRESETS, resolveImageFilterPreset } from '../config/image-filter-presets.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
 
@@ -51,7 +55,14 @@ function headingFontRules(fonts) {
       const config = headings[tag] || legacyConfig;
       const font = getFontById(config?.fontId);
       if (!font) return '';
-      return `${tag}, [role="heading"][aria-level="${tag.slice(1)}"] { font-family: ${font.family} !important; }`;
+      const level = tag.slice(1);
+      const role = `[role="heading"][aria-level="${level}"]`;
+      // Sites often wrap headline text in <a>; page `a { font-family }` would
+      // otherwise override the heading face. Match color's heading-link treatment.
+      return (
+        `${tag}, ${role}, ${tag} a, ${role} a ` +
+        `{ font-family: ${font.family} !important; }`
+      );
     })
     .join('\n');
 }
@@ -78,12 +89,22 @@ function headingScaleRules(headerSizeVariance) {
 // computed style, so this selector also reaches those.
 export const BACKGROUND_IMAGE_ATTR = 'data-gmixer-bgimg';
 
-export function imageFilterPresetCss(preset, palette, customFilter) {
-  const accentHue = hexToHsl(palette.accent ?? '#7c3aed').h;
-  // sepia(1) lands the image around a ~35deg (brown) hue; rotate from there
-  // toward the theme's actual accent hue so "duotone" reads as *this*
-  // theme's color, not a fixed brown/violet default.
-  const duotoneRotate = Math.round(((accentHue - 35) % 360 + 360) % 360);
+/** sepia(1) lands near ~35deg; rotate from there to a palette hex hue. */
+function hueRotateFromSepia(hex) {
+  const hue = hexToHsl(hex ?? '#7c3aed').h;
+  return Math.round(((hue - 35) % 360 + 360) % 360);
+}
+
+/**
+ * @param {string} preset
+ * @param {{ accent?: string, link?: string, isDark?: boolean }} palette
+ * @param {string} [customFilter]
+ * @param {{ colorOn?: boolean }} [options]
+ */
+export function imageFilterPresetCss(preset, palette, customFilter, options = {}) {
+  const resolved = resolveImageFilterPreset(preset, options.colorOn !== false);
+  const accentRotate = hueRotateFromSepia(palette.accent);
+  const linkRotate = hueRotateFromSepia(palette.link ?? palette.accent);
   const presets = {
     grayscale: 'grayscale(1)',
     sepia: 'sepia(0.8)',
@@ -94,17 +115,38 @@ export function imageFilterPresetCss(preset, palette, customFilter) {
     monochrome: palette.isDark
       ? 'grayscale(1) contrast(1.1) brightness(1.08)'
       : 'grayscale(1) contrast(1.08) brightness(0.98)',
-    duotone: `grayscale(1) sepia(1) hue-rotate(${duotoneRotate}deg) saturate(1.4)`,
+    duotone: `grayscale(1) sepia(1) hue-rotate(${accentRotate}deg) saturate(1.4)`,
+    // Softer brand cast than full duotone.
+    'accent-tint': `grayscale(1) sepia(0.55) hue-rotate(${accentRotate}deg) saturate(0.85)`,
+    'link-wash': `grayscale(1) sepia(1) hue-rotate(${linkRotate}deg) saturate(1.4)`,
     custom: customFilter || 'none',
   };
-  return presets[preset] ?? 'none';
+  return presets[resolved] ?? 'none';
 }
 
-function imageFilterRule(filter, palette) {
+function backgroundOverlayForPreset(preset, palette) {
+  if (preset === 'invert') {
+    return { color: '#ffffff', blend: 'difference', opacity: 1 };
+  }
+  if (preset === 'duotone' || preset === 'sepia') {
+    return { color: palette.accent, blend: 'color', opacity: 0.72 };
+  }
+  if (preset === 'accent-tint') {
+    return { color: palette.accent, blend: 'color', opacity: 0.45 };
+  }
+  if (preset === 'link-wash') {
+    return { color: palette.link || palette.accent, blend: 'color', opacity: 0.72 };
+  }
+  return { color: '#808080', blend: 'saturation', opacity: 0.72 };
+}
+
+function imageFilterRule(filter, palette, options = {}) {
   if (!filter?.enabled) return '';
   const applyToImages = filter.scope !== 'backgrounds';
   const applyToBackgrounds = filter.scope !== 'images';
-  const value = imageFilterPresetCss(filter.preset, palette, filter.customFilter);
+  const colorOn = options.colorOn !== false;
+  const effectivePreset = resolveImageFilterPreset(filter.preset, colorOn);
+  const value = imageFilterPresetCss(filter.preset, palette, filter.customFilter, { colorOn });
   const rules = [];
 
   if (applyToImages) {
@@ -125,18 +167,7 @@ figure:hover img, figure:hover video {
   // Never put filter/background declarations on the element that owns the
   // page's background-image: that also filters its text and can replace the
   // site's image. A separate layer blends over the original image instead.
-  const overlayColor =
-    filter.preset === 'invert'
-      ? '#ffffff'
-      : filter.preset === 'sepia' || filter.preset === 'duotone'
-        ? palette.accent
-        : '#808080';
-  const blendMode =
-    filter.preset === 'invert'
-      ? 'difference'
-      : filter.preset === 'sepia' || filter.preset === 'duotone'
-        ? 'color'
-        : 'saturation';
+  const overlay = backgroundOverlayForPreset(effectivePreset, palette);
   rules.push(`
     [${BACKGROUND_IMAGE_ATTR}] {
       position: relative !important;
@@ -147,9 +178,9 @@ figure:hover img, figure:hover video {
       inset: 0 !important;
       z-index: 0 !important;
       pointer-events: none !important;
-      background: ${overlayColor} !important;
-      opacity: ${filter.preset === 'invert' ? 1 : 0.72} !important;
-      mix-blend-mode: ${blendMode} !important;
+      background: ${overlay.color} !important;
+      opacity: ${overlay.opacity} !important;
+      mix-blend-mode: ${overlay.blend} !important;
     }
     [${BACKGROUND_IMAGE_ATTR}] > .gmixer-bgimg-overlay ~ * {
       position: relative;
@@ -165,13 +196,14 @@ figure:hover img, figure:hover video {
   return rules.filter(Boolean).join('\n');
 }
 
-function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHover) {
+function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHover, options = {}) {
   const packMedia = getThemePackById(activeThemePackId)?.media;
   if (!packMedia) return '';
   const media = { ...packMedia };
   for (const [role, override] of Object.entries(mediaOverrides || {})) {
     media[role] = { ...(media[role] || {}), ...override };
   }
+  const colorOn = options.colorOn !== false;
 
   return Object.entries(media)
     .filter(([role]) => role !== 'defaultFilter')
@@ -185,7 +217,7 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
       const rules = [];
       if (style?.filter && style.filter !== 'auto' && style.filter !== 'original') {
         rules.push(
-          `${filterSelector} { filter: ${imageFilterPresetCss(style.filter, palette, '')} !important; }`
+          `${filterSelector} { filter: ${imageFilterPresetCss(style.filter, palette, '', { colorOn })} !important; }`
         );
       }
       if (style?.outline === 'accent') {
@@ -224,42 +256,116 @@ function clippingRule(clipping) {
   return `${targets} { ${shapes[clipping.preset] ?? ''} }`;
 }
 
-function effectsRules(effects, palette) {
-  const rules = [];
-  const glowColor = effects.glow.color || palette.accent;
+const EFFECTS_IMAGE_SELECTORS = 'img, picture img';
+const EFFECTS_VIDEO_SELECTORS = 'video';
+const EFFECTS_NAV_SELECTORS = [
+  'nav a',
+  'header a',
+  '[role="navigation"] a',
+  '[role="banner"] a',
+  '[data-gmixer-role="navigation"] a',
+  '[data-gmixer-role="header"] a',
+  'button',
+  '[role="button"]',
+].join(', ');
 
-  if (effects.glow.enabled) {
+function effectsRules(effects, palette) {
+  const normalized = normalizeEffects(effects);
+  const rules = [];
+  const glowColor = normalized.glow.color || palette.accent;
+  const categories = normalized.categories;
+
+  const imageEffect = categories.images.effect;
+  const videoEffect = categories.videos.effect;
+  const navEffect = categories.navigation.effect;
+
+  if (imageEffect === 'glow' || videoEffect === 'glow' || navEffect === 'glow') {
+    if (normalized.glow.animated) {
+      rules.push(`@keyframes gmixer-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 2px ${glowColor}); }
+  50% { filter: drop-shadow(0 0 10px ${glowColor}); }
+}`);
+      rules.push(`@keyframes gmixer-glow-box-pulse {
+  0%, 100% { box-shadow: 0 0 4px ${glowColor}; }
+  50% { box-shadow: 0 0 14px ${glowColor}; }
+}`);
+    }
+  }
+
+  if (imageEffect === 'glow') {
+    // Prefer box-shadow so Media section filter: !important does not wipe glow.
     rules.push(
-      `a, button, [role="button"] { text-shadow: 0 0 8px ${glowColor}; }`,
-      effects.glow.animated
-        ? `@keyframes gmixer-glow-pulse { 0%, 100% { filter: drop-shadow(0 0 2px ${glowColor}); } 50% { filter: drop-shadow(0 0 10px ${glowColor}); } }
-           a, button, [role="button"] { animation: gmixer-glow-pulse 2.4s ease-in-out infinite; }`
+      normalized.glow.animated
+        ? `${EFFECTS_IMAGE_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${EFFECTS_IMAGE_SELECTORS} { box-shadow: 0 0 12px ${glowColor}; }`
+    );
+  } else if (imageEffect === 'pan-scan') {
+    rules.push(`@keyframes gmixer-pan-scan {
+  0% { transform: scale(1.04) translate(0%, 0%); }
+  100% { transform: scale(1.14) translate(-2.5%, -1.5%); }
+}
+${EFFECTS_IMAGE_SELECTORS} {
+  transform-origin: center center;
+  animation: gmixer-pan-scan 16s ease-in-out infinite alternate;
+}`);
+  }
+
+  if (videoEffect === 'glow') {
+    rules.push(
+      normalized.glow.animated
+        ? `${EFFECTS_VIDEO_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${EFFECTS_VIDEO_SELECTORS} { box-shadow: 0 0 12px ${glowColor}; }`
+    );
+  }
+
+  if (navEffect === 'glow') {
+    rules.push(
+      `${EFFECTS_NAV_SELECTORS} { text-shadow: 0 0 8px ${glowColor}; }`,
+      normalized.glow.animated
+        ? `${EFFECTS_NAV_SELECTORS} { animation: gmixer-glow-pulse 2.4s ease-in-out infinite; }`
         : ''
     );
+  } else if (navEffect === 'flash') {
+    rules.push(`@keyframes gmixer-flash { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
+${EFFECTS_NAV_SELECTORS} { animation: gmixer-flash 3s linear infinite; }`);
   }
 
-  if (effects.flash.enabled) {
-    rules.push(
-      `@keyframes gmixer-flash { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
-       a, button, [role="button"] { animation: gmixer-flash 3s linear infinite; }`
-    );
+  if (normalized.cursor.enabled) {
+    rules.push(`html, body { cursor: ${normalized.cursor.style || 'default'}; }`);
   }
 
-  if (effects.cursor.enabled) {
-    rules.push(
-      `html, body { cursor: ${effects.cursor.style || 'default'}; }`
-    );
-  }
-
-  if (effects.backgroundMotion.enabled) {
+  if (normalized.backgroundMotion.enabled) {
     rules.push(
       `@keyframes gmixer-bg-motion { 0% { background-position: 0% 50%; } 100% { background-position: 100% 50%; } }
        html { background-size: 200% 200% !important; animation: gmixer-bg-motion 12s ease-in-out infinite alternate; }`
     );
   }
 
-  return rules.join('\n');
+  return rules.filter(Boolean).join('\n');
 }
+
+/**
+ * Header / nav chrome — semantic + classified only. Sites that fill headers via
+ * CSS variables (e.g. `background-color: var(--site-header-background-color)`)
+ * are handled by remapping those vars on the same selectors, not by naming
+ * individual components or hosts.
+ */
+const HEADER_CHROME_SELECTORS = [
+  'body header',
+  'body [role="banner"]',
+  'body .masthead',
+  'body #header',
+  'body #masthead',
+  'body [data-gmixer-role="header"]',
+].join(',\n    ');
+
+const NAV_CHROME_SELECTORS = [
+  'body nav',
+  'body [role="navigation"]',
+  'body .nav',
+  'body .navbar',
+  'body [data-gmixer-role="navigation"]',
+].join(',\n    ');
 
 /**
  * Page-role paint. Keep the fallback deliberately conservative: recolor the
@@ -273,28 +379,62 @@ function effectsRules(effects, palette) {
  * @param {boolean} isDark
  * @param {ReturnType<typeof deriveBrandFamily>} brandFamily
  * @param {{ masthead: boolean, nav: boolean }} identityRegions
+ * @param {string[]} [surfaceLadder]
+ * @param {{ paintOpaqueOnly?: boolean }} [options]
  */
-function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, identityRegions) {
-  const identityChromeRules = [
-    identityRegions.masthead
-      ? `
-    body header, body [role="banner"], body .masthead, body #header, body #masthead,
-    body [data-gmixer-role="header"] {
-      background-color: var(--gmixer-masthead) !important;
-      color: var(--gmixer-masthead-text) !important;
-    }`
-      : '',
-    identityRegions.nav
-      ? `
-    body nav, body [role="navigation"], body .nav, body .navbar,
-    body [data-gmixer-role="navigation"] {
-      background-color: var(--gmixer-nav) !important;
-      color: var(--gmixer-nav-text) !important;
-    }`
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+function roleCss(
+  role,
+  surfaceGui,
+  surfaceContainers,
+  isDark,
+  brandFamily,
+  identityRegions,
+  surfaceLadder = [],
+  options = {}
+) {
+  const paintOpaqueOnly = options.paintOpaqueOnly !== false;
+  /** @param {string} selectors comma-separated selector list */
+  const maybeOpaque = (selectors) =>
+    paintOpaqueOnly
+      ? selectors
+          .split(',')
+          .map((part) => `${part.trim()}[data-gmixer-native-l]`)
+          .join(',\n    ')
+      : selectors;
+
+  const ladder =
+    surfaceLadder?.length >= 3
+      ? surfaceLadder
+      : deriveSurfaceLadder(role('background') || '#111111', isDark, 3);
+  // Always tone header/nav chrome. Identity mode keeps sampled brand fills;
+  // otherwise (pure Tone / no sample) use secondary surfaces so CSS-variable
+  // brand mastheads cannot stay stuck on --color-primary-*.
+  const headerFill = identityRegions.masthead
+    ? 'var(--gmixer-masthead)'
+    : 'var(--gmixer-bg-secondary)';
+  const headerText = identityRegions.masthead
+    ? 'var(--gmixer-masthead-text)'
+    : 'var(--gmixer-text)';
+  const navFill = identityRegions.nav ? 'var(--gmixer-nav)' : 'var(--gmixer-bg-secondary)';
+  const navText = identityRegions.nav ? 'var(--gmixer-nav-text)' : 'var(--gmixer-text)';
+
+  const chromeRules = `
+    ${maybeOpaque(HEADER_CHROME_SELECTORS)} {
+      /* Remap common header fill/text vars so var()-based utilities follow. */
+      --site-header-background-color: ${headerFill} !important;
+      --site-header-text-color: ${headerText} !important;
+      --header-background-color: ${headerFill} !important;
+      --header-bg: ${headerFill} !important;
+      --header-color: ${headerText} !important;
+      background-color: ${headerFill} !important;
+      color: ${headerText} !important;
+    }
+
+    ${maybeOpaque(NAV_CHROME_SELECTORS)} {
+      background-color: ${navFill} !important;
+      color: ${navText} !important;
+    }
+  `;
 
   return `
     :root {
@@ -303,6 +443,9 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, ident
       --gmixer-bg: var(--gmixer-bg-primary);
       --gmixer-surface-gui: ${role('surfaceGui') || role('surface') || surfaceGui};
       --gmixer-surface-containers: ${role('surfaceContainers') || surfaceContainers};
+      --gmixer-surface-0: ${ladder[0]};
+      --gmixer-surface-1: ${ladder[1]};
+      --gmixer-surface-2: ${ladder[2]};
       --gmixer-text: ${role('text')};
       --gmixer-muted: ${role('muted')};
       --gmixer-accent: ${role('accent')};
@@ -327,19 +470,92 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, ident
       color: var(--gmixer-text) !important;
     }
 
-    /* Only semantic page regions receive the secondary background. */
-    body > header, body > footer, body > nav, body > aside,
+    /* Semantic page regions — opaque-only skips transparent layout wrappers. */
+    ${maybeOpaque(`body > header, body > footer, body > nav, body > aside,
+    body > section,
     body > [role="banner"], body > [role="contentinfo"],
-    body > [role="navigation"], body > [role="complementary"] {
+    body > [role="navigation"], body > [role="complementary"]`)} {
       background-color: var(--gmixer-bg-secondary) !important;
+      color: var(--gmixer-text) !important;
+    }
+
+    /* Main content sheet: opaque-aware (layout-only mains stay transparent). */
+    ${maybeOpaque(`body main, body #main, body [role="main"], body [data-gmixer-role="main"]`)} {
+      background-color: var(--gmixer-bg-secondary) !important;
+      color: var(--gmixer-text) !important;
     }
 
     /* Compact controls use the GUI surface. */
-    body input, body textarea, body select, body button,
+    ${maybeOpaque(`body input, body textarea, body select, body button,
     body [role="textbox"], body [role="searchbox"], body [role="combobox"],
-    body [role="button"], body [contenteditable="true"] {
+    body [role="button"], body [contenteditable="true"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
       color: var(--gmixer-text) !important;
+    }
+
+    /* Header/nav menus share one chrome fill. Do not elevate buttons, fields,
+       or promoted slabs into spaced darker blocks (Opera GX-style mastheads). */
+    body :is(
+      header,
+      [role="banner"],
+      nav,
+      [role="navigation"],
+      .masthead,
+      .navbar,
+      #header,
+      #masthead,
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    ) :is(
+      ul,
+      ol,
+      li,
+      menu,
+      button,
+      [role="button"],
+      input,
+      textarea,
+      select,
+      [role="textbox"],
+      [role="searchbox"],
+      [role="combobox"],
+      [role="menuitem"],
+      [data-gmixer-role="surface"]
+    ) {
+      background-color: transparent !important;
+    }
+
+    body :is(
+      header,
+      [role="banner"],
+      nav,
+      [role="navigation"],
+      .masthead,
+      .navbar,
+      #header,
+      #masthead,
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    ) :is(button, [role="button"], [role="menuitem"]):is(:hover, :focus-visible) {
+      background-color: color-mix(in srgb, var(--gmixer-text) 12%, transparent) !important;
+      color: inherit !important;
+      border-color: transparent !important;
+    }
+
+    body :is(
+      header,
+      [role="banner"],
+      nav,
+      [role="navigation"],
+      .masthead,
+      .navbar,
+      #header,
+      #masthead,
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    ) :is(button, [role="button"], [role="menuitem"]):active {
+      background-color: color-mix(in srgb, var(--gmixer-text) 18%, transparent) !important;
+      color: inherit !important;
     }
 
     /* Many sites put the visible radius on a field shell and leave the
@@ -403,23 +619,38 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, ident
       corner-shape: inherit !important;
     }
 
-    /* Cards and larger semantic regions use the container surface. */
-    body .card, body [class*="card"],
+    /* Cards, articles, and promoted nested panels. Default mid ladder stop;
+       data-gmixer-tone-step remaps to ranked elevated stops so native
+       light/dark relationships survive Light|Gray|Dark. */
+    ${maybeOpaque(`body .card,
+    body article,
     body [data-gmixer-role="card"],
+    body [data-gmixer-role="article"],
+    body [data-gmixer-role="article-body"],
+    body [data-gmixer-role="surface"],
     body [data-gmixer-role="sidebar"],
     body [data-gmixer-role="hero"],
     body pre, body code, body kbd, body samp,
     body dialog, body [role="dialog"], body [role="menu"],
-    body [role="listbox"], body [role="alert"] {
-      background-color: var(--gmixer-surface-containers) !important;
+    body [role="listbox"], body [role="alert"]`)} {
+      background-color: var(--gmixer-surface-1) !important;
       color: var(--gmixer-text) !important;
     }
 
     /* Keep text coverage semantic. In particular, never force colors on
-       arbitrary div/span layout nodes or icon wrappers. */
+       arbitrary div/span layout nodes or icon wrappers — except as
+       descendants of hosts we already paint (modern sites often put the
+       visible ink on nested spans inside links/headings). */
     p, li, td, th, blockquote, label,
     [role="main"], [role="region"], [role="complementary"],
-    [role="search"], [role="status"], [role="alert"] {
+    [role="search"], [role="status"], [role="alert"],
+    [data-gmixer-role="main"],
+    [data-gmixer-role="article"],
+    [data-gmixer-role="article-body"],
+    [data-gmixer-role="surface"],
+    [data-gmixer-role="header"],
+    [data-gmixer-role="footer"],
+    [data-gmixer-role="sidebar"] {
       color: var(--gmixer-text) !important;
     }
 
@@ -443,6 +674,23 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, ident
 
     a:active {
       color: var(--gmixer-brand-active) !important;
+    }
+
+    /* Nested ink nodes inherit the host color we set above so site rules on
+       span/div inside links and headings cannot keep dark text on dark tone. */
+    a *,
+    h1 *, h2 *, h3 *, h4 *, h5 *, h6 *,
+    [role="heading"] *,
+    p *, li *, td *, th *, blockquote *, label * {
+      color: inherit !important;
+    }
+
+    a:hover *, a:focus-visible * {
+      color: inherit !important;
+    }
+
+    a:active * {
+      color: inherit !important;
     }
 
     /* Heading links belong to the heading role, not ordinary body links. */
@@ -478,7 +726,67 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, ident
       color: var(--gmixer-brand-text) !important;
     }
 
-    ${identityChromeRules}
+    /* Content tonal steps (before chrome so identity header/nav can win). */
+    body :is(
+      [data-gmixer-role="surface"],
+      [data-gmixer-role="article"],
+      [data-gmixer-role="article-body"],
+      [data-gmixer-role="card"],
+      [data-gmixer-role="sidebar"],
+      [data-gmixer-role="hero"],
+      [data-gmixer-role="main"]
+    )[data-gmixer-tone-step="0"] {
+      background-color: var(--gmixer-surface-0) !important;
+    }
+    body :is(
+      [data-gmixer-role="surface"],
+      [data-gmixer-role="article"],
+      [data-gmixer-role="article-body"],
+      [data-gmixer-role="card"],
+      [data-gmixer-role="sidebar"],
+      [data-gmixer-role="hero"],
+      [data-gmixer-role="main"]
+    )[data-gmixer-tone-step="1"] {
+      background-color: var(--gmixer-surface-1) !important;
+    }
+    body :is(
+      [data-gmixer-role="surface"],
+      [data-gmixer-role="article"],
+      [data-gmixer-role="article-body"],
+      [data-gmixer-role="card"],
+      [data-gmixer-role="sidebar"],
+      [data-gmixer-role="hero"],
+      [data-gmixer-role="main"]
+    )[data-gmixer-tone-step="2"] {
+      background-color: var(--gmixer-surface-2) !important;
+    }
+
+    ${chromeRules}
+
+    ${
+      !identityRegions.masthead && !identityRegions.nav
+        ? `
+    /* Tone-only: keep relative header/nav depth (e.g. secondary wrap darker). */
+    body :is(
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    )[data-gmixer-tone-step="0"] {
+      background-color: var(--gmixer-surface-0) !important;
+    }
+    body :is(
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    )[data-gmixer-tone-step="1"] {
+      background-color: var(--gmixer-surface-1) !important;
+    }
+    body :is(
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    )[data-gmixer-tone-step="2"] {
+      background-color: var(--gmixer-surface-2) !important;
+    }`
+        : ''
+    }
 
     hr, fieldset, input, textarea, select, button,
     .card, [class*="card"] {
@@ -506,8 +814,17 @@ export function isSectionEnabled(resolved, id) {
   if (!sectionAllowedByFocus(resolved?.ui?.settingsFocus, id)) return false;
   if (id === 'navigation') return !!resolved?.navigation?.enabled;
   const sections = resolved?.sections;
+  // Tone merged into Color — either bit enables surface paint.
+  if (id === 'tone' || id === 'color') {
+    if (!sections) return true;
+    if (sections.color === true || sections.tone === true) return true;
+    if (sections.color === false && sections.tone === false) return false;
+    if (sections.color !== undefined) return sections.color === true;
+    if (sections.tone !== undefined) return sections.tone === true;
+    return true;
+  }
   if (!sections || sections[id] === undefined) {
-    return id === 'tone' || id === 'color' || id === 'fonts' || id === 'font-browser';
+    return id === 'fonts' || id === 'font-browser';
   }
   return sections[id] === true;
 }
@@ -518,46 +835,78 @@ export function buildCss(resolved, pageSample = null) {
     resolved.color.scheme,
     resolved.themeMode || 'dark'
   );
-  const intensity = resolved.color.intensity ?? 80;
-  const identityMode = resolved.color.identityMode || 'preserve';
+  const paintTone =
+    isSectionEnabled(resolved, 'tone') || isSectionEnabled(resolved, 'color');
+  const paintFonts = isSectionEnabled(resolved, 'fonts');
+  const paintMedia = isSectionEnabled(resolved, 'filter');
+  const colorOn = isSectionEnabled(resolved, 'color');
+  const paintShape = isSectionEnabled(resolved, 'shape');
+  const paintEffects = isSectionEnabled(resolved, 'effects');
+  // Tone approaches live in Color: Only: Tone (or Fully restyle) uses the
+  // theme palette at full strength with structural header/nav fills so
+  // Light|Gray|Dark is not muddied by page sampling / brand preserve.
+  const toneFocus = resolved?.ui?.settingsFocus === 'tone';
+  const identityMode = toneFocus
+    ? 'restyle'
+    : resolved.color.identityMode || 'restyle';
+  const intensity = toneFocus ? 100 : (resolved.color.intensity ?? 100);
+  const structuralChrome = toneFocus || identityMode === 'restyle';
   const blended = blendWithPageSample(themePalette, pageSample, intensity, identityMode);
   const overrides = resolved.color.overrides ?? {};
-  const role = (key) => overrides[key] || blended[key];
+  const role = (key) => {
+    const override = overrides[key];
+    if (typeof override === 'string' && override.trim()) return override;
+    return blended[key] ?? themePalette[key];
+  };
   const background = role('background');
   const isDark = hexToHsl(background).l < 50;
   const surfaceGui =
     overrides.surfaceGui || overrides.surface || blended.surfaceGui || blended.surface || deriveSurface(background, isDark);
   const surfaceContainers =
     overrides.surfaceContainers || blended.surfaceContainers || deriveSurface(surfaceGui, isDark);
+  const surfaceLadder =
+    blended.surfaceLadder || themePalette.surfaceLadder || deriveSurfaceLadder(background, isDark, 3);
 
-  const paintTone = isSectionEnabled(resolved, 'tone') || isSectionEnabled(resolved, 'color');
-  const paintFonts = isSectionEnabled(resolved, 'fonts');
-  const paintMedia = isSectionEnabled(resolved, 'filter');
-  const paintShape = isSectionEnabled(resolved, 'shape');
-  const paintEffects = isSectionEnabled(resolved, 'effects');
   const brandFamily =
     blended.brandFamily || deriveBrandFamily(role('accent') || themePalette.accent, isDark);
-  const identityRegions = {
-    masthead: Boolean(pageSample?.masthead),
-    nav: Boolean(pageSample?.nav),
-  };
+  // samplePageRoles keeps masthead/nav under `identity`; older callers may
+  // still pass them at the top level. Structural chrome (Tone / Fully restyle)
+  // forces secondary fills so CSS-variable brand mastheads follow Light|Gray|Dark.
+  const identityRegions = structuralChrome
+    ? { masthead: false, nav: false }
+    : {
+        masthead: Boolean(pageSample?.identity?.masthead || pageSample?.masthead),
+        nav: Boolean(pageSample?.identity?.nav || pageSample?.nav),
+      };
 
   return [
     fontFaceRules(),
-    paintTone ? roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily, identityRegions) : '',
+    paintTone
+      ? roleCss(
+          role,
+          surfaceGui,
+          surfaceContainers,
+          isDark,
+          brandFamily,
+          identityRegions,
+          surfaceLadder,
+          { paintOpaqueOnly: resolved.color?.paintOpaqueOnly !== false }
+        )
+      : '',
     paintFonts ? headingScaleRules(blended.headerSizeVariance) : '',
     paintFonts ? headingFontRules(resolved.fonts) : '',
     paintFonts ? fontRule('paragraph', resolved.fonts.paragraph) : '',
     paintFonts ? fontRule('ui', resolved.fonts.ui) : '',
     paintFonts ? fontRule('code', resolved.fonts.code) : '',
     paintFonts ? fontRule('captions', resolved.fonts.captions) : '',
-    paintMedia ? imageFilterRule(resolved.imageFilter, blended) : '',
+    paintMedia ? imageFilterRule(resolved.imageFilter, blended, { colorOn }) : '',
     paintMedia
       ? themeMediaRule(
           resolved.activeThemePackId,
           resolved.mediaStyles,
           blended,
-          resolved.imageFilter?.revealOnHover
+          resolved.imageFilter?.revealOnHover,
+          { colorOn }
         )
       : '',
     // Clipping first, then Corners — equal-specificity cascade + Corners'

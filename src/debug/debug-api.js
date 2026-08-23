@@ -4,8 +4,11 @@
 
 import { ROLE_ATTR, MEDIA_ATTR } from '../content/page-classifier.js';
 import { STYLE_ELEMENT_ID } from '../content/style-injector.js';
+import { patchForSettingsFocus } from '../settings/settings-focus.js';
 
 const SETTINGS_POPOVER_ID = 'gmixer-settings';
+const THEME_MODES = new Set(['light', 'gray', 'dark']);
+const SETTINGS_FOCUSES = new Set(['theme', 'tone', 'media']);
 
 function safeClone(value) {
   try {
@@ -124,6 +127,42 @@ export function createDebugApi(deps) {
       return { id, enabled: !!enabled };
     },
 
+    /**
+     * Master theming on/off (all tabs).
+     * @param {boolean} enabled
+     */
+    async setEnabled(enabled) {
+      await store.ready;
+      await store.update({ enabled: !!enabled });
+      return { enabled: !!enabled };
+    },
+
+    /**
+     * Switch Light | Gray | Dark tone direction (themeMode).
+     * @param {'light'|'gray'|'dark'} mode
+     */
+    async setThemeMode(mode) {
+      await store.ready;
+      if (!THEME_MODES.has(mode)) {
+        throw new Error(`Invalid themeMode: ${mode}`);
+      }
+      await store.update({ themeMode: mode });
+      return { themeMode: mode };
+    },
+
+    /**
+     * Apply settings focus (theme | tone | media), including focus side effects.
+     * @param {'theme'|'tone'|'media'} focus
+     */
+    async setSettingsFocus(focus) {
+      await store.ready;
+      if (!SETTINGS_FOCUSES.has(focus)) {
+        throw new Error(`Invalid settingsFocus: ${focus}`);
+      }
+      await store.update(patchForSettingsFocus(focus));
+      return { settingsFocus: focus };
+    },
+
     samplePage() {
       return samplePageRoles();
     },
@@ -178,6 +217,10 @@ export function createDebugApi(deps) {
         ? findPrimaryBackgroundCandidates().slice(0, 5)
         : [];
 
+      const cssBgPrimary = css.match(/--gmixer-bg-primary:\s*([^;]+)/)?.[1]?.trim() || null;
+      const cssBgSecondary = css.match(/--gmixer-bg-secondary:\s*([^;]+)/)?.[1]?.trim() || null;
+      const cssText = css.match(/--gmixer-text:\s*([^;]+)/)?.[1]?.trim() || null;
+
       return {
         hostname: hostname(),
         href: typeof location !== 'undefined' ? location.href : '',
@@ -198,6 +241,10 @@ export function createDebugApi(deps) {
         injectedCssLength: css.length,
         injectedCssHasBgPrimary: css.includes('--gmixer-bg-primary'),
         injectedCssHasSurfaceGui: css.includes('--gmixer-surface-gui'),
+        cssBgPrimary,
+        cssBgSecondary,
+        cssText,
+        cssBgSecondaryValid: !!(cssBgSecondary && /^#|rgb|hsl|var\(/i.test(cssBgSecondary)),
         styleElementPresent: !!styleEl,
         debugEnabled: true,
       };

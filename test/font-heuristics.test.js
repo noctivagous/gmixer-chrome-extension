@@ -51,6 +51,13 @@ describe('font-heuristics', () => {
     assert.equal(isFontSuitableForTarget(euro, 'paragraph'), false);
   });
 
+  it('excludes script faces from recommended headers but keeps them with Show all', () => {
+    const euro = getFontById('euro-script');
+    assert.equal(isFontSuitableForTarget(euro, 'headers'), false);
+    assert.equal(isFontSuitableForTarget(euro, 'subheadings'), false);
+    assert.equal(isFontSuitableForTarget(euro, 'headers', { showAll: true }), true);
+  });
+
   it('excludes ornament fonts unless showAll', () => {
     const youbilee = getFontById('youbilee');
     assert.equal(isFontSuitableForTarget(youbilee, 'headers'), false);

@@ -3,7 +3,15 @@
 // semantics, and repetition, then split structural vs identity roles.
 // See refs/BRANDED_SITE_THEMING.md.
 
-import { contrastRatio, deriveSurface, hexToHsl, hexToLab, hslToHex, labDistance } from '../lib/color-theory.js';
+import {
+  contrastRatio,
+  deriveSurface,
+  deriveSurfaceLadder,
+  hexToHsl,
+  hexToLab,
+  hslToHex,
+  labDistance,
+} from '../lib/color-theory.js';
 
 function rgbToHex(r, g, b) {
   const toHex = (v) =>
@@ -315,8 +323,14 @@ export function samplePageRoles() {
   const html = document.documentElement;
   const body = document.body;
   const roots = [html, body, ...querySample('main, article, [role="main"]', 3)];
-  const headers = querySample('header, [role="banner"], .masthead, #header, #masthead', 8);
-  const navs = querySample('nav, [role="navigation"], .nav, .navbar', 8);
+  const headers = querySample(
+    'header, [role="banner"], .masthead, #header, #masthead, [data-gmixer-role="header"]',
+    8
+  );
+  const navs = querySample(
+    'nav, [role="navigation"], .nav, .navbar, [data-gmixer-role="navigation"]',
+    8
+  );
   const headings = querySample('h1, h2, h3, h4, h5, h6, [role="heading"]', 12);
   const links = querySample('a[href]', 12);
   const bordered = querySample('hr, button, input, .card, [class*="card"]', 8);
@@ -518,18 +532,34 @@ export function blendWithPageSample(
 
   const isDark = luminance(background) < 50;
   const brandFamily = deriveBrandFamily(accent, isDark);
+  const backgroundSecondary = mixHex(
+    themePalette.backgroundSecondary || deriveSurface(themePalette.background, themePalette.isDark),
+    structural.backgroundSecondary || pageSample.backgroundSecondary
+  );
+  // Surfaces follow the blended background ladder so elevated layers stay
+  // consistent when intensity moves the primary canvas.
+  const bg = backgroundSecondary || background;
+  const derivedGui = deriveSurface(bg, isDark);
+  const derivedContainers = deriveSurface(derivedGui, isDark);
+  const surfaceLadder = deriveSurfaceLadder(background, isDark, 3);
+  const muted = mixHex(themePalette.muted, pageSample.muted);
+  const focus = mixHex(themePalette.focus, pageSample.focus);
 
   return {
     background,
-    surface: deriveSurface(background, isDark),
-    surfaceGui: deriveSurface(background, isDark),
-    surfaceContainers: deriveSurface(deriveSurface(background, isDark), isDark),
+    backgroundSecondary: backgroundSecondary || deriveSurface(background, isDark),
+    surface: derivedGui,
+    surfaceGui: derivedGui,
+    surfaceContainers: derivedContainers,
+    surfaceLadder,
     text,
+    muted: muted || themePalette.muted,
     accent,
     link,
     masthead,
     nav,
     border,
+    focus: focus || themePalette.focus,
     isDark,
     headerSizeVariance: pageSample.headerSizeVariance ?? 0.35,
     brandFamily,

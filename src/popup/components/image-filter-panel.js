@@ -2,8 +2,30 @@ import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
 import { getThemePackById } from '../../config/theme-packs.js';
 import { defineElement } from '../../lib/define-element.js';
+import { PALETTE_FILTER_PRESETS } from '../../config/image-filter-presets.js';
 
-const PRESETS = ['grayscale', 'sepia', 'invert', 'duotone', 'monochrome', 'custom'];
+const PRESETS = [
+  { id: 'grayscale', label: 'grayscale' },
+  { id: 'sepia', label: 'sepia' },
+  { id: 'invert', label: 'invert' },
+  { id: 'monochrome', label: 'monochrome' },
+  { id: 'duotone', label: 'duotone', requiresColor: true },
+  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
+  { id: 'link-wash', label: 'link wash', requiresColor: true },
+  { id: 'custom', label: 'custom' },
+];
+
+const CATEGORY_PRESETS = [
+  { id: 'auto', label: 'auto' },
+  { id: 'none', label: 'none' },
+  { id: 'monochrome', label: 'monochrome' },
+  { id: 'grayscale', label: 'grayscale' },
+  { id: 'sepia', label: 'sepia' },
+  { id: 'duotone', label: 'duotone', requiresColor: true },
+  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
+  { id: 'link-wash', label: 'link wash', requiresColor: true },
+];
+
 const SCOPES = [
   { id: 'images', label: 'Images/video only' },
   { id: 'backgrounds', label: 'Background images only' },
@@ -17,6 +39,20 @@ const MEDIA_ROLES = [
   ['ad', 'Ads'],
   ['hero', 'Hero media'],
 ];
+
+function colorSectionOn(global) {
+  const sections = global?.sections;
+  if (!sections) return true;
+  if (sections.color === true || sections.tone === true) return true;
+  if (sections.color === false && sections.tone === false) return false;
+  if (sections.color !== undefined) return sections.color === true;
+  if (sections.tone !== undefined) return sections.tone === true;
+  return true;
+}
+
+function visiblePresets(list, colorOn, currentId) {
+  return list.filter((preset) => !preset.requiresColor || colorOn || preset.id === currentId);
+}
 
 export class ImageFilterPanel extends StoreBoundElement {
   static styles = css`
@@ -103,6 +139,8 @@ export class ImageFilterPanel extends StoreBoundElement {
     const global = this.state.global;
     const pack = getThemePackById(global.activeThemePackId);
     const overrides = global.mediaStyles || {};
+    const colorOn = colorSectionOn(global);
+    const presetOptions = visiblePresets(PRESETS, colorOn, filter.preset);
 
     return html`
       <div class="toggle-row">
@@ -125,10 +163,19 @@ export class ImageFilterPanel extends StoreBoundElement {
 
       <label>Preset</label>
       <select @change=${(e) => this.updateGlobal({ imageFilter: { preset: e.target.value } })}>
-        ${PRESETS.map(
-          (preset) => html`<option value=${preset} ?selected=${preset === filter.preset}>${preset}</option>`
+        ${presetOptions.map(
+          (preset) => html`<option value=${preset.id} ?selected=${preset.id === filter.preset}>
+            ${preset.label}
+          </option>`
         )}
       </select>
+      ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
+        ? html`<p class="hint">
+            Color is off — this palette wash paints as monochrome until Color is enabled.
+          </p>`
+        : !colorOn
+          ? html`<p class="hint">Turn on Color to unlock accent tint, link wash, and duotone.</p>`
+          : html``}
 
       ${filter.preset === 'custom'
         ? html`
@@ -162,6 +209,7 @@ export class ImageFilterPanel extends StoreBoundElement {
               ...(pack?.media?.[role] || {}),
               ...(overrides[role] || {}),
             };
+            const categoryOptions = visiblePresets(CATEGORY_PRESETS, colorOn, current.filter);
             return html`
               <div class="category">
                 <span>${label}</span>
@@ -170,10 +218,10 @@ export class ImageFilterPanel extends StoreBoundElement {
                   @change=${(e) =>
                     this.updateGlobal({ mediaStyles: { [role]: { filter: e.target.value } } })}
                 >
-                  ${['auto', 'none', 'monochrome', 'grayscale', 'sepia', 'duotone'].map(
+                  ${categoryOptions.map(
                     (preset) =>
-                      html`<option value=${preset} ?selected=${preset === current.filter}>
-                        ${preset}
+                      html`<option value=${preset.id} ?selected=${preset.id === current.filter}>
+                        ${preset.label}
                       </option>`
                   )}
                 </select>

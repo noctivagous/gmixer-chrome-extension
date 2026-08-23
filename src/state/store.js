@@ -39,6 +39,24 @@ function migrateTypography(state, persisted) {
   return state;
 }
 
+/** Tone merged into Color — promote a lone Tone enable to Color. */
+function migrateToneIntoColor(state, persisted) {
+  const sections = persisted?.global?.sections;
+  if (!sections) return state;
+  if (sections.tone === true && sections.color !== true) {
+    state.global.sections = {
+      ...state.global.sections,
+      color: true,
+      tone: true,
+    };
+  }
+  return state;
+}
+
+function applyMigrations(state, persisted) {
+  return migrateToneIntoColor(migrateTypography(state, persisted), persisted);
+}
+
 export class SettingsStore {
   constructor() {
     /** @private */
@@ -52,12 +70,12 @@ export class SettingsStore {
   async _init() {
     const persisted = await loadPersistedState();
     if (persisted) {
-      this._state = migrateTypography(deepMerge(this._state, persisted), persisted);
+      this._state = applyMigrations(deepMerge(this._state, persisted), persisted);
     }
     onPersistedStateChanged(async () => {
       const latest = await loadPersistedState();
       if (latest) {
-        this._state = migrateTypography(deepMerge(createDefaultState(), latest), latest);
+        this._state = applyMigrations(deepMerge(createDefaultState(), latest), latest);
         this._notify();
       }
     });

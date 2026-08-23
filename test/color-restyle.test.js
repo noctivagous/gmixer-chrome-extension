@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPalette, contrastRatio, deriveSurface, hexToHsl } from '../src/lib/color-theory.js';
+import {
+  buildPalette,
+  contrastRatio,
+  deriveSurface,
+  deriveSurfaceLadder,
+  hexToHsl,
+} from '../src/lib/color-theory.js';
 import {
   blendWithPageSample,
   findPrimaryBackground,
@@ -9,6 +15,13 @@ import {
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
 import { THEME_PACKS } from '../src/config/theme-packs.js';
+
+/** Fresh install defaults Media+Typography only; color/tone tests opt back in. */
+function withTonePaint(global) {
+  global.sections.color = true;
+  global.sections.tone = true;
+  return global;
+}
 
 describe('color-theory', () => {
   it('builds a split-complement palette from a base color', () => {
@@ -41,6 +54,16 @@ describe('color-theory', () => {
     assert.equal(light.isDark, false);
     assert.equal(gray.isDark, true);
     assert.equal(dark.isDark, true);
+  });
+
+  it('builds a ranked elevated surface ladder from the page background', () => {
+    const dark = buildPalette('#7c3aed', 'monochrome', 'dark');
+    assert.equal(dark.surfaceLadder.length, 3);
+    assert.ok(hexToHsl(dark.surfaceLadder[0]).l > hexToHsl(dark.background).l);
+    assert.ok(hexToHsl(dark.surfaceLadder[1]).l > hexToHsl(dark.surfaceLadder[0]).l);
+    assert.ok(hexToHsl(dark.surfaceLadder[2]).l > hexToHsl(dark.surfaceLadder[1]).l);
+    const ladder = deriveSurfaceLadder('#111111', true, 3);
+    assert.equal(ladder.length, 3);
   });
 
   it('supports triadic and tetradic hue relationships', () => {
@@ -104,7 +127,7 @@ describe('color-theory', () => {
   });
 
   it('leaves explicit role overrides unchanged', () => {
-    const global = createDefaultState().global;
+    const global = withTonePaint(createDefaultState().global);
     global.color.overrides = {
       ...global.color.overrides,
       surface: '#123456',
@@ -122,7 +145,7 @@ describe('color-theory', () => {
   });
 
   it('uses generated role defaults when no overrides are configured', () => {
-    const global = createDefaultState().global;
+    const global = withTonePaint(createDefaultState().global);
     const generated = buildPalette(global.color.baseColor, global.color.scheme, global.themeMode);
     const css = buildCss(global, null);
 
@@ -199,6 +222,31 @@ describe('page-sampler helpers', () => {
     assert.equal(result.border, page.border);
   });
 
+  it('keeps backgroundSecondary, muted, and focus after blending', () => {
+    const theme = buildPalette('#7c3aed', 'complement', 'dark');
+    const page = {
+      background: '#ffffff',
+      backgroundSecondary: '#f0f0f0',
+      text: '#111111',
+      accent: '#222222',
+      link: '#0000ee',
+      border: '#cccccc',
+      isDark: false,
+      headerSizeVariance: 0.2,
+      structural: {
+        background: '#ffffff',
+        backgroundSecondary: '#f0f0f0',
+        text: '#111111',
+        border: '#cccccc',
+      },
+    };
+    const result = blendWithPageSample(theme, page, 80);
+    assert.match(result.backgroundSecondary, /^#[0-9a-f]{6}$/i);
+    assert.match(result.muted, /^#[0-9a-f]{6}$/i);
+    assert.match(result.focus, /^#[0-9a-f]{6}$/i);
+    assert.notEqual(result.backgroundSecondary, 'undefined');
+  });
+
   it('prefers a large app root when the document body is transparent', () => {
     const makeElement = (tagName, id) => ({
       tagName,
@@ -237,10 +285,10 @@ describe('buildCss page paint', () => {
     global.fonts.headings.h3.fontId = 'source-sans-3';
     const css = buildCss(global, null);
 
-    assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\].*font-family: "Lora"/);
-    assert.match(css, /h2, \[role="heading"\]\[aria-level="2"\].*font-family: "Playfair Display"/);
-    assert.match(css, /h3, \[role="heading"\]\[aria-level="3"\].*font-family: "Source Sans 3"/);
-    assert.match(css, /h6, \[role="heading"\]\[aria-level="6"\].*font-family: "Playfair Display"/);
+    assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\], h1 a, \[role="heading"\]\[aria-level="1"\] a \{ font-family: "Lora"/);
+    assert.match(css, /h2, \[role="heading"\]\[aria-level="2"\], h2 a, \[role="heading"\]\[aria-level="2"\] a \{ font-family: "Raleway"/);
+    assert.match(css, /h3, \[role="heading"\]\[aria-level="3"\], h3 a, \[role="heading"\]\[aria-level="3"\] a \{ font-family: "Source Sans 3"/);
+    assert.match(css, /h6, \[role="heading"\]\[aria-level="6"\], h6 a, \[role="heading"\]\[aria-level="6"\] a \{ font-family: "Outfit"/);
   });
 
   it('falls back to legacy header roles for older saved state', () => {
@@ -249,12 +297,12 @@ describe('buildCss page paint', () => {
     global.fonts.headers.fontId = 'lora';
     const css = buildCss(global, null);
 
-    assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\].*font-family: "Lora"/);
-    assert.match(css, /h2, \[role="heading"\]\[aria-level="2"\].*font-family: "Playfair Display"/);
+    assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\], h1 a, \[role="heading"\]\[aria-level="1"\] a \{ font-family: "Lora"/);
+    assert.match(css, /h2, \[role="heading"\]\[aria-level="2"\], h2 a, \[role="heading"\]\[aria-level="2"\] a \{ font-family: "Raleway"/);
   });
 
   it('uses conservative semantic surfaces instead of recursive overlays', () => {
-    const css = buildCss(createDefaultState().global, null);
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /--gmixer-bg-primary:/);
     assert.match(css, /--gmixer-bg-secondary:/);
     assert.match(css, /--gmixer-surface-gui:/);
@@ -263,26 +311,151 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /mix-blend-mode: multiply/);
     assert.doesNotMatch(css, /span, div/);
     assert.match(css, /\[data-gmixer-role="card"\]/);
-    assert.match(css, /body input/);
-    assert.match(css, /\[role="searchbox"\]/);
+    assert.match(css, /\[data-gmixer-role="article"\]/);
+    assert.match(css, /\[data-gmixer-role="main"\]/);
+    assert.match(css, /\[data-gmixer-role="surface"\]/);
+    assert.match(css, /--gmixer-surface-0:/);
+    assert.match(css, /--gmixer-surface-1:/);
+    assert.match(css, /--gmixer-surface-2:/);
+    assert.match(css, /data-gmixer-tone-step="0"/);
+    assert.match(css, /data-gmixer-tone-step="2"/);
+    assert.match(css, /body #main\[data-gmixer-native-l\]/);
+    assert.doesNotMatch(css, /ntv-preview/);
+    assert.doesNotMatch(css, /listingResult/);
+    assert.doesNotMatch(css, /trending__wrapper/);
+    assert.match(css, /body input\[data-gmixer-native-l\]/);
+    assert.match(css, /\[role="searchbox"\]\[data-gmixer-native-l\]/);
     assert.match(css, /:has\(> input, > textarea, > select/);
     assert.match(css, /border-radius: inherit !important/);
     assert.match(css, /corner-shape: inherit !important/);
     assert.match(
       css,
-      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*\}[\s\S]*body > header[\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input[\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card[\s\S]*background-color: var\(--gmixer-surface-containers\)/
+      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*\}[\s\S]*body > header\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-1\)/
+    );
+    // Opaque mains get elevated fill; layout-only mains stay unpainted.
+    assert.match(
+      css,
+      /body #main\[data-gmixer-native-l\],[\s\S]*body \[role="main"\]\[data-gmixer-native-l\],[\s\S]*body \[data-gmixer-role="main"\]\[data-gmixer-native-l\] \{[\s\S]*background-color: var\(--gmixer-bg-secondary\)/
+    );
+    assert.doesNotMatch(
+      css,
+      /body main,\s*body #main,\s*body \[role="main"\],\s*body \[data-gmixer-role="main"\] \{/
     );
     assert.match(css, /color-scheme: dark/);
     assert.match(css, /--gmixer-muted:/);
     assert.match(css, /--gmixer-focus:/);
+    assert.doesNotMatch(css, /--gmixer-bg-secondary:\s*undefined/);
+  });
+
+  it('paintOpaqueOnly off restores unconditional structural fills', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.color.paintOpaqueOnly = false;
+    const css = buildCss(global, null);
+    assert.match(css, /body > header, body > footer/);
+    assert.doesNotMatch(css, /body > header\[data-gmixer-native-l\]/);
+    assert.match(
+      css,
+      /body main, body #main, body \[role="main"\], body \[data-gmixer-role="main"\] \{/
+    );
+    assert.match(css, /body \.card,\s*body article,/);
+  });
+
+  function pageWithBrandIdentity() {
+    return {
+      background: '#ffffff',
+      backgroundSecondary: '#f5f5f5',
+      text: '#111111',
+      accent: '#006666',
+      link: '#008888',
+      border: '#cccccc',
+      structural: {
+        background: '#ffffff',
+        backgroundSecondary: '#f5f5f5',
+        text: '#111111',
+        border: '#cccccc',
+      },
+      identity: {
+        accent: '#006666',
+        link: '#008888',
+        masthead: '#006666',
+        nav: '#006666',
+      },
+    };
+  }
+
+  function assertPureToneCss(css, theme) {
+    assert.match(css, new RegExp(`--gmixer-bg-primary: ${theme.background}`));
+    assert.match(css, new RegExp(`--gmixer-bg-secondary: ${theme.backgroundSecondary}`));
+    // Pure Tone still paints mastheads, but with secondary fill — not brand identity.
+    assert.match(css, /body \.masthead/);
+    assert.match(css, /--site-header-background-color: var\(--gmixer-bg-secondary\)/);
+    assert.doesNotMatch(css, /--site-header-background-color: var\(--gmixer-masthead\)/);
+    assert.match(css, /body \[data-gmixer-role="main"\]/);
+  }
+
+  it('applies full theme tone under tone-only settings focus', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.ui.settingsFocus = 'tone';
+    global.themeMode = 'dark';
+    global.color.intensity = 10;
+    const theme = buildPalette(global.color.baseColor, global.color.scheme, 'dark');
+    assertPureToneCss(buildCss(global, pageWithBrandIdentity()), theme);
+  });
+
+  it('applies Tone structural chrome under Theme Color with Fully restyle', () => {
+    const global = createDefaultState().global;
+    global.ui.settingsFocus = 'theme';
+    global.sections.color = true;
+    global.sections.tone = true;
+    global.themeMode = 'dark';
+    global.color.intensity = 10;
+    global.color.identityMode = 'restyle';
+    const theme = buildPalette(global.color.baseColor, global.color.scheme, 'dark');
+    // Intensity still blends neutrals, but headers use structural fills like Tone.
+    const css = buildCss(global, pageWithBrandIdentity());
+    assert.match(css, /--site-header-background-color: var\(--gmixer-bg-secondary\)/);
+    assert.doesNotMatch(css, /--site-header-background-color: var\(--gmixer-masthead\)/);
+    assert.match(css, /body \.masthead/);
+  });
+
+  it('preserves brand masthead fills when Color identity is Preserve', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.ui.settingsFocus = 'theme';
+    global.color.identityMode = 'preserve';
+    global.color.intensity = 100;
+    const css = buildCss(global, pageWithBrandIdentity());
+    assert.match(css, /--site-header-background-color: var\(--gmixer-masthead\)/);
+  });
+
+  it('keeps header/nav menu controls flush with chrome instead of elevated GUI blocks', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(css, /Header\/nav menus share one chrome fill/);
+    assert.match(css, /\[data-gmixer-role="header"\],\s*\[data-gmixer-role="navigation"\]/);
+    assert.match(css, /ul,\s*ol,\s*li,\s*menu,\s*button/);
+    assert.match(css, /background-color: transparent !important;/);
+  });
+
+  it('remaps common header CSS variables on semantic header selectors', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(css, /--site-header-background-color:/);
+    assert.match(css, /--header-background-color:/);
+    assert.match(css, /body \[data-gmixer-role="header"\]/);
+    assert.doesNotMatch(css, /data-component-name/);
+    assert.doesNotMatch(css, /van-masthead/);
   });
 
   it('forces theme text with !important so light-page body colors cannot stick', () => {
-    const css = buildCss(createDefaultState().global, null);
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /p, li, td, th, blockquote[\s\S]*color: var\(--gmixer-text\) !important/);
     assert.match(css, /h1, h2, h3, h4, h5, h6[\s\S]*color: var\(--gmixer-accent\) !important/);
     assert.match(css, /a, a:link, a:visited[\s\S]*color: var\(--gmixer-link\) !important/);
     assert.match(css, /h1 a, h1 a:link, h1 a:visited[\s\S]*color: var\(--gmixer-accent\) !important/);
+  });
+
+  it('makes nested ink inside links and headings inherit so span headlines restyle', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(css, /a \*,[\s\S]*h1 \*, h2 \*, h3 \*, h4 \*, h5 \*, h6 \*,[\s\S]*color: inherit !important/);
+    assert.match(css, /a:hover \*, a:focus-visible \*[\s\S]*color: inherit !important/);
   });
 
   it('renders category media slots independently from the global filter', () => {
@@ -303,6 +476,7 @@ describe('buildCss page paint', () => {
 
   it('uses a separate overlay for background images instead of filtering their owner', () => {
     const global = createDefaultState().global;
+    global.activeThemePackId = 'editorial';
     global.sections.filter = true;
     global.imageFilter.enabled = true;
     global.imageFilter.scope = 'backgrounds';
@@ -332,6 +506,40 @@ describe('buildCss page paint', () => {
       css,
       /\[data-gmixer-bgimg\]:hover > \.gmixer-bgimg-overlay \{ opacity: 0 !important; \}/
     );
+  });
+
+  it('emits accent-tint and link-wash when Color is on', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.sections.color = true;
+    global.imageFilter.enabled = true;
+    global.imageFilter.scope = 'images';
+    global.color.baseColor = '#3366ff';
+    global.color.scheme = 'complement';
+
+    global.imageFilter.preset = 'accent-tint';
+    const tintCss = buildCss(global, null);
+    assert.match(tintCss, /img, video \{ filter: grayscale\(1\) sepia\(0\.55\) hue-rotate\(\d+deg\) saturate\(0\.85\)/);
+
+    global.imageFilter.preset = 'link-wash';
+    const linkCss = buildCss(global, null);
+    assert.match(linkCss, /img, video \{ filter: grayscale\(1\) sepia\(1\) hue-rotate\(\d+deg\) saturate\(1\.4\)/);
+  });
+
+  it('falls palette washes back to monochrome when Color is off', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.sections.color = false;
+    global.sections.tone = false;
+    global.imageFilter.enabled = true;
+    global.imageFilter.preset = 'accent-tint';
+    global.imageFilter.scope = 'both';
+    const css = buildCss(global, null);
+
+    assert.match(css, /img, video \{ filter: grayscale\(1\) contrast/);
+    assert.doesNotMatch(css, /sepia\(0\.55\)/);
+    assert.match(css, /mix-blend-mode: saturation/);
+    assert.match(css, /background: #808080 !important/);
   });
 
   it('omits media CSS when the Media section is off', () => {
@@ -367,7 +575,7 @@ describe('buildCss page paint', () => {
   });
 
   it('tone-only focus paints surfaces without media filters', () => {
-    const global = createDefaultState().global;
+    const global = withTonePaint(createDefaultState().global);
     global.ui.settingsFocus = 'tone';
     global.sections.filter = true;
     global.imageFilter.enabled = true;

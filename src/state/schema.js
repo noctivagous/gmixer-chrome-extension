@@ -22,17 +22,22 @@ export function createDefaultState() {
       // Master theming switch (titlebar / Alt+N). Off disables paint on every
       // tab; stored in local so all open tabs stay in lockstep immediately.
       enabled: true,
-      activeThemePackId: 'editorial',
+      activeThemePackId: 'noir',
       themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {
-        baseColor: '#a08a7f', // warm taupe — Editorial theme pack default
-        scheme: /** @type {ColorScheme} */ ('analog'),
+        baseColor: '#8a8a8a', // gMixer Default monochrome accent
+        scheme: /** @type {ColorScheme} */ ('monochrome'),
         // 0 = stay close to sampled page colors; 100 = full theme paint.
-        intensity: 80,
+        // Tone-aligned default: full Light|Gray|Dark unless the user lowers it.
+        intensity: 100,
         // How identity colors (masthead/nav/links/accents) are handled:
         // preserve = keep site brand; harmonize = remap hue to theme accent;
-        // restyle = blend identity with the rest (legacy intensity behavior).
-        identityMode: /** @type {IdentityMode} */ ('preserve'),
+        // restyle = Tone approach — full structural Light|Gray|Dark including headers.
+        identityMode: /** @type {IdentityMode} */ ('restyle'),
+        // When true (default), only paint fills on hosts that already had an
+        // opaque native background (`data-gmixer-native-l`). Transparent layout
+        // wrappers stay transparent so they share the page canvas.
+        paintOpaqueOnly: true,
         // Per-role overrides. Empty string = "use the generated/blended palette value".
         overrides: {
           background: '',
@@ -51,34 +56,34 @@ export function createDefaultState() {
         },
       },
       fonts: {
-        // Defaults-first: Editorial Google Font pairing (Playfair + Source Sans 3 + Lora).
+        // Defaults-first: gMixer Default (DIN + Raleway + Outfit + DM Sans + Tippa).
         // Heading slots are independent so h1-h6 can each have their own
         // face. The settings UI can still apply one face to a selected group.
         // `headers` and `subheadings` remain as compatibility fallbacks for
         // state saved before individual heading customization existed.
-        headers: { fontId: 'playfair-display', customFontId: null },
-        subheadings: { fontId: 'playfair-display', customFontId: null },
+        headers: { fontId: 'din-breit', customFontId: null },
+        subheadings: { fontId: 'raleway', customFontId: null },
         headings: {
-          h1: { fontId: 'playfair-display', customFontId: null },
-          h2: { fontId: 'playfair-display', customFontId: null },
-          h3: { fontId: 'playfair-display', customFontId: null },
-          h4: { fontId: 'playfair-display', customFontId: null },
-          h5: { fontId: 'playfair-display', customFontId: null },
-          h6: { fontId: 'playfair-display', customFontId: null },
+          h1: { fontId: 'din-breit', customFontId: null },
+          h2: { fontId: 'raleway', customFontId: null },
+          h3: { fontId: 'outfit', customFontId: null },
+          h4: { fontId: 'outfit', customFontId: null },
+          h5: { fontId: 'outfit', customFontId: null },
+          h6: { fontId: 'outfit', customFontId: null },
         },
-        paragraph: { fontId: 'source-sans-3', customFontId: null },
-        ui: { fontId: 'source-sans-3', customFontId: null },
+        paragraph: { fontId: 'dm-sans', customFontId: null },
+        ui: { fontId: 'dm-sans', customFontId: null },
         code: { fontId: 'system-mono', customFontId: null },
-        captions: { fontId: 'lora', customFontId: null },
+        captions: { fontId: 'tippa', customFontId: null },
         // User-uploaded @font-face definitions, keyed by generated id.
         customFonts: {},
       },
       imageFilter: {
-        enabled: false,
+        enabled: true,
         preset: 'monochrome',
         customFilter: '',
         scope: 'both', // 'images' | 'backgrounds' | 'both'
-        revealOnHover: false,
+        revealOnHover: true,
       },
       // Empty category entries inherit the active theme pack's media slots.
       // User changes are stored here as explicit per-category overrides.
@@ -103,8 +108,13 @@ export function createDefaultState() {
         scope: 'all', // 'images' | 'buttons' | 'all'
       },
       effects: {
-        glow: { enabled: false, animated: true, color: '' },
-        flash: { enabled: false },
+        categories: {
+          images: { effect: 'none' },
+          videos: { effect: 'none' },
+          navigation: { effect: 'none' },
+          articles: { effect: 'none' },
+        },
+        glow: { animated: true, color: '' },
         cursor: { enabled: false, style: 'default' },
         backgroundMotion: { enabled: false },
       },
@@ -116,13 +126,13 @@ export function createDefaultState() {
         hoverOutlineAnimated: true,
       },
       // Accordion section masters — independent from expand/collapse UI state.
-      // Tone/color/fonts ship on so a fresh install looks finished; opt-in
-      // layers stay off until the user flips their header switch.
+      // gMixer Default ships Media + Typography only. Tone lives inside Color;
+      // `tone` is kept in sync when Color is toggled for older paint paths.
       sections: {
         preview: true,
-        tone: true,
-        filter: false,
-        color: true,
+        tone: false,
+        filter: true,
+        color: false,
         fonts: true,
         shape: false,
         effects: false,

@@ -231,8 +231,12 @@ as a selling point for the GX/gaming audience — "defaults are for NPCs" is
 the same audience that installs animated wallpapers and RGB mods, so effects
 here should feel closer to that than to a subtle accessibility feature.
 
+- Per-category slots (one effect each): Images, Videos, Navigation, Articles
+  (see refs/CATEGORY_EFFECTS.md). Examples: glow on nav, pan & scan on images,
+  link shimmer cycling article/teaser cards in the viewport.
 - Glowing (text/element glow via CSS, animated pulse variant available)
-- Flashing (attention/accent flashing effect)
+- Flashing (attention/accent flashing — Navigation category)
+- Pan & scan (Ken Burns-style motion — Images category)
 - Cursor mods (custom cursor styles, including animated/trailing cursors)
 - Animated gradients / background motion (slow shifting hue or gradient pan)
 - More animation presets over time (e.g. flicker, scanline/CRT overlay,
@@ -307,7 +311,7 @@ Sections:
 5. Clipping (corner rounding / clip presets + scope selector)
 6. Corners (force border-radius + per-corner bevel cuts on images/video/buttons;
    when both Clipping and Corners are on, Corners wins on shared properties)
-7. Effects (glow / flash / cursor, each toggleable)
+7. Effects (per-category Images / Videos / Navigation + cursor / motion)
 8. Navigation (opt-in checkbox + the 3 nav keys, off by default)
 9. All-tabs enable/disable toggle (titlebar / Alt+N)
 
