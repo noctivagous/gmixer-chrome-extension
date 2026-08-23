@@ -76,6 +76,65 @@ export function contrastRatio(firstHex, secondHex) {
 }
 
 /**
+ * sRGB hex → CIE Lab (D65). Used for perceptual clustering / ΔE.
+ * @param {string} hex
+ * @returns {{ L: number, a: number, b: number }}
+ */
+export function hexToLab(hex) {
+  const normalized = hex.replace('#', '');
+  const channels = [0, 2, 4].map((offset) => parseInt(normalized.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  const [r, g, b] = linear;
+  // sRGB D65 → XYZ
+  const x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+  const y = (r * 0.2126729 + g * 0.7151522 + b * 0.072175);
+  const z = (r * 0.0193339 + g * 0.119192 + b * 0.9503041) / 1.08883;
+
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const fx = f(x);
+  const fy = f(y);
+  const fz = f(z);
+  return {
+    L: 116 * fy - 16,
+    a: 500 * (fx - fy),
+    b: 200 * (fy - fz),
+  };
+}
+
+/**
+ * CIE76 ΔE — enough for clustering nearby brand colors.
+ * @param {{ L: number, a: number, b: number }} first
+ * @param {{ L: number, a: number, b: number }} second
+ */
+export function labDistance(first, second) {
+  const dL = first.L - second.L;
+  const da = first.a - second.a;
+  const db = first.b - second.b;
+  return Math.sqrt(dL * dL + da * da + db * db);
+}
+
+/** @param {string} firstHex @param {string} secondHex */
+export function hexLabDistance(firstHex, secondHex) {
+  return labDistance(hexToLab(firstHex), hexToLab(secondHex));
+}
+
+/**
+ * Approximate OKLCH from hex via Lab → OKLab-ish chroma/hue for debug keys.
+ * Clustering uses Lab ΔE; this is for readable cluster labels.
+ * @param {string} hex
+ * @returns {{ L: number, C: number, H: number }}
+ */
+export function hexToOklchApprox(hex) {
+  const lab = hexToLab(hex);
+  const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+  let H = (Math.atan2(lab.b, lab.a) * 180) / Math.PI;
+  if (H < 0) H += 360;
+  return { L: lab.L / 100, C: C / 100, H };
+}
+
+/**
  * Preserve a generated color's hue where possible while meeting a contrast
  * threshold. User overrides are applied outside this function and are never
  * adjusted.

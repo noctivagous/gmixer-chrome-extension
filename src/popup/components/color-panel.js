@@ -12,6 +12,12 @@ const SCHEMES = [
   { id: 'monochrome', label: 'Monochrome' },
 ];
 
+const IDENTITY_MODES = [
+  { id: 'preserve', label: 'Preserve site identity' },
+  { id: 'harmonize', label: 'Harmonize site identity' },
+  { id: 'restyle', label: 'Fully restyle' },
+];
+
 const ROLES = [
   { id: 'background', label: 'BG:Primary' },
   { id: 'backgroundSecondary', label: 'BG:Secondary' },
@@ -92,6 +98,7 @@ export class ColorPanel extends StoreBoundElement {
     if (!color) return html``;
     const palette = buildPalette(color.baseColor, color.scheme, this.state?.global?.themeMode || 'dark');
     const intensity = color.intensity ?? 80;
+    const identityMode = color.identityMode || 'preserve';
     const overrides = color.overrides ?? {};
 
     return html`
@@ -113,6 +120,22 @@ export class ColorPanel extends StoreBoundElement {
           </select>
         </label>
       </div>
+
+      <label>Site identity</label>
+      <select
+        style="width:100%;margin-bottom:10px"
+        @change=${(e) => this.updateGlobal({ color: { identityMode: e.target.value } })}
+      >
+        ${IDENTITY_MODES.map(
+          (mode) => html`<option value=${mode.id} ?selected=${mode.id === identityMode}>
+            ${mode.label}
+          </option>`
+        )}
+      </select>
+      <p class="hint">
+        Preserve keeps brand colors while restyling neutrals. Harmonize maps brand hue to the
+        theme accent. Fully restyle blends everything by intensity.
+      </p>
 
       <label>Restyle intensity (${intensity}%)</label>
       <input

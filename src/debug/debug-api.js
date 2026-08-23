@@ -186,6 +186,7 @@ export function createDebugApi(deps) {
         settingsOpen: popover?.matches?.(':popover-open') === true,
         settingsScrollTop: body ? Math.round(body.scrollTop) : 0,
         openSection: state?.global?.ui?.openSection ?? null,
+        settingsFocus: state?.global?.ui?.settingsFocus ?? 'theme',
         sections: safeClone(state?.global?.sections ?? {}),
         activeThemePackId: state?.global?.activeThemePackId ?? null,
         themeMode: state?.global?.themeMode ?? null,

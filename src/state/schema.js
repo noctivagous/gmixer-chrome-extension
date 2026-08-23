@@ -7,6 +7,8 @@ export const SCHEMA_VERSION = 1;
 
 /** @typedef {'analog' | 'complement' | 'splitComplement' | 'triadic' | 'tetradic' | 'monochrome'} ColorScheme */
 /** @typedef {'light' | 'gray' | 'dark'} ThemeMode */
+/** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
+/** @typedef {'preserve' | 'harmonize' | 'restyle'} IdentityMode */
 
 /**
  * Default state for a fresh install. Ships "good out of the box" per the
@@ -27,6 +29,10 @@ export function createDefaultState() {
         scheme: /** @type {ColorScheme} */ ('analog'),
         // 0 = stay close to sampled page colors; 100 = full theme paint.
         intensity: 80,
+        // How identity colors (masthead/nav/links/accents) are handled:
+        // preserve = keep site brand; harmonize = remap hue to theme accent;
+        // restyle = blend identity with the rest (legacy intensity behavior).
+        identityMode: /** @type {IdentityMode} */ ('preserve'),
         // Per-role overrides. Empty string = "use the generated/blended palette value".
         overrides: {
           background: '',
@@ -128,6 +134,9 @@ export function createDefaultState() {
         openSection: /** @type {string|null} */ (null),
         settingsOpen: false,
         settingsScrollTop: 0,
+        // Which accordion sections the settings panel shows:
+        // theme = all, tone = Tone only, media = Media only.
+        settingsFocus: /** @type {SettingsFocus} */ ('theme'),
       },
     },
     // Per-site overrides layered on top of `global`. Keyed by hostname so

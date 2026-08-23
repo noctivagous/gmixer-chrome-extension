@@ -20,12 +20,15 @@ import {
   runAdaptiveSubtreePass,
   clearAdaptivePass,
 } from './adaptive-pass.js';
+import { waitForPageSettle } from './page-settle.js';
 
 async function main() {
   await store.ready;
   const hostname = location.hostname;
 
   let sample = null;
+  let lastLayoutKey = '';
+  let layoutTimer = 0;
 
   const nav = new NavigationController(() => store.getResolvedStateForHost(hostname));
 
@@ -45,8 +48,11 @@ async function main() {
     injectStyle(css);
     writeCssCache(hostname, css);
     nav.sync();
+    lastLayoutKey = layoutKey();
   };
 
+  // Let the first paint settle before sampling the site's own colors.
+  await waitForPageSettle();
   reapply();
 
   startMutationObserver({
@@ -77,12 +83,72 @@ async function main() {
 
   store.subscribe(reapply);
   initSettingsHost();
+  watchLayoutAndSpa(reapply, {
+    getLastKey: () => lastLayoutKey,
+    setLastKey: (key) => {
+      lastLayoutKey = key;
+    },
+    getTimer: () => layoutTimer,
+    setTimer: (id) => {
+      layoutTimer = id;
+    },
+  });
 
   // Compile-time flag from build.js (--debug). False builds drop this import.
   if (__GMIXER_DEBUG__) {
     const { installDebugApi } = await import('../debug/install-debug.js');
     installDebugApi(store, reapply);
   }
+}
+
+function layoutKey() {
+  return `${window.innerWidth}x${window.innerHeight}:${Math.round(document.documentElement.scrollHeight / 200)}`;
+}
+
+/**
+ * Full resample on significant layout change or SPA history navigation.
+ * Mutations still use incremental classify between these events.
+ * @param {() => void} reapply
+ * @param {{
+ *   getLastKey: () => string,
+ *   setLastKey: (key: string) => void,
+ *   getTimer: () => number,
+ *   setTimer: (id: number) => void,
+ * }} layout
+ */
+function watchLayoutAndSpa(reapply, layout) {
+  const scheduleLayoutResample = () => {
+    clearTimeout(layout.getTimer());
+    layout.setTimer(
+      window.setTimeout(() => {
+        const next = layoutKey();
+        if (next === layout.getLastKey()) return;
+        layout.setLastKey(next);
+        reapply();
+      }, 400)
+    );
+  };
+
+  window.addEventListener('resize', scheduleLayoutResample, { passive: true });
+
+  const onSpaNav = () => {
+    window.setTimeout(reapply, 50);
+  };
+  window.addEventListener('popstate', onSpaNav);
+  window.addEventListener('hashchange', onSpaNav);
+
+  const originalPush = history.pushState;
+  const originalReplace = history.replaceState;
+  history.pushState = function pushStatePatched(...args) {
+    const result = originalPush.apply(this, args);
+    onSpaNav();
+    return result;
+  };
+  history.replaceState = function replaceStatePatched(...args) {
+    const result = originalReplace.apply(this, args);
+    onSpaNav();
+    return result;
+  };
 }
 
 main();

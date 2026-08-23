@@ -17,6 +17,11 @@ import '../../popup/components/site-toggle.js';
 import { THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
 import './font-browser.js';
 import { defineElement } from '../../lib/define-element.js';
+import {
+  SETTINGS_FOCUS_OPTIONS,
+  preferredOpenSectionForFocus,
+  visibleSectionsForFocus,
+} from '../settings-focus.js';
 
 /** @typedef {{ id: string, label: string, tag: string } | { type: 'divider' }} NavItem */
 
@@ -103,7 +108,7 @@ const NAV_ICONS = {
 };
 
 /**
- * Accordion order: Theme preview first, then Media → Color → Typography →
+ * Accordion order: Tone first, then Media → Color → Typography →
  * Clipping/Corners → Effects → Navigation → Font browser.
  *
  * Header On/Off is persisted section enablement (page effects).
@@ -112,7 +117,7 @@ const NAV_ICONS = {
  * @type {{ id: string, label: string, tags: string[] }[]}
  */
 const SECTIONS = [
-  { id: 'tone', label: 'Theme', tags: ['gmixer-theme-pack-panel'] },
+  { id: 'tone', label: 'Tone', tags: ['gmixer-theme-pack-panel'] },
   { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'color', label: 'Color', tags: ['gmixer-color-panel'] },
   { id: 'fonts', label: 'Typography', tags: ['gmixer-fonts-panel'] },
@@ -278,6 +283,28 @@ export class GmixerSettings extends StoreBoundElement {
     }
 
     .theme-pack-picker select {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.18));
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.22);
+      color: inherit;
+      box-sizing: border-box;
+    }
+
+    .settings-focus-picker {
+      max-width: 48rem;
+      display: grid;
+      gap: 4px;
+      margin: 0 0 var(--gm-space-2, 16px);
+    }
+
+    .settings-focus-picker label {
+      font-size: 11px;
+      opacity: 0.78;
+    }
+
+    .settings-focus-picker select {
       width: 100%;
       padding: 7px 8px;
       border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.18));
@@ -626,8 +653,28 @@ export class GmixerSettings extends StoreBoundElement {
     this.updateGlobal({ activeThemePackId: packId, themeMode: 'dark', ...pack.patch });
   }
 
+  /**
+   * @param {import('../../state/schema.js').SettingsFocus|string} focus
+   */
+  _setSettingsFocus(focus) {
+    const preferred = preferredOpenSectionForFocus(focus);
+    /** @type {Record<string, unknown>} */
+    const ui = { settingsFocus: focus };
+    if (preferred) ui.openSection = preferred;
+    this.updateGlobal({ ui });
+  }
+
+  /** @returns {import('../../state/schema.js').SettingsFocus} */
+  _settingsFocus() {
+    const focus = this.state?.global?.ui?.settingsFocus;
+    if (focus === 'tone' || focus === 'media' || focus === 'theme') return focus;
+    return 'theme';
+  }
+
   render() {
     const activeId = this.state?.global?.activeThemePackId;
+    const settingsFocus = this._settingsFocus();
+    const visibleSections = visibleSectionsForFocus(SECTIONS, settingsFocus);
     const openSection = this._openSectionId();
     return html`
       <header class="titlebar">
@@ -642,21 +689,38 @@ export class GmixerSettings extends StoreBoundElement {
       </header>
       <gmixer-palette-swatches></gmixer-palette-swatches>
       <main class="body">
-        <div class="theme-pack-picker">
-          <label for="theme-pack">Theme</label>
+        <div class="settings-focus-picker">
+          <label for="settings-focus">Settings</label>
           <select
-            id="theme-pack"
-            @change=${(e) => this._selectThemePack(e.target.value)}
+            id="settings-focus"
+            @change=${(e) => this._setSettingsFocus(e.target.value)}
           >
-            ${THEME_PACKS.map(
-              (pack) => html`<option value=${pack.id} ?selected=${pack.id === activeId}>
-                ${pack.label}
+            ${SETTINGS_FOCUS_OPTIONS.map(
+              (option) => html`<option value=${option.id} ?selected=${option.id === settingsFocus}>
+                ${option.label}
               </option>`
             )}
           </select>
         </div>
+        ${settingsFocus === 'theme'
+          ? html`
+              <div class="theme-pack-picker">
+                <label for="theme-pack">Theme pack</label>
+                <select
+                  id="theme-pack"
+                  @change=${(e) => this._selectThemePack(e.target.value)}
+                >
+                  ${THEME_PACKS.map(
+                    (pack) => html`<option value=${pack.id} ?selected=${pack.id === activeId}>
+                      ${pack.label}
+                    </option>`
+                  )}
+                </select>
+              </div>
+            `
+          : null}
         <div class="accordion">
-          ${SECTIONS.map((section) => {
+          ${visibleSections.map((section) => {
             const isOpen = openSection === section.id;
             const isEnabled = this._isSectionEnabled(section.id);
             return html`
@@ -715,7 +779,12 @@ export class GmixerSettings extends StoreBoundElement {
   /** @returns {string|null} */
   _openSectionId() {
     const open = this.state?.global?.ui?.openSection;
-    return open === undefined ? null : open;
+    if (open === undefined || open === null) return null;
+    const visible = visibleSectionsForFocus(SECTIONS, this._settingsFocus());
+    if (!visible.some((section) => section.id === open)) {
+      return preferredOpenSectionForFocus(this._settingsFocus());
+    }
+    return open;
   }
 
   _toggleExpanded(id) {

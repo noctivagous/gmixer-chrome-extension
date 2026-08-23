@@ -7,7 +7,7 @@ import { getFontById } from '../config/fonts.js';
 import { getThemePackById } from '../config/theme-packs.js';
 import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
-import { blendWithPageSample } from './page-sampler.js';
+import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
 
@@ -257,8 +257,9 @@ function effectsRules(effects, palette) {
  * @param {string} surfaceGui
  * @param {string} surfaceContainers
  * @param {boolean} isDark
+ * @param {ReturnType<typeof deriveBrandFamily>} brandFamily
  */
-function roleCss(role, surfaceGui, surfaceContainers, isDark) {
+function roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) {
   return `
     :root {
       --gmixer-bg-primary: ${role('background')};
@@ -272,6 +273,12 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark) {
       --gmixer-link: ${role('link')};
       --gmixer-border: ${role('border')};
       --gmixer-focus: ${role('focus')};
+      --gmixer-brand: ${brandFamily.brand};
+      --gmixer-brand-tint: ${brandFamily.tint};
+      --gmixer-brand-shade: ${brandFamily.shade};
+      --gmixer-brand-text: ${brandFamily.textOnBrand};
+      --gmixer-brand-hover: ${brandFamily.hover};
+      --gmixer-brand-active: ${brandFamily.active};
       color-scheme: ${isDark ? 'dark' : 'light'};
     }
 
@@ -390,6 +397,14 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark) {
       background-color: transparent !important;
     }
 
+    a:hover, a:focus-visible {
+      color: var(--gmixer-brand-hover) !important;
+    }
+
+    a:active {
+      color: var(--gmixer-brand-active) !important;
+    }
+
     /* Heading links belong to the heading role, not ordinary body links. */
     h1 a, h1 a:link, h1 a:visited,
     h2 a, h2 a:link, h2 a:visited,
@@ -399,6 +414,28 @@ function roleCss(role, surfaceGui, surfaceContainers, isDark) {
     h6 a, h6 a:link, h6 a:visited,
     [role="heading"] a, [role="heading"] a:link, [role="heading"] a:visited {
       color: var(--gmixer-accent) !important;
+    }
+
+    h1 a:hover, h1 a:focus-visible,
+    h2 a:hover, h2 a:focus-visible,
+    h3 a:hover, h3 a:focus-visible,
+    h4 a:hover, h4 a:focus-visible,
+    h5 a:hover, h5 a:focus-visible,
+    h6 a:hover, h6 a:focus-visible,
+    [role="heading"] a:hover, [role="heading"] a:focus-visible {
+      color: var(--gmixer-brand-hover) !important;
+    }
+
+    body button:hover, body [role="button"]:hover,
+    body button:focus-visible, body [role="button"]:focus-visible {
+      background-color: var(--gmixer-brand-hover) !important;
+      color: var(--gmixer-brand-text) !important;
+      border-color: var(--gmixer-brand-shade) !important;
+    }
+
+    body button:active, body [role="button"]:active {
+      background-color: var(--gmixer-brand-active) !important;
+      color: var(--gmixer-brand-text) !important;
     }
 
     hr, fieldset, input, textarea, select, button,
@@ -438,7 +475,8 @@ export function buildCss(resolved, pageSample = null) {
     resolved.themeMode || 'dark'
   );
   const intensity = resolved.color.intensity ?? 80;
-  const blended = blendWithPageSample(themePalette, pageSample, intensity);
+  const identityMode = resolved.color.identityMode || 'preserve';
+  const blended = blendWithPageSample(themePalette, pageSample, intensity, identityMode);
   const overrides = resolved.color.overrides ?? {};
   const role = (key) => overrides[key] || blended[key];
   const background = role('background');
@@ -453,10 +491,12 @@ export function buildCss(resolved, pageSample = null) {
   const paintMedia = isSectionEnabled(resolved, 'filter');
   const paintShape = isSectionEnabled(resolved, 'shape');
   const paintEffects = isSectionEnabled(resolved, 'effects');
+  const brandFamily =
+    blended.brandFamily || deriveBrandFamily(role('accent') || themePalette.accent, isDark);
 
   return [
     fontFaceRules(),
-    paintTone ? roleCss(role, surfaceGui, surfaceContainers, isDark) : '',
+    paintTone ? roleCss(role, surfaceGui, surfaceContainers, isDark, brandFamily) : '',
     paintFonts ? headingScaleRules(blended.headerSizeVariance) : '',
     paintFonts ? headingFontRules(resolved.fonts) : '',
     paintFonts ? fontRule('paragraph', resolved.fonts.paragraph) : '',

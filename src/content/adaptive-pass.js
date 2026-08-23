@@ -28,26 +28,24 @@ import { removeStyle } from './style-injector.js';
 
 /**
  * Full adaptive pass for document_end / settings reapply.
- * Samples roles, classifies structure/media, tags background images, and
- * installs tonal surface layers.
+ * Samples roles, classifies structure/media, and tags background images.
  *
  * @param {object} resolved  resolved global settings for this host
  * @returns {AdaptivePassResult}
  */
 export function runAdaptivePass(resolved) {
   // The static pass may already have painted the roots. Remove that temporary
-  // stylesheet while sampling so intensity is based on the site's own colors,
-  // not on gMixer's previous pass. This is synchronous, so no paint occurs
-  // between removal and the caller's replacement stylesheet.
+  // stylesheet (and any overlays) while sampling so intensity is based on the
+  // site's own colors, not on gMixer's previous pass. This is synchronous, so
+  // no paint occurs between removal and the caller's replacement stylesheet.
   removeStyle();
   removeTonalSurfaceLayers();
+  removeBackgroundImageOverlays();
   const sample = samplePageRoles();
   const classification = classifyPage();
 
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements();
-  } else {
-    removeBackgroundImageOverlays();
   }
 
   return { sample, classification };
