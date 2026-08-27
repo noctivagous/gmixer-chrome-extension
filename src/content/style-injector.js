@@ -300,13 +300,118 @@ function effectsRules(effects, palette) {
         : `${EFFECTS_IMAGE_SELECTORS} { box-shadow: 0 0 12px ${glowColor}; }`
     );
   } else if (imageEffect === 'pan-scan') {
-    rules.push(`@keyframes gmixer-pan-scan {
-  0% { transform: scale(1.04) translate(0%, 0%); }
-  100% { transform: scale(1.14) translate(-2.5%, -1.5%); }
+    const { speed, zoom, loop } = normalized.panScan;
+    const zoomScale = 1 + zoom / 100;
+    // Per-image --gmixer-pan-ox/oy are 9×9 grid origins set by pan-scan.js.
+    const ox = `var(--gmixer-pan-ox, 50%)`;
+    const oy = `var(--gmixer-pan-oy, 50%)`;
+    const fz = `var(--gmixer-pan-zoom, ${zoomScale})`;
+    const targetSel = `[data-gmixer-pan-scan-target="${loop}"]`;
+
+    if (loop === 'oscillate') {
+      rules.push(`@keyframes gmixer-pan-scan-oscillate {
+  0% { transform: scale(1.04); }
+  100% { transform: scale(${fz}); }
 }
-${EFFECTS_IMAGE_SELECTORS} {
+${targetSel} {
+  transform-origin: ${ox} ${oy};
+  animation: gmixer-pan-scan-oscillate ${speed}s ease-in-out infinite alternate;
+}`);
+    } else {
+      // Cross-dissolve: zoom toward a grid point, hold, dissolve into a rest
+      // twin at original framing, jump-cut primary back, then next grid point.
+      rules.push(`@keyframes gmixer-pan-scan-fade {
+  0% { transform: scale(1); opacity: 1; }
+  12% { transform: scale(1.04); opacity: 1; }
+  40% { transform: scale(${fz}); opacity: 1; }
+  62% { transform: scale(${fz}); opacity: 1; }
+  78% { transform: scale(${fz}); opacity: 0; }
+  79% { transform: scale(1); opacity: 0; }
+  92% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes gmixer-pan-scan-rest {
+  0%, 62% { opacity: 0; }
+  78%, 88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+${targetSel} {
+  transform-origin: ${ox} ${oy};
+  animation: gmixer-pan-scan-fade ${speed}s ease-in-out infinite;
+}
+[data-gmixer-pan-scan-rest] {
+  transform: none !important;
   transform-origin: center center;
-  animation: gmixer-pan-scan 16s ease-in-out infinite alternate;
+  animation: gmixer-pan-scan-rest ${speed}s ease-in-out infinite;
+}`);
+    }
+  } else if (imageEffect === 'rotating-cube') {
+    // Horizontal spin on the Y axis. Front/back keep the image aspect (W×H);
+    // left/right use depth×H. Depth vars come from rotating-cube.js.
+    rules.push(`@keyframes gmixer-rotating-cube {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+[data-gmixer-rotating-cube-scene] {
+  position: relative;
+  transform-style: preserve-3d;
+}
+[data-gmixer-rotating-cube] {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  animation: gmixer-rotating-cube 12s linear infinite;
+}
+[data-gmixer-rotating-cube-face] {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: #111;
+  transform-style: preserve-3d;
+  box-sizing: border-box;
+}
+[data-gmixer-rotating-cube-face] > img,
+[data-gmixer-rotating-cube-face] > picture,
+[data-gmixer-rotating-cube-face] > picture img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+[data-gmixer-rotating-cube-face="front"],
+[data-gmixer-rotating-cube-face="back"] {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+[data-gmixer-rotating-cube-face="front"] {
+  transform: translateZ(var(--gmixer-cube-half-d, 40px));
+}
+[data-gmixer-rotating-cube-face="back"] {
+  transform: rotateY(180deg) translateZ(var(--gmixer-cube-half-d, 40px));
+}
+[data-gmixer-rotating-cube-face="right"],
+[data-gmixer-rotating-cube-face="left"] {
+  top: 0;
+  left: 50%;
+  width: var(--gmixer-cube-d, 80px);
+  height: 100%;
+  margin-left: calc(var(--gmixer-cube-d, 80px) / -2);
+}
+[data-gmixer-rotating-cube-face="right"] {
+  transform: rotateY(90deg) translateZ(var(--gmixer-cube-half-w, 60px));
+}
+[data-gmixer-rotating-cube-face="left"] {
+  transform: rotateY(-90deg) translateZ(var(--gmixer-cube-half-w, 60px));
 }`);
   }
 
@@ -328,6 +433,36 @@ ${EFFECTS_IMAGE_SELECTORS} {
   } else if (navEffect === 'flash') {
     rules.push(`@keyframes gmixer-flash { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
 ${EFFECTS_NAV_SELECTORS} { animation: gmixer-flash 3s linear infinite; }`);
+  }
+
+  if (categories.articles?.effect === 'link-shimmer') {
+    // Soft sheen only — no border/outline. Color follows theme accent/swatch
+    // via --gmixer-shimmer-color on the overlay (fallback: palette accent).
+    const sheen = `var(--gmixer-shimmer-color, ${palette.accent})`;
+    rules.push(`@keyframes gmixer-link-shimmer-sweep {
+  0% { background-position: -140% 0; }
+  100% { background-position: 240% 0; }
+}
+.gmixer-link-shimmer-overlay {
+  position: fixed !important;
+  z-index: 2147483646 !important;
+  pointer-events: none !important;
+  box-sizing: border-box !important;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  background-image: linear-gradient(
+    105deg,
+    transparent 38%,
+    color-mix(in srgb, ${sheen} 42%, transparent) 50%,
+    transparent 62%
+  ) !important;
+  background-color: transparent !important;
+  background-size: 240% 100% !important;
+  background-repeat: no-repeat !important;
+  animation: gmixer-link-shimmer-sweep 1.35s ease-in-out 1 both !important;
+}`);
   }
 
   if (normalized.cursor.enabled) {
@@ -814,15 +949,6 @@ export function isSectionEnabled(resolved, id) {
   if (!sectionAllowedByFocus(resolved?.ui?.settingsFocus, id)) return false;
   if (id === 'navigation') return !!resolved?.navigation?.enabled;
   const sections = resolved?.sections;
-  // Tone merged into Color — either bit enables surface paint.
-  if (id === 'tone' || id === 'color') {
-    if (!sections) return true;
-    if (sections.color === true || sections.tone === true) return true;
-    if (sections.color === false && sections.tone === false) return false;
-    if (sections.color !== undefined) return sections.color === true;
-    if (sections.tone !== undefined) return sections.tone === true;
-    return true;
-  }
   if (!sections || sections[id] === undefined) {
     return id === 'fonts' || id === 'font-browser';
   }
@@ -830,21 +956,22 @@ export function isSectionEnabled(resolved, id) {
 }
 
 export function buildCss(resolved, pageSample = null) {
+  const colorOn = isSectionEnabled(resolved, 'color');
+  // Tone owns the surface direction. Without Color Scheme enabled, tone must
+  // remain neutral even if a hue relationship was selected previously.
+  const paletteScheme = colorOn ? resolved.color.scheme : 'monochrome';
   const themePalette = buildPalette(
     resolved.color.baseColor,
-    resolved.color.scheme,
+    paletteScheme,
     resolved.themeMode || 'dark'
   );
-  const paintTone =
-    isSectionEnabled(resolved, 'tone') || isSectionEnabled(resolved, 'color');
+  const paintTone = isSectionEnabled(resolved, 'tone');
   const paintFonts = isSectionEnabled(resolved, 'fonts');
   const paintMedia = isSectionEnabled(resolved, 'filter');
-  const colorOn = isSectionEnabled(resolved, 'color');
   const paintShape = isSectionEnabled(resolved, 'shape');
   const paintEffects = isSectionEnabled(resolved, 'effects');
-  // Tone approaches live in Color: Only: Tone (or Fully restyle) uses the
-  // theme palette at full strength with structural header/nav fills so
-  // Light|Gray|Dark is not muddied by page sampling / brand preserve.
+  // Tone uses the theme palette at full strength with structural header/nav
+  // fills so Light|Gray|Dark is not muddied by page sampling / brand preserve.
   const toneFocus = resolved?.ui?.settingsFocus === 'tone';
   const identityMode = toneFocus
     ? 'restyle'

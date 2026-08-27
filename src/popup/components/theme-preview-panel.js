@@ -237,7 +237,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const pack = THEME_PACKS.find((item) => item.id === activeId) || THEME_PACKS[0];
     const basePalette = paletteForPack(pack, activeMode);
     const livePalette = global?.color
-      ? buildPalette(global.color.baseColor, global.color.scheme, activeMode)
+      ? buildPalette(
+          global.color.baseColor,
+          global.sections?.color === true ? global.color.scheme : 'monochrome',
+          activeMode
+        )
       : basePalette;
     const colors = roleColors(livePalette, overrides, true);
     const fonts = {
@@ -254,8 +258,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const captionFamily = fontFamily(fonts.captions?.fontId);
     const uiFamily = fontFamily(fonts.ui?.fontId || fonts.paragraph?.fontId);
     const codeFamily = fontFamily(fonts.code?.fontId);
-    const mediaFilter =
-      pack.media?.defaultFilter && pack.media.defaultFilter !== 'none'
+    const mediaFilter = global?.imageFilter?.enabled
+      ? global.imageFilter.preset
+      : pack.media?.defaultFilter && pack.media.defaultFilter !== 'none'
         ? pack.media.defaultFilter
         : pack.patch?.imageFilter?.enabled
           ? pack.patch.imageFilter.preset

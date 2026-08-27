@@ -9,6 +9,7 @@ import {
 } from '../src/settings/settings-focus.js';
 
 const SECTIONS = [
+  { id: 'tone' },
   { id: 'color' },
   { id: 'filter' },
   { id: 'fonts' },
@@ -22,10 +23,10 @@ describe('settings-focus', () => {
     );
   });
 
-  it('shows Color (tone-only UI) for tone focus', () => {
+  it('shows Tone for tone focus', () => {
     assert.deepEqual(
       visibleSectionsForFocus(SECTIONS, 'tone').map((section) => section.id),
-      ['color']
+      ['tone']
     );
   });
 
@@ -43,7 +44,7 @@ describe('settings-focus', () => {
   });
 
   it('prefers opening the focused section', () => {
-    assert.equal(preferredOpenSectionForFocus('tone'), 'color');
+    assert.equal(preferredOpenSectionForFocus('tone'), 'tone');
     assert.equal(preferredOpenSectionForFocus('media'), 'filter');
     assert.equal(preferredOpenSectionForFocus('theme'), null);
   });
@@ -58,11 +59,11 @@ describe('settings-focus', () => {
     assert.equal(patch.imageFilter.revealOnHover, true);
   });
 
-  it('enables Color (Tone) for tone focus with full restyle defaults', () => {
+  it('enables Tone with a monochrome full-restyle default', () => {
     const patch = patchForSettingsFocus('tone');
-    assert.equal(patch.sections.color, true);
     assert.equal(patch.sections.tone, true);
-    assert.equal(patch.ui.openSection, 'color');
+    assert.equal(patch.ui.openSection, 'tone');
+    assert.equal(patch.color.scheme, 'monochrome');
     assert.equal(patch.color.identityMode, 'restyle');
     assert.equal(patch.color.intensity, 100);
   });
@@ -75,8 +76,8 @@ describe('settings-focus', () => {
     assert.equal(sectionAllowedByFocus('media', 'navigation'), false);
   });
 
-  it('gates non-Color sections when focus is tone-only', () => {
-    assert.equal(sectionAllowedByFocus('tone', 'color'), true);
+  it('gates non-Tone sections when focus is tone-only', () => {
+    assert.equal(sectionAllowedByFocus('tone', 'color'), false);
     assert.equal(sectionAllowedByFocus('tone', 'tone'), true);
     assert.equal(sectionAllowedByFocus('tone', 'filter'), false);
     assert.equal(sectionAllowedByFocus('tone', 'fonts'), false);

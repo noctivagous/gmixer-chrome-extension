@@ -274,6 +274,15 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   const offsets = accentHueOffsets(scheme);
   const accentHue = offsets.length ? rotate(base.h, offsets[0]) : base.h;
   const linkHue = offsets.length > 1 ? rotate(base.h, offsets[1]) : accentHue;
+  // Tone-only / monochrome themes must not introduce a saturated accent.
+  // A gray source has an arbitrary hue (usually 0°), which otherwise becomes
+  // orange/red when the regular accent rule enforces high saturation.
+  const relationshipSaturation = scheme === 'monochrome'
+    ? Math.min(base.s, 12)
+    : Math.max(base.s, 65);
+  const linkSaturation = scheme === 'monochrome'
+    ? Math.min(base.s, 12)
+    : Math.max(base.s, 60);
 
   const isDark = mode !== 'light';
   const backgroundLightness = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
@@ -306,12 +315,12 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     4.5
   );
   const accent = ensureContrast(
-    hslToHex({ h: accentHue, s: Math.max(base.s, 65), l: accentLightness }),
+    hslToHex({ h: accentHue, s: relationshipSaturation, l: accentLightness }),
     background,
     4.5
   );
   const link = ensureContrast(
-    hslToHex({ h: linkHue, s: Math.max(base.s, 60), l: linkLightness }),
+    hslToHex({ h: linkHue, s: linkSaturation, l: linkLightness }),
     background,
     4.5
   );
@@ -321,7 +330,7 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     3
   );
   const focus = ensureContrast(
-    hslToHex({ h: accentHue, s: Math.max(base.s, 65), l: focusLightness }),
+    hslToHex({ h: accentHue, s: relationshipSaturation, l: focusLightness }),
     surfaceGui,
     3
   );

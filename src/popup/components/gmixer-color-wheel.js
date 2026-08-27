@@ -28,6 +28,7 @@ export class GmixerColorWheel extends StoreBoundElement {
       );
       position: relative;
       cursor: crosshair;
+      touch-action: none;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
     .wheel::after {
@@ -68,9 +69,6 @@ export class GmixerColorWheel extends StoreBoundElement {
 
   constructor() {
     super();
-    this._isDragging = false;
-    this._onMouseMove = this._onMouseMove.bind(this);
-    this._onMouseUp = this._onMouseUp.bind(this);
   }
 
   render() {
@@ -86,7 +84,10 @@ export class GmixerColorWheel extends StoreBoundElement {
     return html`
       <div
         class="wheel"
-        @mousedown=${this._onMouseDown}
+        @pointerdown=${this._onPointerDown}
+        @pointermove=${this._onPointerMove}
+        @pointerup=${this._onPointerUp}
+        @pointercancel=${this._onPointerUp}
         style="--current-color: ${color.baseColor}"
       >
         <div
@@ -118,22 +119,20 @@ export class GmixerColorWheel extends StoreBoundElement {
     };
   }
 
-  _onMouseDown(e) {
-    this._isDragging = true;
-    window.addEventListener('mousemove', this._onMouseMove);
-    window.addEventListener('mouseup', this._onMouseUp);
-    this._updateHue(e);
+  _onPointerDown(event) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    this._updateHue(event);
   }
 
-  _onMouseMove(e) {
-    if (!this._isDragging) return;
-    this._updateHue(e);
+  _onPointerMove(event) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    this._updateHue(event);
   }
 
-  _onMouseUp() {
-    this._isDragging = false;
-    window.removeEventListener('mousemove', this._onMouseMove);
-    window.removeEventListener('mouseup', this._onMouseUp);
+  _onPointerUp(event) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
 
   _updateHue(e) {
@@ -152,7 +151,10 @@ export class GmixerColorWheel extends StoreBoundElement {
     if (!color) return;
 
     const hsl = hexToHsl(color.baseColor);
-    const newHex = hslToHex({ ...hsl, h: angle });
+    // The default monochrome theme has zero saturation. A hue alone cannot
+    // change a gray value, so choosing the wheel also establishes a vivid
+    // base color for its generated schemes.
+    const newHex = hslToHex({ ...hsl, h: angle, s: Math.max(hsl.s, 70) });
 
     this.updateGlobal({ color: { baseColor: newHex } });
   }

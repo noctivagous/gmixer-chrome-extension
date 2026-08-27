@@ -43,7 +43,15 @@ export function startMutationObserver(handlers) {
       node.id === 'gmixer-settings' ||
       node.id === 'gmixer-hover-outline' ||
       node.classList?.contains('gmixer-tonal-overlay') ||
-      node.closest?.('#gmixer-settings'));
+      node.classList?.contains('gmixer-link-shimmer-overlay') ||
+      node.hasAttribute?.('data-gmixer-pan-scan-frame') ||
+      node.hasAttribute?.('data-gmixer-pan-scan-rest') ||
+      node.hasAttribute?.('data-gmixer-rotating-cube-scene') ||
+      node.hasAttribute?.('data-gmixer-rotating-cube') ||
+      node.hasAttribute?.('data-gmixer-rotating-cube-face') ||
+      node.closest?.('#gmixer-settings') ||
+      node.closest?.('[data-gmixer-pan-scan-frame]') ||
+      node.closest?.('[data-gmixer-rotating-cube-scene]'));
 
   const flush = () => {
     pending = false;

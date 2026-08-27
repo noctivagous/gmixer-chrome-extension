@@ -21,6 +21,9 @@ import {
   clearAdaptivePass,
 } from './adaptive-pass.js';
 import { waitForPageSettle } from './page-settle.js';
+import { syncLinkShimmer, rescanLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
+import { syncPanScan } from './pan-scan.js';
+import { syncRotatingCube } from './rotating-cube.js';
 
 async function main() {
   await store.ready;
@@ -35,19 +38,25 @@ async function main() {
   const reapply = () => {
     const resolved = store.getResolvedStateForHost(hostname);
     if (resolved.enabled === false) {
+      syncPanScan(resolved);
+      syncRotatingCube(resolved);
       removeStyle();
       clearCssCache(hostname);
       clearAdaptivePass();
+      stopLinkShimmer();
       nav.sync();
       return;
     }
 
     const adaptive = runAdaptivePass(resolved);
     sample = adaptive.sample;
+    syncPanScan(resolved);
+    syncRotatingCube(resolved);
     const css = buildCss(resolved, sample);
     injectStyle(css);
     writeCssCache(hostname, css);
     nav.sync();
+    syncLinkShimmer(resolved);
     lastLayoutKey = layoutKey();
   };
 
@@ -71,14 +80,21 @@ async function main() {
     onSubtree(roots) {
       const resolved = store.getResolvedStateForHost(hostname);
       if (resolved.enabled === false) {
+        syncPanScan(resolved);
+        syncRotatingCube(resolved);
         removeStyle();
         clearAdaptivePass();
+        stopLinkShimmer();
         return;
       }
       for (const root of roots) {
         runAdaptiveSubtreePass(root, resolved);
       }
+      syncPanScan(resolved);
+      syncRotatingCube(resolved);
       injectStyle(buildCss(resolved, sample));
+      syncLinkShimmer(resolved);
+      rescanLinkShimmer();
     },
     // Stylesheets or head changes: cascade order may have beaten us — reassert.
     onCascadeThreat() {
@@ -86,6 +102,7 @@ async function main() {
       if (resolved.enabled === false) {
         removeStyle();
         clearAdaptivePass();
+        stopLinkShimmer();
         return;
       }
       injectStyle(buildCss(resolved, sample));

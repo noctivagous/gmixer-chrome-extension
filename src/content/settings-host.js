@@ -12,16 +12,23 @@
 
 import { GRID, GRID_CSS_VARS } from '../settings/tokens.js';
 import { ensureDocumentFontFaces } from '../lib/font-faces.js';
-import { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE } from '../messaging/messages.js';
+import {
+  MSG_TOGGLE_SETTINGS,
+  MSG_TOGGLE_SITE,
+  MSG_OPEN_WALKTHROUGH,
+} from '../messaging/messages.js';
 import { drainEarlyMessageQueue } from '../messaging/early-message-queue.js';
 import { toggleSiteTheming } from '../state/site-enable.js';
+import { createDefaultState } from '../state/schema.js';
 import { store } from '../state/store.js';
 
 export const SETTINGS_POPOVER_ID = 'gmixer-settings';
+export const WALKTHROUGH_POPOVER_ID = 'gmixer-walkthrough-host';
 export { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE };
 
 const HOST_STYLE_ID = 'gmixer-settings-host-style';
 let settingsUiPromise;
+let walkthroughUiPromise;
 /** @type {(() => void) | null} */
 let unsubscribeStore = null;
 
@@ -33,6 +40,16 @@ function loadSettingsUi() {
     ]).then(() => import('../settings/settings-entry.js'));
   }
   return settingsUiPromise;
+}
+
+function loadWalkthroughUi() {
+  if (!walkthroughUiPromise) {
+    walkthroughUiPromise = Promise.all([
+      import('@webcomponents/custom-elements'),
+      import('lit/polyfill-support.js'),
+    ]).then(() => import('../settings/components/gmixer-walkthrough.js'));
+  }
+  return walkthroughUiPromise;
 }
 
 async function persistSettingsOpen(open) {
@@ -103,6 +120,51 @@ function ensureHostStyles() {
       width: 100%;
       height: 100%;
     }
+
+    #${WALKTHROUGH_POPOVER_ID} {
+      ${GRID_CSS_VARS}
+      box-sizing: border-box;
+      position: fixed;
+      inset: 0;
+      margin: auto;
+      width: fit-content;
+      height: fit-content;
+      max-width: 90vw;
+      max-height: 90vh;
+      border: 0;
+      padding: 0;
+      overflow: visible;
+      background: transparent;
+      color: var(--gm-text);
+      box-shadow: none;
+      opacity: 0;
+      transform: scale(0.95);
+      transition:
+        opacity 200ms ease,
+        transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+
+    #${WALKTHROUGH_POPOVER_ID}:popover-open {
+      display: flex;
+      flex-direction: column;
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    @starting-style {
+      #${WALKTHROUGH_POPOVER_ID}:popover-open {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+    }
+
+    #${WALKTHROUGH_POPOVER_ID}::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      pointer-events: auto;
+    }
   `;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -124,6 +186,55 @@ export async function ensureSettingsPopover() {
     document.documentElement.appendChild(el);
   }
   return el;
+}
+
+/** @returns {Promise<HTMLElement>} */
+export async function ensureWalkthroughPopover() {
+  await loadWalkthroughUi();
+  ensureHostStyles();
+  ensureDocumentFontFaces();
+
+  let el = document.getElementById(WALKTHROUGH_POPOVER_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = WALKTHROUGH_POPOVER_ID;
+    el.setAttribute('popover', 'manual');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'gMixer Walkthrough');
+    el.appendChild(document.createElement('gmixer-walkthrough'));
+    document.documentElement.appendChild(el);
+  }
+  return el;
+}
+
+export async function openWalkthroughPopover() {
+  const el = await ensureWalkthroughPopover();
+  const walkthrough = el.querySelector('gmixer-walkthrough');
+  if (walkthrough) walkthrough.currentSlide = 0;
+  if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
+    el.showPopover();
+  }
+  return el;
+}
+
+/**
+ * Apply the blank User-Made baseline exactly once before onboarding begins.
+ * Reloading an unpacked extension can retain chrome.storage, so new
+ * walkthrough state must not inherit a prior theme’s fonts or color choices.
+ */
+async function initializeWalkthrough() {
+  const state = store.getState();
+  if (state?.global?.ui?.walkthroughInitialized) return;
+
+  const baseline = createDefaultState().global;
+  await store.update({
+    ...baseline,
+    ui: {
+      ...baseline.ui,
+      walkthroughInitialized: true,
+      walkthroughCompleted: false,
+    },
+  });
 }
 
 /**
@@ -229,6 +340,12 @@ function onRuntimeMessage(message, _sender, sendResponse) {
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
   }
+  if (message?.type === MSG_OPEN_WALKTHROUGH) {
+    openWalkthroughPopover()
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
 }
 
 /** Call once from content-end. */
@@ -249,8 +366,15 @@ export function initSettingsHost() {
     .then(() => {
       unsubscribeStore?.();
       unsubscribeStore = store.subscribe(syncPopoverFromStore);
+      
+      const state = store.getState();
       // Align with persisted open state (reload + already-open other tabs).
-      syncPopoverFromStore(store.getState());
+      syncPopoverFromStore(state);
+
+      // Trigger walkthrough if not completed and not in a frame.
+      if (!state?.global?.ui?.walkthroughCompleted && window === window.top) {
+        void initializeWalkthrough().then(() => openWalkthroughPopover());
+      }
     })
     .catch(() => {});
 }

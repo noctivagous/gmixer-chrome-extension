@@ -56,6 +56,13 @@ describe('color-theory', () => {
     assert.equal(dark.isDark, true);
   });
 
+  it('keeps monochrome palette roles desaturated for Tone-only themes', () => {
+    const palette = buildPalette('#8a8a8a', 'monochrome', 'dark');
+    assert.equal(hexToHsl(palette.accent).s, 0);
+    assert.equal(hexToHsl(palette.link).s, 0);
+    assert.equal(hexToHsl(palette.focus).s, 0);
+  });
+
   it('builds a ranked elevated surface ladder from the page background', () => {
     const dark = buildPalette('#7c3aed', 'monochrome', 'dark');
     assert.equal(dark.surfaceLadder.length, 3);
@@ -281,8 +288,11 @@ describe('page-sampler helpers', () => {
 describe('buildCss page paint', () => {
   it('emits independent font rules for all heading levels', () => {
     const global = createDefaultState().global;
+    global.sections.fonts = true;
     global.fonts.headings.h1.fontId = 'lora';
+    global.fonts.headings.h2.fontId = 'raleway';
     global.fonts.headings.h3.fontId = 'source-sans-3';
+    global.fonts.headings.h6.fontId = 'outfit';
     const css = buildCss(global, null);
 
     assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\], h1 a, \[role="heading"\]\[aria-level="1"\] a \{ font-family: "Lora"/);
@@ -293,8 +303,10 @@ describe('buildCss page paint', () => {
 
   it('falls back to legacy header roles for older saved state', () => {
     const global = createDefaultState().global;
+    global.sections.fonts = true;
     delete global.fonts.headings;
     global.fonts.headers.fontId = 'lora';
+    global.fonts.subheadings.fontId = 'raleway';
     const css = buildCss(global, null);
 
     assert.match(css, /h1, \[role="heading"\]\[aria-level="1"\], h1 a, \[role="heading"\]\[aria-level="1"\] a \{ font-family: "Lora"/);
@@ -599,7 +611,7 @@ describe('theme package schema', () => {
   });
 
   it('preserves each pack personality while tone changes its surfaces', () => {
-    for (const pack of THEME_PACKS) {
+    for (const pack of THEME_PACKS.filter((pack) => pack.patch.color)) {
       const { baseColor, scheme } = pack.patch.color;
       const palettes = ['light', 'gray', 'dark'].map((mode) =>
         buildPalette(baseColor, scheme, mode)

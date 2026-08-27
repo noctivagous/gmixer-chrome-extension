@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizeEffects } from '../src/config/effects-catalog.js';
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
+import { gridIndexToPercent, GRID_SIZE } from '../src/content/pan-scan.js';
 
 describe('effects catalog', () => {
   it('clamps invalid category effects to none', () => {
@@ -44,8 +45,78 @@ describe('effectsRules category paint', () => {
       }),
       null
     );
-    assert.match(css, /@keyframes gmixer-pan-scan/);
-    assert.match(css, /img, picture img \{[\s\S]*animation: gmixer-pan-scan/);
+    assert.match(css, /@keyframes gmixer-pan-scan-fade/);
+    assert.match(css, /@keyframes gmixer-pan-scan-rest/);
+    assert.match(css, /\[data-gmixer-pan-scan-target="fade"\]/);
+    assert.match(css, /\[data-gmixer-pan-scan-rest\]/);
+    assert.doesNotMatch(css, /infinite alternate/);
+  });
+
+  it('emits oscillate pan-scan when loop is oscillate', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'pan-scan' } },
+        panScan: { loop: 'oscillate' },
+      }),
+      null
+    );
+    assert.match(css, /@keyframes gmixer-pan-scan-oscillate/);
+    assert.match(css, /infinite alternate/);
+  });
+
+  it('defaults pan-scan loop to fade and clamps invalid loop values', () => {
+    assert.equal(normalizeEffects({}).panScan.loop, 'fade');
+    assert.equal(normalizeEffects({ panScan: { loop: 'nope' } }).panScan.loop, 'fade');
+    assert.equal(normalizeEffects({ panScan: { loop: 'oscillate' } }).panScan.loop, 'oscillate');
+  });
+
+  it('defaults pan-scan motion to scan and clamps invalid motion values', () => {
+    assert.equal(normalizeEffects({}).panScan.motion, 'scan');
+    assert.equal(normalizeEffects({ panScan: { motion: 'nope' } }).panScan.motion, 'scan');
+    assert.equal(normalizeEffects({ panScan: { motion: 'pan' } }).panScan.motion, 'pan');
+    assert.equal(normalizeEffects({ panScan: { motion: 'tilt' } }).panScan.motion, 'tilt');
+  });
+
+  it('emits transform-origin vars for pan-scan grid zooms', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'pan-scan' } },
+      }),
+      null
+    );
+    assert.match(css, /transform-origin: var\(--gmixer-pan-ox/);
+    assert.match(css, /--gmixer-pan-oy/);
+  });
+
+  it('maps 9x9 grid indices into a distance-scaled origin range', () => {
+    assert.equal(GRID_SIZE, 9);
+    assert.equal(gridIndexToPercent(4, 3), 50);
+    assert.ok(gridIndexToPercent(0, 3) < 50);
+    assert.ok(gridIndexToPercent(8, 3) > 50);
+    assert.ok(gridIndexToPercent(0, 12) < gridIndexToPercent(0, 3));
+  });
+
+  it('emits rotating-cube keyframes and face transforms', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'rotating-cube' } },
+      }),
+      null
+    );
+    assert.match(css, /@keyframes gmixer-rotating-cube/);
+    assert.match(css, /rotateY\(360deg\)/);
+    assert.match(css, /\[data-gmixer-rotating-cube\]/);
+    assert.match(css, /\[data-gmixer-rotating-cube-face="front"\]/);
+    assert.match(css, /--gmixer-cube-half-w/);
+    assert.match(css, /--gmixer-cube-half-d/);
+  });
+
+  it('allows rotating-cube on images', () => {
+    assert.equal(
+      normalizeEffects({ categories: { images: { effect: 'rotating-cube' } } }).categories.images
+        .effect,
+      'rotating-cube'
+    );
   });
 
   it('emits navigation glow on nav/header selectors, not bare a', () => {

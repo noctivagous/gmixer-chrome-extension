@@ -27,14 +27,15 @@ const ROLES = [
 ];
 
 /**
- * Color module — includes Tone (Light | Gray | Dark) plus base color, scheme,
- * identity, intensity, and per-role overrides. Under "Only: Tone" settings
- * focus, only the Tone controls are shown.
+ * Color controls, split by settings sections: Tone (Light | Gray | Dark) and
+ * Color Scheme (base color, relationships, identity, intensity, overrides).
  */
 export class ColorPanel extends StoreBoundElement {
   static properties = {
-    /** When true, only Light | Gray | Dark (Only: Tone settings focus). */
+    /** When true, only Light | Gray | Dark controls are shown. */
     toneOnly: { type: Boolean, attribute: 'tone-only' },
+    /** When true, excludes Tone and shows only color-scheme controls. */
+    schemeOnly: { type: Boolean, attribute: 'scheme-only' },
   };
 
   static styles = css`
@@ -183,6 +184,7 @@ export class ColorPanel extends StoreBoundElement {
   constructor() {
     super();
     this.toneOnly = false;
+    this.schemeOnly = false;
   }
 
   render() {
@@ -223,7 +225,7 @@ export class ColorPanel extends StoreBoundElement {
     const overrides = color.overrides ?? {};
 
     return html`
-      ${toneControls}
+      ${this.schemeOnly ? null : toneControls}
 
       <div class="color-selection-grid">
         <gmixer-color-wheel></gmixer-color-wheel>

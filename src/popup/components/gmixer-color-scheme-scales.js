@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
-import { SCHEMES, getColorScale } from '../../lib/color-theory.js';
+import { SCHEMES, accentHueOffsets, getColorScale, hexToHsl, hslToHex } from '../../lib/color-theory.js';
 import { defineElement } from '../../lib/define-element.js';
 
 export class GmixerColorSchemeScales extends StoreBoundElement {
@@ -31,11 +31,13 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       gap: 2px;
     }
     .swatch {
+      display: block;
       width: 100%;
       aspect-ratio: 1;
       border-radius: 2px;
       cursor: pointer;
       border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 0;
       transition: transform 120ms ease, box-shadow 120ms ease;
     }
     .swatch:hover {
@@ -46,6 +48,11 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     .swatch.active {
       outline: 2px solid var(--gm-accent, #8b5cf6);
       outline-offset: 1px;
+    }
+    .scale-label {
+      min-width: 3.5rem;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.55));
+      font-size: 10px;
     }
   `;
 
@@ -60,31 +67,47 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
 
   _renderScheme(scheme, currentColor) {
     const steps = 5;
-    const tints = getColorScale(currentColor.baseColor, 'tint', steps);
-    const shades = getColorScale(currentColor.baseColor, 'shade', steps);
-    const tones = getColorScale(currentColor.baseColor, 'tone', steps);
+    const schemeColors = this._schemeColors(currentColor.baseColor, scheme.id);
+    const tints = schemeColors.flatMap((color) => getColorScale(color, 'tint', steps));
+    const shades = schemeColors.flatMap((color) => getColorScale(color, 'shade', steps));
+    const tones = schemeColors.flatMap((color) => getColorScale(color, 'tone', steps));
 
     return html`
       <div class="scheme-row">
         <span class="scheme-label">${scheme.label}</span>
         <div class="scales-grid">
-          <div class="scale">${tints.map((c) => this._renderSwatch(c, scheme.id, currentColor))}</div>
-          <div class="scale">${shades.map((c) => this._renderSwatch(c, scheme.id, currentColor))}</div>
-          <div class="scale">${tones.map((c) => this._renderSwatch(c, scheme.id, currentColor))}</div>
+          <div class="scale">
+            <span class="scale-label">Colors</span>
+            ${schemeColors.map((color) =>
+              this._renderSwatch(color, scheme.id, currentColor, scheme.label)
+            )}
+          </div>
+          <div class="scale"><span class="scale-label">Tint</span>${tints.map((c) => this._renderSwatch(c, scheme.id, currentColor, 'Tint'))}</div>
+          <div class="scale"><span class="scale-label">Shade</span>${shades.map((c) => this._renderSwatch(c, scheme.id, currentColor, 'Shade'))}</div>
+          <div class="scale"><span class="scale-label">Tone</span>${tones.map((c) => this._renderSwatch(c, scheme.id, currentColor, 'Tone'))}</div>
         </div>
       </div>
     `;
   }
 
-  _renderSwatch(hex, schemeId, currentColor) {
+  _schemeColors(baseColor, schemeId) {
+    const hsl = hexToHsl(baseColor);
+    return [0, ...accentHueOffsets(schemeId)].map((offset) =>
+      hslToHex({ ...hsl, h: (hsl.h + offset + 360) % 360 })
+    );
+  }
+
+  _renderSwatch(hex, schemeId, currentColor, scaleLabel) {
     const isActive = currentColor.baseColor.toLowerCase() === hex.toLowerCase() && currentColor.scheme === schemeId;
     return html`
-      <div
+      <button
+        type="button"
         class="swatch ${isActive ? 'active' : ''}"
         style="background: ${hex}"
-        title="${hex}"
+        title=${`${scaleLabel}: ${hex}`}
+        aria-label=${`${schemeId} ${scaleLabel} ${hex}`}
         @click=${() => this._select(hex, schemeId)}
-      ></div>
+      ></button>
     `;
   }
 

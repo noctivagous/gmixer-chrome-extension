@@ -76,6 +76,15 @@ function mediaSet(defaultFilter = 'none') {
 /** @type {ThemePack[]} */
 export const THEME_PACKS = [
   {
+    id: 'user-made',
+    label: 'User-Made',
+    description: 'Your personal combination of Tone, Color Scheme, Media, Typography, and Effects.',
+    modes: modeSet(),
+    media: mediaSet('none'),
+    // Selecting this pack intentionally preserves the user’s current settings.
+    patch: {},
+  },
+  {
     id: 'editorial',
     label: 'Editorial',
     description:

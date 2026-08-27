@@ -75,4 +75,6 @@ export function runAdaptiveSubtreePass(root, resolved) {
 export function clearAdaptivePass() {
   removeTonalSurfaceLayers();
   removeBackgroundImageOverlays();
+  // Link shimmer is owned by content-end (stopLinkShimmer) so we do not import
+  // it here and create a cycle with style-injector consumers.
 }

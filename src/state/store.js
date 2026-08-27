@@ -39,22 +39,8 @@ function migrateTypography(state, persisted) {
   return state;
 }
 
-/** Tone merged into Color — promote a lone Tone enable to Color. */
-function migrateToneIntoColor(state, persisted) {
-  const sections = persisted?.global?.sections;
-  if (!sections) return state;
-  if (sections.tone === true && sections.color !== true) {
-    state.global.sections = {
-      ...state.global.sections,
-      color: true,
-      tone: true,
-    };
-  }
-  return state;
-}
-
 function applyMigrations(state, persisted) {
-  return migrateToneIntoColor(migrateTypography(state, persisted), persisted);
+  return migrateTypography(state, persisted);
 }
 
 export class SettingsStore {

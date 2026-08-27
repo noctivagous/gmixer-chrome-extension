@@ -1,7 +1,7 @@
 /** Per-category Effects catalog. */
 
 /**
- * @typedef {'none' | 'glow' | 'pan-scan' | 'flash' | 'link-shimmer'} EffectId
+ * @typedef {'none' | 'glow' | 'pan-scan' | 'rotating-cube' | 'flash' | 'link-shimmer'} EffectId
  * @typedef {'images' | 'videos' | 'navigation' | 'articles'} EffectCategoryId
  */
 
@@ -13,6 +13,7 @@ export const EFFECT_CATEGORIES = {
       { id: 'none', label: 'None' },
       { id: 'glow', label: 'Glow' },
       { id: 'pan-scan', label: 'Pan & scan' },
+      { id: 'rotating-cube', label: 'Rotating cube' },
     ],
   },
   videos: {
@@ -48,6 +49,7 @@ export function createDefaultEffects() {
       articles: { effect: /** @type {EffectId} */ ('none') },
     },
     glow: { animated: true, color: '' },
+    panScan: { speed: 16, zoom: 14, distance: 3, loop: 'fade', motion: 'scan' },
     cursor: { enabled: false, style: 'default' },
     backgroundMotion: { enabled: false },
   };
@@ -75,11 +77,24 @@ export function normalizeEffects(raw) {
     }
   }
 
+  const loopRaw = raw.panScan?.loop;
+  const loop = loopRaw === 'oscillate' ? 'oscillate' : 'fade';
+  const motionRaw = raw.panScan?.motion;
+  const motion =
+    motionRaw === 'pan' || motionRaw === 'tilt' ? motionRaw : 'scan';
+
   return {
     categories,
     glow: {
       animated: raw.glow?.animated !== false,
       color: typeof raw.glow?.color === 'string' ? raw.glow.color : '',
+    },
+    panScan: {
+      speed: clampNumber(raw.panScan?.speed, 4, 40, 16),
+      zoom: clampNumber(raw.panScan?.zoom, 4, 40, 14),
+      distance: clampNumber(raw.panScan?.distance, 0, 12, 3),
+      loop,
+      motion,
     },
     cursor: {
       enabled: !!raw.cursor?.enabled,
@@ -89,6 +104,12 @@ export function normalizeEffects(raw) {
       enabled: !!raw.backgroundMotion?.enabled,
     },
   };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
 }
 
 /** True when any category uses glow (for shared glow option UI). */

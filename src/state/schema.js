@@ -22,10 +22,10 @@ export function createDefaultState() {
       // Master theming switch (titlebar / Alt+N). Off disables paint on every
       // tab; stored in local so all open tabs stay in lockstep immediately.
       enabled: true,
-      activeThemePackId: 'noir',
+      activeThemePackId: 'user-made',
       themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {
-        baseColor: '#8a8a8a', // gMixer Default monochrome accent
+        baseColor: '#8a8a8a',
         scheme: /** @type {ColorScheme} */ ('monochrome'),
         // 0 = stay close to sampled page colors; 100 = full theme paint.
         // Tone-aligned default: full Light|Gray|Dark unless the user lowers it.
@@ -56,31 +56,30 @@ export function createDefaultState() {
         },
       },
       fonts: {
-        // Defaults-first: gMixer Default (DIN + Raleway + Outfit + DM Sans + Tippa).
-        // Heading slots are independent so h1-h6 can each have their own
-        // face. The settings UI can still apply one face to a selected group.
+        // Roles retain a usable fallback until the user opts into Typography.
+        // Heading slots are independent so h1-h6 can each have their own face.
         // `headers` and `subheadings` remain as compatibility fallbacks for
         // state saved before individual heading customization existed.
-        headers: { fontId: 'din-breit', customFontId: null },
-        subheadings: { fontId: 'raleway', customFontId: null },
+        headers: { fontId: 'system-body', customFontId: null },
+        subheadings: { fontId: 'system-body', customFontId: null },
         headings: {
-          h1: { fontId: 'din-breit', customFontId: null },
-          h2: { fontId: 'raleway', customFontId: null },
-          h3: { fontId: 'outfit', customFontId: null },
-          h4: { fontId: 'outfit', customFontId: null },
-          h5: { fontId: 'outfit', customFontId: null },
-          h6: { fontId: 'outfit', customFontId: null },
+          h1: { fontId: 'system-body', customFontId: null },
+          h2: { fontId: 'system-body', customFontId: null },
+          h3: { fontId: 'system-body', customFontId: null },
+          h4: { fontId: 'system-body', customFontId: null },
+          h5: { fontId: 'system-body', customFontId: null },
+          h6: { fontId: 'system-body', customFontId: null },
         },
-        paragraph: { fontId: 'dm-sans', customFontId: null },
-        ui: { fontId: 'dm-sans', customFontId: null },
+        paragraph: { fontId: 'system-body', customFontId: null },
+        ui: { fontId: 'system-body', customFontId: null },
         code: { fontId: 'system-mono', customFontId: null },
-        captions: { fontId: 'tippa', customFontId: null },
+        captions: { fontId: 'system-body', customFontId: null },
         // User-uploaded @font-face definitions, keyed by generated id.
         customFonts: {},
       },
       imageFilter: {
-        enabled: true,
-        preset: 'monochrome',
+        enabled: false,
+        preset: 'none',
         customFilter: '',
         scope: 'both', // 'images' | 'backgrounds' | 'both'
         revealOnHover: true,
@@ -115,6 +114,7 @@ export function createDefaultState() {
           articles: { effect: 'none' },
         },
         glow: { animated: true, color: '' },
+        panScan: { speed: 16, zoom: 14, distance: 3, loop: 'fade', motion: 'scan' },
         cursor: { enabled: false, style: 'default' },
         backgroundMotion: { enabled: false },
       },
@@ -126,14 +126,14 @@ export function createDefaultState() {
         hoverOutlineAnimated: true,
       },
       // Accordion section masters — independent from expand/collapse UI state.
-      // gMixer Default ships Media + Typography only. Tone lives inside Color;
-      // `tone` is kept in sync when Color is toggled for older paint paths.
+      // Tone is the always-active base layer; remaining layers are opted in by
+      // an explicit user choice in the walkthrough or settings panel.
       sections: {
         preview: true,
-        tone: false,
-        filter: true,
+        tone: true,
+        filter: false,
         color: false,
-        fonts: true,
+        fonts: false,
         shape: false,
         effects: false,
         navigation: false,
@@ -148,6 +148,8 @@ export function createDefaultState() {
         // Which accordion sections the settings panel shows:
         // theme = all, tone = Tone only, media = Media only.
         settingsFocus: /** @type {SettingsFocus} */ ('theme'),
+        walkthroughInitialized: false,
+        walkthroughCompleted: false,
       },
     },
     // Per-site overrides layered on top of `global`. Keyed by hostname so
