@@ -1,7 +1,7 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { store } from '../../state/store.js';
-import { buildPalette } from '../../lib/color-theory.js';
+import { buildPalette, hexToHsl, hslToHex } from '../../lib/color-theory.js';
 import { getFontById } from '../../config/fonts.js';
 
 import '../../popup/components/theme-preview-panel.js';
@@ -1033,10 +1033,29 @@ export class GmixerSettings extends StoreBoundElement {
     // Tone without Color Scheme uses a neutral monochrome palette, so its
     // Light|Gray|Dark surface direction remains independent of hue choices.
     if (id === 'tone' && enabled) {
-      patch.color = { scheme: 'monochrome', identityMode: 'restyle', intensity: 100 };
+      const hsl = hexToHsl(this.state?.global?.color?.baseColor || '#8a8a8a');
+      patch.color = {
+        scheme: 'monochrome',
+        baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+        identityMode: 'restyle',
+        intensity: 100,
+      };
     }
-    if (id === 'color' && !enabled && this._isSectionEnabled('tone')) {
-      patch.color = { scheme: 'monochrome' };
+    if (id === 'color' && enabled) {
+      const color = this.state?.global?.color;
+      const hsl = hexToHsl(color?.baseColor || '#8a8a8a');
+      patch.activeThemePackId = 'user-made';
+      patch.color = {
+        scheme: color?.scheme === 'monochrome' ? 'analog' : color?.scheme || 'analog',
+        baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+      };
+    }
+    if (id === 'color' && !enabled) {
+      const hsl = hexToHsl(this.state?.global?.color?.baseColor || '#8a8a8a');
+      patch.color = {
+        scheme: 'monochrome',
+        baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+      };
     }
     this.updateGlobal(patch);
   }

@@ -4,6 +4,11 @@ import { SCHEMES, accentHueOffsets, getColorScale, hexToHsl, hslToHex } from '..
 import { defineElement } from '../../lib/define-element.js';
 
 export class GmixerColorSchemeScales extends StoreBoundElement {
+  static properties = {
+    monochrome: { type: Boolean, reflect: true },
+    activeSchemeOnly: { type: Boolean, attribute: 'active-scheme-only', reflect: true },
+  };
+
   static styles = css`
     :host {
       display: grid;
@@ -15,6 +20,10 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       grid-template-columns: 100px 1fr;
       align-items: center;
       gap: 12px;
+    }
+    .scheme-row.compact {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
     }
     .scheme-label {
       font-size: 11px;
@@ -56,12 +65,31 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     }
   `;
 
+  constructor() {
+    super();
+    this.monochrome = false;
+    this.activeSchemeOnly = false;
+  }
+
   render() {
     const color = this.state?.global?.color;
     if (!color) return html``;
 
+    let schemes = this.monochrome
+      ? SCHEMES.filter((scheme) => scheme.id === 'monochrome')
+      : SCHEMES.filter((scheme) => scheme.id !== 'monochrome');
+
+    if (this.activeSchemeOnly) {
+      const activeId = color.scheme || 'monochrome';
+      schemes = schemes.filter((scheme) => scheme.id === activeId);
+      if (!schemes.length) {
+        const fallback = SCHEMES.find((scheme) => scheme.id === activeId);
+        schemes = fallback ? [fallback] : schemes;
+      }
+    }
+
     return html`
-      ${SCHEMES.map((scheme) => this._renderScheme(scheme, color))}
+      ${schemes.map((scheme) => this._renderScheme(scheme, color))}
     `;
   }
 
@@ -71,10 +99,11 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     const tints = schemeColors.flatMap((color) => getColorScale(color, 'tint', steps));
     const shades = schemeColors.flatMap((color) => getColorScale(color, 'shade', steps));
     const tones = schemeColors.flatMap((color) => getColorScale(color, 'tone', steps));
+    const compact = this.activeSchemeOnly;
 
     return html`
-      <div class="scheme-row">
-        <span class="scheme-label">${scheme.label}</span>
+      <div class="scheme-row ${compact ? 'compact' : ''}">
+        ${compact ? null : html`<span class="scheme-label">${scheme.label}</span>`}
         <div class="scales-grid">
           <div class="scale">
             <span class="scale-label">Colors</span>

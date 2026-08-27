@@ -285,7 +285,15 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     : Math.max(base.s, 60);
 
   const isDark = mode !== 'light';
-  const backgroundLightness = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
+  const tonalBase = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
+  // In monochrome, baseColor is the neutral-value control. Keep the
+  // Light/Gray/Dark character intact while allowing a user-selected gray to
+  // brighten or deepen the entire surface ladder.
+  const neutralOffset = scheme === 'monochrome' ? (base.l - 50) * 0.24 : 0;
+  const backgroundLightness = Math.max(
+    mode === 'light' ? 80 : 3,
+    Math.min(mode === 'light' ? 99 : mode === 'gray' ? 58 : 20, tonalBase + neutralOffset)
+  );
   const textLightness = isDark ? 92 : 12;
   const mutedLightness = isDark ? 66 : 44;
   const accentLightness = isDark ? 62 : 45;

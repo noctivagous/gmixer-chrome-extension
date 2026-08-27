@@ -81,6 +81,11 @@ export class EffectsPanel extends StoreBoundElement {
     }
   `;
 
+  updateGlobal(patch) {
+    super.updateGlobal(patch);
+    this.dispatchEvent(new CustomEvent('change', { bubbles: true, composed: true }));
+  }
+
   render() {
     const raw = this.state?.global?.effects;
     if (!raw) return html``;

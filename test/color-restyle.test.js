@@ -63,6 +63,14 @@ describe('color-theory', () => {
     assert.equal(hexToHsl(palette.focus).s, 0);
   });
 
+  it('uses the monochrome base value to adjust theme surfaces', () => {
+    const deep = buildPalette('#333333', 'monochrome', 'dark');
+    const bright = buildPalette('#cccccc', 'monochrome', 'dark');
+    assert.ok(hexToHsl(bright.background).l > hexToHsl(deep.background).l);
+    assert.equal(hexToHsl(deep.background).s, 0);
+    assert.equal(hexToHsl(bright.background).s, 0);
+  });
+
   it('builds a ranked elevated surface ladder from the page background', () => {
     const dark = buildPalette('#7c3aed', 'monochrome', 'dark');
     assert.equal(dark.surfaceLadder.length, 3);

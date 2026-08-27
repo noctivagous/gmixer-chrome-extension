@@ -27,6 +27,7 @@ const CATEGORY_PRESETS = [
 ];
 
 const SCOPES = [
+  { id: 'off', label: 'No media' },
   { id: 'images', label: 'Images/video only' },
   { id: 'backgrounds', label: 'Background images only' },
   { id: 'both', label: 'Both' },
@@ -75,6 +76,20 @@ export class ImageFilterPanel extends StoreBoundElement {
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+    .apply-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .apply-filter-row label {
+      flex: 0 0 auto;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .apply-filter-row select {
+      flex: 1;
+      min-width: 0;
     }
     .media-categories {
       margin: 16px 0 0;
@@ -143,13 +158,25 @@ export class ImageFilterPanel extends StoreBoundElement {
     const presetOptions = visiblePresets(PRESETS, colorOn, filter.preset);
 
     return html`
-      <div class="toggle-row">
-        <input
-          type="checkbox"
-          .checked=${filter.enabled}
-          @change=${(e) => this.updateGlobal({ imageFilter: { enabled: e.target.checked } })}
-        />
-        <label style="margin:0">Enable image filter</label>
+      <div class="apply-filter-row">
+        <label for="image-filter-scope">Apply filter to</label>
+        <select
+          id="image-filter-scope"
+          .value=${filter.enabled ? filter.scope : 'off'}
+          @change=${(e) => {
+            const scope = e.target.value;
+            this.updateGlobal({
+              imageFilter: {
+                enabled: scope !== 'off',
+                ...(scope === 'off' ? {} : { scope }),
+              },
+            });
+          }}
+        >
+          ${SCOPES.map(
+            (scope) => html`<option value=${scope.id}>${scope.label}</option>`
+          )}
+        </select>
       </div>
       <div class="toggle-row">
         <input
@@ -188,13 +215,6 @@ export class ImageFilterPanel extends StoreBoundElement {
             />
           `
         : html``}
-
-      <label>Apply to</label>
-      <select @change=${(e) => this.updateGlobal({ imageFilter: { scope: e.target.value } })}>
-        ${SCOPES.map(
-          (scope) => html`<option value=${scope.id} ?selected=${scope.id === filter.scope}>${scope.label}</option>`
-        )}
-      </select>
 
       <details class="media-categories">
         <summary>Recognized media categories</summary>

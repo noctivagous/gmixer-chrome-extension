@@ -4,6 +4,10 @@ import { hexToHsl, hslToHex, accentHueOffsets } from '../../lib/color-theory.js'
 import { defineElement } from '../../lib/define-element.js';
 
 export class GmixerColorWheel extends StoreBoundElement {
+  static properties = {
+    monochrome: { type: Boolean, reflect: true },
+  };
+
   static styles = css`
     :host {
       display: block;
@@ -30,6 +34,24 @@ export class GmixerColorWheel extends StoreBoundElement {
       cursor: crosshair;
       touch-action: none;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .wheel.monochrome {
+      background: conic-gradient(
+        from 180deg,
+        #ffffff,
+        #d9d9d9,
+        #b3b3b3,
+        #8c8c8c,
+        #666666,
+        #404040,
+        #1a1a1a,
+        #404040,
+        #666666,
+        #8c8c8c,
+        #b3b3b3,
+        #d9d9d9,
+        #ffffff
+      );
     }
     .wheel::after {
       content: '';
@@ -69,6 +91,7 @@ export class GmixerColorWheel extends StoreBoundElement {
 
   constructor() {
     super();
+    this.monochrome = false;
   }
 
   render() {
@@ -76,14 +99,14 @@ export class GmixerColorWheel extends StoreBoundElement {
     if (!color) return html``;
 
     const { h, s, l } = hexToHsl(color.baseColor);
-    const offsets = accentHueOffsets(color.scheme);
-
-    const radius = 60; // radius for dots positioning
-    const mainPos = this._getPos(h, radius + 10);
+    const radius = 60;
+    const wheelAngle = this.monochrome ? (l / 100) * 360 : h;
+    const mainPos = this._getPos(wheelAngle, radius + 10);
+    const offsets = this.monochrome ? [] : accentHueOffsets(color.scheme);
 
     return html`
       <div
-        class="wheel"
+        class="wheel ${this.monochrome ? 'monochrome' : ''}"
         @pointerdown=${this._onPointerDown}
         @pointermove=${this._onPointerMove}
         @pointerup=${this._onPointerUp}
@@ -151,10 +174,16 @@ export class GmixerColorWheel extends StoreBoundElement {
     if (!color) return;
 
     const hsl = hexToHsl(color.baseColor);
-    // The default monochrome theme has zero saturation. A hue alone cannot
-    // change a gray value, so choosing the wheel also establishes a vivid
-    // base color for its generated schemes.
-    const newHex = hslToHex({ ...hsl, h: angle, s: Math.max(hsl.s, 70) });
+    if (this.monochrome) {
+      const lightness = Math.max(8, Math.min(92, Math.round((angle / 360) * 100)));
+      const newHex = hslToHex({ h: hsl.h, s: 0, l: lightness });
+      this.updateGlobal({ color: { baseColor: newHex } });
+      return;
+    }
+
+    // Saturation is intentionally preserved: the Saturation slider is the
+    // explicit source of truth after Color mode establishes an initial value.
+    const newHex = hslToHex({ ...hsl, h: angle });
 
     this.updateGlobal({ color: { baseColor: newHex } });
   }

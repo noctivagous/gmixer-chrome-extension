@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeEffects } from '../src/config/effects-catalog.js';
+import { buildPreviewEffectsCss, previewEffectsActive } from '../src/lib/preview-effects-css.js';
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
 import { gridIndexToPercent, GRID_SIZE } from '../src/content/pan-scan.js';
@@ -141,5 +142,26 @@ describe('effectsRules category paint', () => {
     const css = buildCss(global, null);
     assert.doesNotMatch(css, /gmixer-pan-scan/);
     assert.doesNotMatch(css, /gmixer-glow-pulse/);
+  });
+});
+
+describe('preview effects css', () => {
+  it('scopes image glow to the theme preview blurb', () => {
+    const css = buildPreviewEffectsCss(
+      { categories: { images: { effect: 'glow' } }, glow: { animated: false, color: '#ff00aa' } },
+      { accent: '#7c3aed' }
+    );
+    assert.match(css, /\.theme-preview \.blurb-image/);
+    assert.match(css, /#ff00aa/);
+    assert.doesNotMatch(css, /^img,/m);
+  });
+
+  it('activates preview effects only when the Effects section is on', () => {
+    const global = createDefaultState().global;
+    global.sections.effects = false;
+    global.effects.categories.images.effect = 'glow';
+    assert.equal(previewEffectsActive(global), false);
+    global.sections.effects = true;
+    assert.equal(previewEffectsActive(global), true);
   });
 });

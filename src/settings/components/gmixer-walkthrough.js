@@ -1,7 +1,7 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
-import { buildPalette, SCHEMES } from '../../lib/color-theory.js';
+import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theory.js';
 import { defineElement } from '../../lib/define-element.js';
 
 import '../../popup/components/color-panel.js';
@@ -11,6 +11,92 @@ import '../../popup/components/image-filter-panel.js';
 import '../../popup/components/fonts-panel.js';
 import '../../popup/components/effects-panel.js';
 import '../../popup/components/theme-preview-panel.js';
+
+/** @param {number} angleDeg 0 = top, clockwise */
+function schemeDot(angleDeg, fill, radius = 7) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  const cx = 12 + Math.cos(rad) * radius;
+  const cy = 12 + Math.sin(rad) * radius;
+  return html`<circle cx=${cx.toFixed(2)} cy=${cy.toFixed(2)} r="2.6" fill=${fill} />`;
+}
+
+function schemeIconRing() {
+  return html`
+    <circle
+      cx="12"
+      cy="12"
+      r="7"
+      fill="none"
+      stroke="currentColor"
+      stroke-opacity="0.28"
+      stroke-width="1"
+    />
+  `;
+}
+
+/** @param {string} schemeId */
+function schemeCategoryIcon(schemeId) {
+  const base = '#ef4444';
+  const warm = '#f97316';
+  const gold = '#eab308';
+  const green = '#22c55e';
+  const teal = '#14b8a6';
+  const blue = '#3b82f6';
+  const indigo = '#6366f1';
+
+  /** @type {import('lit').TemplateResult} */
+  let dots = html``;
+  switch (schemeId) {
+    case 'analog':
+      dots = html`
+        ${schemeDot(-28, warm)}
+        ${schemeDot(0, base)}
+        ${schemeDot(28, gold)}
+      `;
+      break;
+    case 'complement':
+      dots = html`${schemeDot(0, base)} ${schemeDot(180, green)}`;
+      break;
+    case 'splitComplement':
+      dots = html`
+        ${schemeDot(0, base)}
+        ${schemeDot(152, teal)}
+        ${schemeDot(208, indigo)}
+      `;
+      break;
+    case 'triadic':
+      dots = html`
+        ${schemeDot(0, base)}
+        ${schemeDot(120, green)}
+        ${schemeDot(240, blue)}
+      `;
+      break;
+    case 'tetradic':
+      dots = html`
+        ${schemeDot(0, base)}
+        ${schemeDot(90, gold)}
+        ${schemeDot(180, green)}
+        ${schemeDot(270, blue)}
+      `;
+      break;
+    default:
+      dots = html`${schemeDot(0, base)}`;
+      break;
+  }
+
+  return html`
+    <svg
+      class="scheme-icon"
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      aria-hidden="true"
+      focusable="false"
+    >
+      ${schemeIconRing()} ${dots}
+    </svg>
+  `;
+}
 
 /**
  * gMixer Onboarding Walkthrough: 5 slides in a centered popover modal.
@@ -195,18 +281,152 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     .scheme-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       padding: 8px 10px;
       border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.15));
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.04);
       color: inherit;
       cursor: pointer;
+      font: 600 12px/1.2 system-ui, sans-serif;
+    }
+
+    .scheme-option .scheme-icon {
+      display: block;
+      flex: 0 0 20px;
+      width: 20px;
+      height: 20px;
+      overflow: visible;
     }
 
     .scheme-option:hover,
     .scheme-option[aria-pressed='true'] {
       border-color: var(--gm-accent, #7c3aed);
       background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
+    }
+
+    .color-mode-switch {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      overflow: hidden;
+      width: min(100%, 280px);
+      margin: 0 auto 20px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.15));
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.25);
+    }
+
+    .color-mode-option {
+      margin: 0;
+      padding: 10px 12px;
+      border: 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      background: transparent;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.65));
+      cursor: pointer;
+      font: 700 12px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      text-align: center;
+      transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .color-mode-option:last-child {
+      border-right: 0;
+    }
+
+    .color-mode-option:hover {
+      background: rgba(139, 92, 246, 0.1);
+      color: var(--gm-text, #f2eefc);
+    }
+
+    .color-mode-option[aria-pressed='true'] {
+      background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
+      box-shadow: inset 0 -3px 0 var(--gm-accent, #7c3aed);
+      color: var(--gm-text, #f2eefc);
+    }
+
+    .color-slide {
+      display: grid;
+      gap: 24px;
+      justify-items: center;
+    }
+
+    .color-picker-row {
+      display: grid;
+      grid-template-columns: auto 42px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .hsl-sliders {
+      display: grid;
+      grid-template-columns: repeat(2, 18px);
+      gap: 6px;
+      justify-content: center;
+      min-height: 160px;
+    }
+
+    .hsl-slider {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 5px;
+      justify-items: center;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.7));
+      font: 700 9px/1 system-ui, sans-serif;
+    }
+
+    .hsl-slider input {
+      width: 150px;
+      margin: 0;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      accent-color: var(--gm-accent, #7c3aed);
+    }
+
+    .grayscale-control {
+      display: grid;
+      gap: 10px;
+      width: min(100%, 360px);
+      padding: 16px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.12));
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .grayscale-control-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      color: var(--gm-text, #f2eefc);
+      font: 700 12px/1.2 system-ui, sans-serif;
+    }
+
+    .grayscale-control output {
+      color: var(--gm-muted, rgba(242, 238, 252, 0.72));
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .grayscale-range {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--gm-accent, #7c3aed);
+    }
+
+    .grayscale-track {
+      height: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: linear-gradient(to right, #161616, #ffffff);
+    }
+
+    .grayscale-hint {
+      margin: 0;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.7));
+      font: 11px/1.4 system-ui, sans-serif;
     }
 
     .tone-picker {
@@ -413,6 +633,22 @@ export class GmixerWalkthrough extends StoreBoundElement {
       .tone-detail-preview {
         grid-template-columns: minmax(0, 1fr);
       }
+
+      .color-picker-row {
+        grid-template-columns: 1fr;
+      }
+
+      .hsl-sliders {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+        width: 100%;
+        min-height: auto;
+      }
+
+      .hsl-slider input {
+        width: 100%;
+        writing-mode: initial;
+        direction: initial;
+      }
     }
 
     @media (max-width: 760px) {
@@ -564,6 +800,77 @@ export class GmixerWalkthrough extends StoreBoundElement {
     });
   }
 
+  _isColorSchemeEnabled() {
+    return this.state?.global?.sections?.color === true;
+  }
+
+  _setColorMode(useColor) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+
+    if (useColor) {
+      const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
+      this.updateGlobal({
+        activeThemePackId: 'user-made',
+        sections: { color: true },
+        color: {
+          scheme,
+          baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+        },
+      });
+      return;
+    }
+
+    this.updateGlobal({
+      sections: { color: false },
+      color: {
+        scheme: 'monochrome',
+        baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+      },
+    });
+  }
+
+  _setMonochromeLightness(value) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+    const lightness = Math.max(8, Math.min(92, Number(value)));
+    this.updateGlobal({
+      activeThemePackId: 'user-made',
+      sections: { color: false },
+      color: { baseColor: hslToHex({ h: hsl.h, s: 0, l: lightness }), scheme: 'monochrome' },
+    });
+  }
+
+  _setColorHsl(key, value) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+    this.updateGlobal({
+      activeThemePackId: 'user-made',
+      sections: { color: true },
+      color: { baseColor: hslToHex({ ...hsl, [key]: Number(value) }) },
+    });
+  }
+
+  _renderColorHslSlider(shortLabel, label, value, min, max, key) {
+    return html`
+      <label class="hsl-slider">
+        <input
+          type="range"
+          min=${min}
+          max=${max}
+          step="1"
+          .value=${String(Math.round(value))}
+          aria-label=${label}
+          @input=${(event) => this._setColorHsl(key, event.target.value)}
+        />
+        <span>${shortLabel}</span>
+      </label>
+    `;
+  }
+
   render() {
     return html`
       <div class="header">
@@ -710,31 +1017,95 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _renderSlide2() {
     const color = this.state?.global?.color;
+    const colorEnabled = this._isColorSchemeEnabled();
+    const colorSchemes = SCHEMES.filter((scheme) => scheme.id !== 'monochrome');
+    const monochromeLightness = Math.round(hexToHsl(color?.baseColor || '#8a8a8a').l);
+    const colorHsl = hexToHsl(color?.baseColor || '#8a8a8a');
     return html`
-      <p class="intro-text">How do you want it to look? Pick a base color and a scheme.</p>
-      <div
-        style="display: grid; gap: 24px; justify-items: center;"
-        @pointerdown=${(event) => this._activateSection('color', event)}
-      >
-        <gmixer-color-wheel></gmixer-color-wheel>
-        <div role="group" aria-label="Color scheme">
-          ${SCHEMES.map(
-            (scheme) => html`
-              <button
-                type="button"
-                class="scheme-option"
-                aria-pressed=${color?.scheme === scheme.id}
-                @click=${() =>
-                  this.updateGlobal({
-                    activeThemePackId: 'user-made',
-                    sections: { color: true },
-                    color: { scheme: scheme.id },
-                  })}
-              >${scheme.label}</button>
+      <p class="intro-text">
+        ${colorEnabled
+          ? 'How do you want it to look? Pick a base color and a scheme.'
+          : 'Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.'}
+      </p>
+      <div class="color-mode-switch" role="group" aria-label="Color mode">
+        <button
+          type="button"
+          class="color-mode-option"
+          aria-pressed=${colorEnabled}
+          @click=${() => this._setColorMode(true)}
+        >
+          Color
+        </button>
+        <button
+          type="button"
+          class="color-mode-option"
+          aria-pressed=${!colorEnabled}
+          @click=${() => this._setColorMode(false)}
+        >
+          Monochrome
+        </button>
+      </div>
+      <div class="color-slide">
+        ${colorEnabled
+          ? html`
+              <div class="color-picker-row">
+                <gmixer-color-wheel></gmixer-color-wheel>
+                <div class="hsl-sliders" aria-label="Color adjustments">
+                  ${this._renderColorHslSlider('S', 'Saturation', colorHsl.s, 0, 100, 's')}
+                  ${this._renderColorHslSlider('L', 'Lightness', colorHsl.l, 8, 92, 'l')}
+                </div>
+              </div>
             `
-          )}
-        </div>
-        <gmixer-color-scheme-scales></gmixer-color-scheme-scales>
+          : html`
+              <label class="grayscale-control">
+                <span class="grayscale-control-header">
+                  <span>Theme grayscale</span>
+                  <output>${monochromeLightness}%</output>
+                </span>
+                <input
+                  class="grayscale-range"
+                  type="range"
+                  min="8"
+                  max="92"
+                  step="1"
+                  .value=${String(monochromeLightness)}
+                  aria-label="Theme grayscale"
+                  @input=${(event) => this._setMonochromeLightness(event.target.value)}
+                />
+                <span class="grayscale-track" aria-hidden="true"></span>
+                <span class="grayscale-hint">
+                  Brighten or deepen the neutral surfaces while keeping this theme monochrome.
+                </span>
+              </label>
+            `}
+        ${colorEnabled
+          ? html`
+              <div class="scheme-options" role="group" aria-label="Color scheme">
+                ${colorSchemes.map(
+                  (scheme) => html`
+                    <button
+                      type="button"
+                      class="scheme-option"
+                      aria-pressed=${color?.scheme === scheme.id}
+                      @click=${() =>
+                        this.updateGlobal({
+                          activeThemePackId: 'user-made',
+                          sections: { color: true },
+                          color: { scheme: scheme.id },
+                        })}
+                    >
+                      ${schemeCategoryIcon(scheme.id)}
+                      <span>${scheme.label}</span>
+                    </button>
+                  `
+                )}
+              </div>
+            `
+          : null}
+        <gmixer-color-scheme-scales
+          ?monochrome=${!colorEnabled}
+          active-scheme-only
+        ></gmixer-color-scheme-scales>
       </div>
     `;
   }

@@ -5,6 +5,7 @@ import { buildPalette } from '../../lib/color-theory.js';
 import { getFontById } from '../../config/fonts.js';
 import { createDefaultState } from '../../state/schema.js';
 import { roleColors } from './palette-swatches.js';
+import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
 import { defineElement } from '../../lib/define-element.js';
 
 function paletteForPack(pack, mode = 'dark') {
@@ -128,6 +129,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
       display: grid;
       gap: 4px;
       width: 120px;
+    }
+    .blurb-image-wrap {
+      display: block;
+      width: 100%;
+      border-radius: 4px;
     }
     .blurb-image {
       display: block;
@@ -265,8 +271,15 @@ export class ThemePreviewPanel extends StoreBoundElement {
         : pack.patch?.imageFilter?.enabled
           ? pack.patch.imageFilter.preset
           : 'none';
+    const effectsOn = previewEffectsActive(global);
+    const previewEffectsCss = effectsOn
+      ? buildPreviewEffectsCss(global.effects, { accent: colors.accent })
+      : '';
 
     return html`
+      ${previewEffectsCss
+        ? html`<style>${previewEffectsCss}</style>`
+        : null}
       <div class="theme-preview">
         <strong class="pack-name">${pack.label}</strong>
         <div
@@ -326,15 +339,17 @@ export class ThemePreviewPanel extends StoreBoundElement {
               </p>
             </div>
             <figure class="blurb-figure">
-              <img
-                class="blurb-image"
-                src=${SAMPLE_IMAGE_SRC}
-                alt=""
-                width="160"
-                height="120"
-                data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
-                draggable="false"
-              />
+              <span class="blurb-image-wrap">
+                <img
+                  class="blurb-image"
+                  src=${SAMPLE_IMAGE_SRC}
+                  alt=""
+                  width="160"
+                  height="120"
+                  data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
+                  draggable="false"
+                />
+              </span>
               <figcaption
                 class="blurb-image-caption"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"

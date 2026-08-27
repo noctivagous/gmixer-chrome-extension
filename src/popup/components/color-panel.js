@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
-import { buildPalette, SCHEMES } from '../../lib/color-theory.js';
+import { buildPalette, hexToHsl, hslToHex, SCHEMES } from '../../lib/color-theory.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
 import { defineElement } from '../../lib/define-element.js';
 
@@ -111,8 +111,8 @@ export class ColorPanel extends StoreBoundElement {
     }
     .color-selection-grid {
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 24px;
+      grid-template-columns: auto 42px 1fr;
+      gap: 16px;
       align-items: start;
       margin-bottom: 16px;
       padding: 16px;
@@ -125,6 +125,84 @@ export class ColorPanel extends StoreBoundElement {
         grid-template-columns: 1fr;
         justify-items: center;
       }
+    }
+    .color-mode-switch {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .color-mode-option,
+    .scheme-option {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: 650 11px/1.2 system-ui, sans-serif;
+    }
+    .color-mode-option {
+      padding: 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .color-mode-option:last-child {
+      border-right: 0;
+    }
+    .color-mode-option[aria-pressed='true'],
+    .scheme-option[aria-pressed='true'] {
+      color: var(--gm-text, #f2eefc);
+      background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
+      box-shadow: inset 0 -2px 0 var(--gm-accent, #7c3aed);
+    }
+    .hsl-sliders {
+      display: grid;
+      grid-template-columns: repeat(2, 18px);
+      gap: 6px;
+      justify-content: center;
+      min-height: 160px;
+    }
+    .hsl-slider {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 5px;
+      justify-items: center;
+      font-size: 9px;
+      opacity: 0.75;
+    }
+    .hsl-slider input {
+      width: 150px;
+      margin: 0;
+      writing-mode: vertical-lr;
+      direction: rtl;
+    }
+    .scheme-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 10px;
+    }
+    .scheme-option {
+      padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    .grayscale-control {
+      display: grid;
+      gap: 8px;
+      width: 100%;
+    }
+    .grayscale-control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .grayscale-track {
+      height: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      background: linear-gradient(to right, #161616, #fff);
     }
     .tone-segments {
       display: grid;
@@ -220,16 +298,86 @@ export class ColorPanel extends StoreBoundElement {
     if (this.toneOnly) return toneControls;
 
     const palette = buildPalette(color.baseColor, color.scheme, activeMode);
+    const colorEnabled = this.state?.global?.sections?.color === true;
+    const hsl = hexToHsl(color.baseColor);
     const intensity = color.intensity ?? 100;
     const identityMode = color.identityMode || 'restyle';
     const overrides = color.overrides ?? {};
 
+    if (!colorEnabled) {
+      return html`
+        ${this.schemeOnly ? null : toneControls}
+        <div class="color-mode-switch" role="group" aria-label="Color mode">
+          <button
+            type="button"
+            class="color-mode-option"
+            aria-pressed="false"
+            @click=${() => this._setColorMode(true)}
+          >Color</button>
+          <button
+            type="button"
+            class="color-mode-option"
+            aria-pressed="true"
+            @click=${() => this._setColorMode(false)}
+          >Monochrome</button>
+        </div>
+        <label class="grayscale-control">
+          <span class="grayscale-control-header">
+            <span>Theme grayscale</span><output>${Math.round(hsl.l)}%</output>
+          </span>
+          <input
+            type="range"
+            min="8"
+            max="92"
+            step="1"
+            .value=${String(Math.round(hsl.l))}
+            @input=${(event) => this._setMonochromeLightness(event.target.value)}
+          />
+          <span class="grayscale-track" aria-hidden="true"></span>
+        </label>
+        <gmixer-color-scheme-scales monochrome active-scheme-only></gmixer-color-scheme-scales>
+      `;
+    }
+
     return html`
       ${this.schemeOnly ? null : toneControls}
 
+      <div class="color-mode-switch" role="group" aria-label="Color mode">
+        <button
+          type="button"
+          class="color-mode-option"
+          aria-pressed=${colorEnabled}
+          @click=${() => this._setColorMode(true)}
+        >Color</button>
+        <button
+          type="button"
+          class="color-mode-option"
+          aria-pressed=${!colorEnabled}
+          @click=${() => this._setColorMode(false)}
+        >Monochrome</button>
+      </div>
+
       <div class="color-selection-grid">
         <gmixer-color-wheel></gmixer-color-wheel>
-        <gmixer-color-scheme-scales></gmixer-color-scheme-scales>
+        <div class="hsl-sliders" aria-label="Color adjustments">
+          ${this._renderVerticalHslSlider('S', 'Saturation', hsl.s, 0, 100, 's')}
+          ${this._renderVerticalHslSlider('L', 'Lightness', hsl.l, 8, 92, 'l')}
+        </div>
+        <div>
+          <div class="scheme-options" role="group" aria-label="Color scheme">
+            ${SCHEMES.filter((scheme) => scheme.id !== 'monochrome').map(
+              (scheme) => html`
+                <button
+                  type="button"
+                  class="scheme-option"
+                  aria-pressed=${color.scheme === scheme.id}
+                  @click=${() => this.updateGlobal({ color: { scheme: scheme.id } })}
+                >${scheme.label}</button>
+              `
+            )}
+          </div>
+          <gmixer-color-scheme-scales active-scheme-only></gmixer-color-scheme-scales>
+        </div>
       </div>
 
       <label>Site identity</label>
@@ -314,6 +462,55 @@ export class ColorPanel extends StoreBoundElement {
         },
       },
     });
+  }
+
+  _setColorMode(enabled) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+    this.updateGlobal({
+      activeThemePackId: 'user-made',
+      sections: { color: enabled },
+      color: enabled
+        ? {
+            scheme: color.scheme === 'monochrome' ? 'analog' : color.scheme,
+            baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+          }
+        : { scheme: 'monochrome', baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }) },
+    });
+  }
+
+  _setMonochromeLightness(value) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+    this.updateGlobal({
+      color: { baseColor: hslToHex({ h: hsl.h, s: 0, l: Number(value) }) },
+    });
+  }
+
+  _setHsl(key, value) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const hsl = hexToHsl(color.baseColor);
+    this.updateGlobal({ color: { baseColor: hslToHex({ ...hsl, [key]: Number(value) }) } });
+  }
+
+  _renderVerticalHslSlider(shortLabel, label, value, min, max, key) {
+    return html`
+      <label class="hsl-slider">
+        <input
+          type="range"
+          min=${min}
+          max=${max}
+          step="1"
+          .value=${String(Math.round(value))}
+          aria-label=${label}
+          @input=${(event) => this._setHsl(key, event.target.value)}
+        />
+        <span>${shortLabel}</span>
+      </label>
+    `;
   }
 }
 
