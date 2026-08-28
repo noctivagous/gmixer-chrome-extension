@@ -18,6 +18,7 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
 
   const img = `${root} .blurb-image`;
   const imgWrap = `${root} .blurb-image-wrap`;
+  const cube = `${root} .blurb-cube`;
   const nav = `${root} .blurb-button, ${root} .blurb-link`;
   const link = `${root} .blurb-link`;
   const blurb = `${root} .blurb`;
@@ -48,23 +49,26 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
         : `${img} { box-shadow: 0 0 12px ${glowColor}; }`
     );
   } else if (imageEffect === 'pan-scan') {
-    const { speed, zoom, loop } = normalized.panScan;
+    const { speed, zoom, distance, loop, motion } = normalized.panScan;
     const zoomScale = 1 + zoom / 100;
+    const travel = distance / 2;
+    const x = motion === 'tilt' ? 0 : travel;
+    const y = motion === 'pan' ? 0 : travel;
     rules.push(`${imgWrap} { overflow: hidden; border-radius: 4px; }`);
     if (loop === 'oscillate') {
       rules.push(`@keyframes gmixer-preview-pan-scan-oscillate {
-  0% { transform: scale(1.04); }
-  100% { transform: scale(${zoomScale}); }
+  0% { transform: translate(${-x}%, ${-y}%) scale(1.04); }
+  100% { transform: translate(${x}%, ${y}%) scale(${zoomScale}); }
 }`);
       rules.push(
         `${img} { transform-origin: 35% 45%; animation: gmixer-preview-pan-scan-oscillate ${speed}s ease-in-out infinite alternate; }`
       );
     } else {
       rules.push(`@keyframes gmixer-preview-pan-scan-fade {
-  0% { transform: scale(1); opacity: 1; }
-  40% { transform: scale(${zoomScale}); opacity: 1; }
-  70% { transform: scale(${zoomScale}); opacity: 0.72; }
-  100% { transform: scale(1); opacity: 1; }
+  0% { transform: translate(${-x}%, ${-y}%) scale(1); opacity: 1; }
+  40% { transform: translate(${x}%, ${y}%) scale(${zoomScale}); opacity: 1; }
+  70% { transform: translate(${x}%, ${y}%) scale(${zoomScale}); opacity: 0.72; }
+  100% { transform: translate(${-x}%, ${-y}%) scale(1); opacity: 1; }
 }`);
       rules.push(
         `${img} { transform-origin: 35% 45%; animation: gmixer-preview-pan-scan-fade ${speed}s ease-in-out infinite; }`
@@ -75,9 +79,9 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
   0% { transform: rotateY(0deg); }
   100% { transform: rotateY(360deg); }
 }`);
-    rules.push(`${imgWrap} { perspective: 420px; overflow: visible; }`);
+    rules.push(`${imgWrap} { overflow: visible; }`);
     rules.push(
-      `${img} { animation: gmixer-preview-rotating-cube 12s linear infinite; transform-style: preserve-3d; }`
+      `${cube} { animation: gmixer-preview-rotating-cube 12s linear infinite; }`
     );
   }
 

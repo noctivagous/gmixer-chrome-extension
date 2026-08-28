@@ -156,6 +156,28 @@ describe('preview effects css', () => {
     assert.doesNotMatch(css, /^img,/m);
   });
 
+  it('animates the preview image using Pan & Scan direction and distance', () => {
+    const css = buildPreviewEffectsCss(
+      {
+        categories: { images: { effect: 'pan-scan' } },
+        panScan: { speed: 12, zoom: 20, distance: 8, loop: 'oscillate', motion: 'pan' },
+      },
+      { accent: '#7c3aed' }
+    );
+    assert.match(css, /gmixer-preview-pan-scan-oscillate 12s/);
+    assert.match(css, /translate\(-4%, 0%\)/);
+    assert.match(css, /translate\(4%, 0%\) scale\(1\.2\)/);
+  });
+
+  it('animates the preview rotating cube scene', () => {
+    const css = buildPreviewEffectsCss(
+      { categories: { images: { effect: 'rotating-cube' } } },
+      { accent: '#7c3aed' }
+    );
+    assert.match(css, /gmixer-preview-rotating-cube/);
+    assert.match(css, /\.theme-preview \.blurb-cube \{ animation:/);
+  });
+
   it('activates preview effects only when the Effects section is on', () => {
     const global = createDefaultState().global;
     global.sections.effects = false;

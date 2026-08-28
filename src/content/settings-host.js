@@ -214,7 +214,10 @@ export async function ensureWalkthroughPopover() {
 export async function openWalkthroughPopover() {
   const el = await ensureWalkthroughPopover();
   const walkthrough = el.querySelector('gmixer-walkthrough');
-  if (walkthrough) walkthrough.currentSlide = 0;
+  if (walkthrough) {
+    walkthrough.currentSlide = 0;
+    walkthrough.showCompletion = false;
+  }
   if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
     el.showPopover();
   }

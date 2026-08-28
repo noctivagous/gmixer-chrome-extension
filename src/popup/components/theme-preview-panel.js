@@ -140,6 +140,37 @@ export class ThemePreviewPanel extends StoreBoundElement {
       width: 100%;
       border-radius: 4px;
     }
+    .blurb-cube-scene {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      perspective: 420px;
+      perspective-origin: 50% 50%;
+    }
+    .blurb-cube {
+      display: block;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+    }
+    .blurb-cube-face {
+      position: absolute;
+      inset: 0;
+      display: block;
+      overflow: hidden;
+      backface-visibility: hidden;
+    }
+    .blurb-cube-face.front { transform: translateZ(45px); }
+    .blurb-cube-face.back { transform: rotateY(180deg) translateZ(45px); }
+    .blurb-cube-face.right { transform: rotateY(90deg) translateZ(60px); }
+    .blurb-cube-face.left { transform: rotateY(-90deg) translateZ(60px); }
+    .blurb-cube-face .blurb-image {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: auto;
+      border-radius: 0;
+    }
     .blurb-image {
       display: block;
       width: 100%;
@@ -292,6 +323,20 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const previewEffectsCss = effectsOn
       ? buildPreviewEffectsCss(global.effects, { accent: colors.accent })
       : '';
+    const useRotatingCube =
+      effectsOn && global.effects?.categories?.images?.effect === 'rotating-cube';
+    const previewImage = (face = '') => html`
+      <img
+        class=${`blurb-image ${face}`.trim()}
+        src=${SAMPLE_IMAGE_SRC}
+        alt=""
+        width="160"
+        height="120"
+        data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
+        style=${mediaFilterCss !== 'none' ? `filter: ${mediaFilterCss}` : ''}
+        draggable="false"
+      />
+    `;
 
     return html`
       ${previewEffectsCss
@@ -357,16 +402,18 @@ export class ThemePreviewPanel extends StoreBoundElement {
             </div>
             <figure class="blurb-figure">
               <span class="blurb-image-wrap">
-                <img
-                  class="blurb-image"
-                  src=${SAMPLE_IMAGE_SRC}
-                  alt=""
-                  width="160"
-                  height="120"
-                  data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
-                  style=${mediaFilterCss !== 'none' ? `filter: ${mediaFilterCss}` : ''}
-                  draggable="false"
-                />
+                ${useRotatingCube
+                  ? html`
+                      <span class="blurb-cube-scene">
+                        <span class="blurb-cube">
+                          <span class="blurb-cube-face front">${previewImage()}</span>
+                          <span class="blurb-cube-face back">${previewImage()}</span>
+                          <span class="blurb-cube-face right">${previewImage()}</span>
+                          <span class="blurb-cube-face left">${previewImage()}</span>
+                        </span>
+                      </span>
+                    `
+                  : previewImage()}
               </span>
               <figcaption
                 class="blurb-image-caption"

@@ -63,6 +63,13 @@ export class EffectsPanel extends StoreBoundElement {
       margin: 0;
       font-size: 12px;
     }
+    .toggle-row.unavailable {
+      opacity: 0.4;
+    }
+    .toggle-row.unavailable,
+    .toggle-row.unavailable label {
+      cursor: not-allowed;
+    }
     .sub {
       margin-left: 4px;
       font-size: 11px;
@@ -237,40 +244,20 @@ export class EffectsPanel extends StoreBoundElement {
 
       <hr class="divider" />
 
-      <div class="toggle-row">
+      <div class="toggle-row unavailable" title="Unavailable">
         <input
           type="checkbox"
           .checked=${effects.cursor.enabled}
-          @change=${(e) => this.updateGlobal({ effects: { cursor: { enabled: e.target.checked } } })}
+          disabled
         />
         <label>Cursor mods</label>
       </div>
-      ${effects.cursor.enabled
-        ? html`
-            <div class="sub toggle-row">
-              <label for="cursor-style">Cursor style</label>
-              <select
-                id="cursor-style"
-                .value=${effects.cursor.style || 'default'}
-                @change=${(e) =>
-                  this.updateGlobal({ effects: { cursor: { style: e.target.value } } })}
-              >
-                <option value="default">Default</option>
-                <option value="pointer">Pointer</option>
-                <option value="crosshair">Crosshair</option>
-                <option value="help">Help</option>
-                <option value="wait">Wait</option>
-              </select>
-            </div>
-          `
-        : html``}
 
-      <div class="toggle-row">
+      <div class="toggle-row unavailable" title="Unavailable">
         <input
           type="checkbox"
           .checked=${effects.backgroundMotion.enabled}
-          @change=${(e) =>
-            this.updateGlobal({ effects: { backgroundMotion: { enabled: e.target.checked } } })}
+          disabled
         />
         <label>Animated background motion</label>
       </div>

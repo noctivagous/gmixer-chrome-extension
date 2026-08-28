@@ -152,6 +152,7 @@ function walkthroughTabIcon(index) {
 export class GmixerWalkthrough extends StoreBoundElement {
   static properties = {
     currentSlide: { type: Number, state: true },
+    showCompletion: { type: Boolean, reflect: true },
   };
 
   static styles = css`
@@ -160,8 +161,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
       flex-direction: column;
       width: 100%;
       height: 100%;
-      width: min(1040px, 90vw);
-      height: min(760px, 85vh);
+      width: min(1120px, calc(90vw + 80px), calc(100vw - 32px));
+      height: min(840px, calc(85vh + 80px));
       max-width: none;
       max-height: none;
       color: var(--gm-text, #f2eefc);
@@ -171,6 +172,37 @@ export class GmixerWalkthrough extends StoreBoundElement {
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
       overflow: hidden;
       border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+    }
+
+    :host([showcompletion]) {
+      width: min(440px, calc(100vw - 32px));
+      height: auto;
+    }
+
+    .completion-dialog {
+      display: grid;
+      gap: 20px;
+      padding: 28px;
+      text-align: center;
+    }
+
+    .completion-dialog p {
+      margin: 0;
+      color: var(--gm-text, #f2eefc);
+      font: 650 16px/1.45 system-ui, sans-serif;
+    }
+
+    .completion-dialog kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.2));
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      font: 700 0.9em/1 system-ui, sans-serif;
+    }
+
+    .completion-dialog .nav {
+      justify-self: center;
     }
 
     .header {
@@ -398,6 +430,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
       box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
     }
 
+    button.nav.next {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button.nav.next .tab-icon {
+      opacity: 1;
+      flex: 0 0 18px;
+    }
+
     button.nav:disabled {
       opacity: 0.3;
       cursor: not-allowed;
@@ -485,9 +528,42 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     .color-picker-row {
       display: grid;
-      grid-template-columns: auto 106px minmax(132px, 174px);
+      grid-template-columns: 160px 106px minmax(0, 1fr);
       gap: 16px;
       align-items: start;
+      justify-self: start;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .color-picker-stack {
+      display: grid;
+      gap: 12px;
+      width: 160px;
+    }
+
+    .color-picker-stack gmixer-color-scheme-scales {
+      width: 160px;
+    }
+
+    .color-picker-row .scheme-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-content: start;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .color-picker-row .scheme-option {
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .color-picker-row .scheme-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .hsl-sliders {
@@ -810,6 +886,22 @@ export class GmixerWalkthrough extends StoreBoundElement {
       border-radius: 3px;
     }
 
+    @media (max-width: 960px) {
+      .color-picker-row {
+        grid-template-columns: minmax(0, 1fr);
+        justify-self: stretch;
+      }
+
+      .color-picker-stack,
+      .color-picker-row .scheme-options {
+        justify-self: center;
+      }
+
+      .color-picker-row .scheme-options {
+        width: min(100%, 360px);
+      }
+    }
+
     @media (max-width: 560px) {
       .tone-picker {
         grid-template-columns: minmax(0, 1fr);
@@ -820,7 +912,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       }
 
       .color-picker-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .hsl-sliders {
@@ -885,6 +977,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
   constructor() {
     super();
     this.currentSlide = 0;
+    this.showCompletion = false;
     this._activatedSlides = new Set([0]);
   }
 
@@ -925,7 +1018,18 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _finish() {
-    this._dismissWalkthrough();
+    this.updateGlobal({ ui: { walkthroughCompleted: true } });
+    this.showCompletion = true;
+    this.updateComplete.then(() => {
+      this.renderRoot.querySelector('.completion-dialog button')?.focus();
+    });
+  }
+
+  _closeCompletion() {
+    const popover = document.getElementById('gmixer-walkthrough-host');
+    if (popover && typeof popover.hidePopover === 'function') {
+      popover.hidePopover();
+    }
   }
 
   /** Closing or finishing both permanently dismiss auto-open onboarding. */
@@ -1170,6 +1274,23 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   render() {
+    if (this.showCompletion) {
+      return html`
+        <section
+          class="completion-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="walkthrough-completion-message"
+        >
+          <p id="walkthrough-completion-message">
+            Access gMixer Settings with <kbd>Alt</kbd>+<kbd>M</kbd> or the gMixer extension
+            icon in your browser toolbar.
+          </p>
+          <button class="nav primary" @click=${this._closeCompletion}>OK</button>
+        </section>
+      `;
+    }
+
     return html`
       <div class="header">
         <div class="titlebar">
@@ -1222,8 +1343,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
         >
           Back
         </button>
-        <button class="nav primary" @click=${this._next}>
-          ${this.currentSlide === 4 ? 'Finish' : `Next: ${this._getTabLabel(this.currentSlide + 1)}`}
+        <button class="nav primary next" @click=${this._next}>
+          ${this.currentSlide === 4
+            ? 'Finish'
+            : html`${walkthroughTabIcon(this.currentSlide + 1)}
+                <span>Next: ${this._getTabLabel(this.currentSlide + 1)}</span>`}
         </button>
       </div>
     `;
@@ -1367,7 +1491,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
         ${colorEnabled
           ? html`
               <div class="color-picker-row">
-                <gmixer-color-wheel></gmixer-color-wheel>
+                <div class="color-picker-stack">
+                  <gmixer-color-wheel></gmixer-color-wheel>
+                  <gmixer-color-scheme-scales
+                    compact
+                    active-scheme-only
+                  ></gmixer-color-scheme-scales>
+                </div>
                 <div class="hsl-sliders" aria-label="Color adjustments">
                   ${this._renderColorHslSlider(
                     'S',
@@ -1390,10 +1520,26 @@ export class GmixerWalkthrough extends StoreBoundElement {
                     color?.scheme || 'analog'
                   )}
                 </div>
-                <gmixer-color-scheme-scales
-                  compact
-                  active-scheme-only
-                ></gmixer-color-scheme-scales>
+                <div class="scheme-options" role="group" aria-label="Color scheme">
+                  ${colorSchemes.map(
+                    (scheme) => html`
+                      <button
+                        type="button"
+                        class="scheme-option"
+                        aria-pressed=${color?.scheme === scheme.id}
+                        @click=${() =>
+                          this.updateGlobal({
+                            activeThemePackId: 'user-made',
+                            sections: { color: true },
+                            color: { scheme: scheme.id },
+                          })}
+                      >
+                        ${schemeCategoryIcon(scheme.id)}
+                        <span>${scheme.label}</span>
+                      </button>
+                    `
+                  )}
+                </div>
               </div>
             `
           : html`
@@ -1418,30 +1564,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
                 </span>
               </label>
             `}
-        ${colorEnabled
-          ? html`
-              <div class="scheme-options" role="group" aria-label="Color scheme">
-                ${colorSchemes.map(
-                  (scheme) => html`
-                    <button
-                      type="button"
-                      class="scheme-option"
-                      aria-pressed=${color?.scheme === scheme.id}
-                      @click=${() =>
-                        this.updateGlobal({
-                          activeThemePackId: 'user-made',
-                          sections: { color: true },
-                          color: { scheme: scheme.id },
-                        })}
-                    >
-                      ${schemeCategoryIcon(scheme.id)}
-                      <span>${scheme.label}</span>
-                    </button>
-                  `
-                )}
-              </div>
-            `
-          : null}
       </div>
     `;
   }

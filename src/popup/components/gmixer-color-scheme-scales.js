@@ -19,7 +19,8 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     }
     :host([compact]) {
       gap: 4px;
-      width: min(100%, 174px);
+      width: 100%;
+      max-width: 160px;
       height: 160px;
     }
     .scheme-row {
