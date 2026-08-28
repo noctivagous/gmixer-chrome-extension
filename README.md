@@ -2,7 +2,7 @@
 
 Re-theme any web page — colors, fonts, image filters, corner clipping /
 radius overrides, and effects — through one **in-page Settings popover**.
-Built for Opera GX (current Chromium engine). See `product description.txt`
+Built for Chromium. See `product description.txt`
 for the full spec.
 
 ## Setup
