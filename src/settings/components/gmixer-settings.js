@@ -838,7 +838,14 @@ export class GmixerSettings extends StoreBoundElement {
   _selectThemePack(packId) {
     const pack = getThemePackById(packId);
     if (!pack) return;
-    this.updateGlobal({ activeThemePackId: packId, ...pack.patch });
+    this.updateGlobal({
+      activeThemePackId: packId,
+      ...pack.patch,
+      color: {
+        ...pack.patch.color,
+        schemeBaseColor: pack.patch.color?.baseColor,
+      },
+    });
   }
 
   /**
@@ -1037,6 +1044,7 @@ export class GmixerSettings extends StoreBoundElement {
       patch.color = {
         scheme: 'monochrome',
         baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+        schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
         identityMode: 'restyle',
         intensity: 100,
       };
@@ -1048,6 +1056,7 @@ export class GmixerSettings extends StoreBoundElement {
       patch.color = {
         scheme: color?.scheme === 'monochrome' ? 'analog' : color?.scheme || 'analog',
         baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+        schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
       };
     }
     if (id === 'color' && !enabled) {
@@ -1055,6 +1064,7 @@ export class GmixerSettings extends StoreBoundElement {
       patch.color = {
         scheme: 'monochrome',
         baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+        schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
       };
     }
     this.updateGlobal(patch);

@@ -157,6 +157,22 @@ export class ImageFilterPanel extends StoreBoundElement {
     const presetOptions = visiblePresets(PRESETS, colorOn, filter.preset);
 
     return html`
+      <label>Preset</label>
+      <select @change=${(e) => this.updateGlobal({ imageFilter: { preset: e.target.value } })}>
+        ${presetOptions.map(
+          (preset) => html`<option value=${preset.id} ?selected=${preset.id === filter.preset}>
+            ${preset.label}
+          </option>`
+        )}
+      </select>
+      ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
+        ? html`<p class="hint">
+            Color is off — this palette wash paints as monochrome until Color is enabled.
+          </p>`
+        : !colorOn
+          ? html`<p class="hint">Turn on Color to unlock accent tint, link wash, and duotone.</p>`
+          : html``}
+
       <div class="apply-filter-row">
         <input
           id="image-filter-enabled"
@@ -194,24 +210,8 @@ export class ImageFilterPanel extends StoreBoundElement {
           @change=${(e) =>
             this.updateGlobal({ imageFilter: { revealOnHover: e.target.checked } })}
         />
-        <label style="margin:0">Reveal original media on hover</label>
+        <label style="margin:0">Hover shows media unfiltered</label>
       </div>
-
-      <label>Preset</label>
-      <select @change=${(e) => this.updateGlobal({ imageFilter: { preset: e.target.value } })}>
-        ${presetOptions.map(
-          (preset) => html`<option value=${preset.id} ?selected=${preset.id === filter.preset}>
-            ${preset.label}
-          </option>`
-        )}
-      </select>
-      ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
-        ? html`<p class="hint">
-            Color is off — this palette wash paints as monochrome until Color is enabled.
-          </p>`
-        : !colorOn
-          ? html`<p class="hint">Turn on Color to unlock accent tint, link wash, and duotone.</p>`
-          : html``}
 
       ${filter.preset === 'custom'
         ? html`

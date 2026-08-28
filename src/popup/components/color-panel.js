@@ -422,7 +422,7 @@ export class ColorPanel extends StoreBoundElement {
             0,
             100,
             's',
-            color.baseColor,
+            color.schemeBaseColor || color.baseColor,
             color.scheme
           )}
           ${this._renderVerticalHslSlider(
@@ -432,7 +432,7 @@ export class ColorPanel extends StoreBoundElement {
             8,
             92,
             'l',
-            color.baseColor,
+            color.schemeBaseColor || color.baseColor,
             color.scheme
           )}
         </div>
@@ -548,8 +548,13 @@ export class ColorPanel extends StoreBoundElement {
         ? {
             scheme: color.scheme === 'monochrome' ? 'analog' : color.scheme,
             baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+            schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
           }
-        : { scheme: 'monochrome', baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }) },
+        : {
+            scheme: 'monochrome',
+            baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+            schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+          },
     });
   }
 

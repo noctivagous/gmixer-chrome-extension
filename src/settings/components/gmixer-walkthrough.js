@@ -485,7 +485,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     .color-picker-row {
       display: grid;
-      grid-template-columns: auto 106px;
+      grid-template-columns: auto 106px minmax(132px, 174px);
       gap: 16px;
       align-items: start;
     }
@@ -885,11 +885,12 @@ export class GmixerWalkthrough extends StoreBoundElement {
   constructor() {
     super();
     this.currentSlide = 0;
+    this._activatedSlides = new Set([0]);
   }
 
   _next() {
     if (this.currentSlide < 4) {
-      this.currentSlide++;
+      this._selectSlide(this.currentSlide + 1);
     } else {
       this._finish();
     }
@@ -902,6 +903,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _selectSlide(index) {
+    this._applySlideDefaults(index);
     this.currentSlide = index;
     this.updateComplete.then(() => {
       this.renderRoot.querySelector(`#walkthrough-slide-${index}`)?.focus();
@@ -953,6 +955,70 @@ export class GmixerWalkthrough extends StoreBoundElement {
     };
     if (id === 'filter') patch.imageFilter = { enabled: true };
     this.updateGlobal(patch);
+  }
+
+  _applySlideDefaults(index) {
+    if (this._activatedSlides.has(index)) return;
+    this._activatedSlides.add(index);
+
+    const color = this.state?.global?.color;
+    const hsl = hexToHsl(color?.baseColor || '#8a8a8a');
+
+    switch (index) {
+      case 1: {
+        const baseColor = hslToHex({ ...hsl, s: Math.max(hsl.s, 70) });
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { color: true },
+          color: { baseColor, schemeBaseColor: baseColor, scheme: 'triadic' },
+        });
+        break;
+      }
+      case 2:
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { filter: true },
+          imageFilter: {
+            enabled: true,
+            preset: 'monochrome',
+            scope: 'both',
+            revealOnHover: true,
+          },
+        });
+        break;
+      case 3:
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { fonts: true },
+          fonts: {
+            headings: {
+              h1: { fontId: 'din-breit', customFontId: null },
+              h2: { fontId: 'raleway', customFontId: null },
+              h3: { fontId: 'outfit', customFontId: null },
+              h4: { fontId: 'outfit', customFontId: null },
+              h5: { fontId: 'outfit', customFontId: null },
+              h6: { fontId: 'outfit', customFontId: null },
+            },
+            paragraph: { fontId: 'dm-sans', customFontId: null },
+            captions: { fontId: 'tippa', customFontId: null },
+          },
+        });
+        break;
+      case 4:
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { effects: true },
+          effects: {
+            categories: {
+              images: { effect: 'glow' },
+              navigation: { effect: 'glow' },
+            },
+          },
+        });
+        break;
+      default:
+        break;
+    }
   }
 
   _tonePalette(mode) {
@@ -1040,6 +1106,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
         color: {
           scheme,
           baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+          schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
         },
       });
       return;
@@ -1050,6 +1117,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       color: {
         scheme: 'monochrome',
         baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+        schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
       },
     });
   }
@@ -1308,7 +1376,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
                     0,
                     100,
                     's',
-                    color?.baseColor || '#8a8a8a',
+                    color?.schemeBaseColor || color?.baseColor || '#8a8a8a',
                     color?.scheme || 'analog'
                   )}
                   ${this._renderColorHslSlider(
@@ -1318,10 +1386,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
                     8,
                     92,
                     'l',
-                    color?.baseColor || '#8a8a8a',
+                    color?.schemeBaseColor || color?.baseColor || '#8a8a8a',
                     color?.scheme || 'analog'
                   )}
                 </div>
+                <gmixer-color-scheme-scales
+                  compact
+                  active-scheme-only
+                ></gmixer-color-scheme-scales>
               </div>
             `
           : html`
@@ -1370,10 +1442,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
               </div>
             `
           : null}
-        <gmixer-color-scheme-scales
-          ?monochrome=${!colorEnabled}
-          active-scheme-only
-        ></gmixer-color-scheme-scales>
       </div>
     `;
   }

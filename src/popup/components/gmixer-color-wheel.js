@@ -177,7 +177,7 @@ export class GmixerColorWheel extends StoreBoundElement {
     if (this.monochrome) {
       const lightness = Math.max(8, Math.min(92, Math.round((angle / 360) * 100)));
       const newHex = hslToHex({ h: hsl.h, s: 0, l: lightness });
-      this.updateGlobal({ color: { baseColor: newHex } });
+      this.updateGlobal({ color: { baseColor: newHex, schemeBaseColor: newHex } });
       return;
     }
 
@@ -185,7 +185,7 @@ export class GmixerColorWheel extends StoreBoundElement {
     // explicit source of truth after Color mode establishes an initial value.
     const newHex = hslToHex({ ...hsl, h: angle });
 
-    this.updateGlobal({ color: { baseColor: newHex } });
+    this.updateGlobal({ color: { baseColor: newHex, schemeBaseColor: newHex } });
   }
 }
 

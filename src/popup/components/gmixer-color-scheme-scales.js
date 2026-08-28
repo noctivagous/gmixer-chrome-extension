@@ -7,6 +7,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
   static properties = {
     monochrome: { type: Boolean, reflect: true },
     activeSchemeOnly: { type: Boolean, attribute: 'active-scheme-only', reflect: true },
+    compact: { type: Boolean, reflect: true },
   };
 
   static styles = css`
@@ -15,6 +16,11 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       gap: var(--gm-space-2, 16px);
       width: 100%;
       outline: none;
+    }
+    :host([compact]) {
+      gap: 4px;
+      width: min(100%, 174px);
+      height: 160px;
     }
     .scheme-row {
       display: grid;
@@ -27,6 +33,10 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       grid-template-columns: minmax(0, 1fr);
       gap: 0;
     }
+    :host([compact]) .scheme-row {
+      gap: 0;
+      height: 100%;
+    }
     .scheme-label {
       font-size: 11px;
       font-weight: 600;
@@ -38,9 +48,19 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       gap: 4px;
       outline: none;
     }
+    :host([compact]) .scales-grid {
+      grid-template-rows: repeat(4, minmax(0, 1fr));
+      gap: 3px;
+      height: 100%;
+    }
     .scale {
       display: flex;
       gap: 2px;
+    }
+    :host([compact]) .scale {
+      gap: 1px;
+      align-items: center;
+      min-height: 0;
     }
     .swatch {
       display: block;
@@ -51,6 +71,12 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       border: 1px solid rgba(255, 255, 255, 0.1);
       padding: 0;
       transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    :host([compact]) .swatch {
+      flex: 1 1 0;
+      border-radius: 1px;
+      min-width: 0;
+      height: 100%;
     }
     .swatch:hover {
       transform: scale(1.1);
@@ -68,6 +94,10 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       min-width: 3.5rem;
       color: var(--gm-muted, rgba(242, 238, 252, 0.55));
       font-size: 10px;
+    }
+    :host([compact]) .scale-label {
+      min-width: 30px;
+      font-size: 8px;
     }
   `;
 
@@ -101,7 +131,8 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
 
   _renderScheme(scheme, currentColor) {
     const steps = 5;
-    const schemeColors = this._schemeColors(currentColor.baseColor, scheme.id);
+    const baseColor = currentColor.schemeBaseColor || currentColor.baseColor;
+    const schemeColors = this._schemeColors(baseColor, scheme.id);
     const tints = schemeColors.flatMap((color) => getColorScale(color, 'tint', steps));
     const shades = schemeColors.flatMap((color) => getColorScale(color, 'shade', steps));
     const tones = schemeColors.flatMap((color) => getColorScale(color, 'tone', steps));
@@ -114,7 +145,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
           <div class="scale">
             <span class="scale-label">Colors</span>
             ${schemeColors.map((color) =>
-              this._renderSwatch(color, scheme.id, currentColor, scheme.label)
+              this._renderSwatch(color, scheme.id, currentColor, scheme.label, true)
             )}
           </div>
           <div class="scale"><span class="scale-label">Tint</span>${tints.map((c) => this._renderSwatch(c, scheme.id, currentColor, 'Tint'))}</div>
@@ -132,7 +163,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     );
   }
 
-  _renderSwatch(hex, schemeId, currentColor, scaleLabel) {
+  _renderSwatch(hex, schemeId, currentColor, scaleLabel, isBaseColor = false) {
     const isActive = currentColor.baseColor.toLowerCase() === hex.toLowerCase() && currentColor.scheme === schemeId;
     return html`
       <button
@@ -141,16 +172,17 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
         style="background: ${hex}"
         title=${`${scaleLabel}: ${hex}`}
         aria-label=${`${schemeId} ${scaleLabel} ${hex}`}
-        @click=${() => this._select(hex, schemeId)}
+        @click=${() => this._select(hex, schemeId, isBaseColor)}
       ></button>
     `;
   }
 
-  _select(hex, schemeId) {
+  _select(hex, schemeId, isBaseColor) {
     this.updateGlobal({
       color: {
         baseColor: hex,
-        scheme: schemeId
+        scheme: schemeId,
+        ...(isBaseColor ? { schemeBaseColor: hex } : {}),
       }
     });
   }
