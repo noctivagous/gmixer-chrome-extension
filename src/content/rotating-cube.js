@@ -1,3 +1,5 @@
+import { MAX_MEDIA_EFFECT_SCAN } from './scan-limits.js';
+
 export const SCENE_ATTR = 'data-gmixer-rotating-cube-scene';
 export const CUBE_ATTR = 'data-gmixer-rotating-cube';
 export const FACE_ATTR = 'data-gmixer-rotating-cube-face';
@@ -25,7 +27,10 @@ export function syncRotatingCube(resolved) {
 
 function addCubes() {
   const media = new Set();
-  for (const image of document.querySelectorAll('img')) {
+  const images = document.images;
+  const limit = Math.min(images.length, MAX_MEDIA_EFFECT_SCAN);
+  for (let i = 0; i < limit; i++) {
+    const image = images[i];
     if (image.closest(`#gmixer-settings, [${SCENE_ATTR}], [data-gmixer-pan-scan-frame]`)) {
       continue;
     }
@@ -48,14 +53,15 @@ function addCubes() {
 
     const scene = document.createElement('span');
     scene.setAttribute(SCENE_ATTR, '');
-    scene.style.display = getComputedStyle(element).display === 'block' ? 'block' : 'inline-block';
-    scene.style.verticalAlign = getComputedStyle(element).verticalAlign;
+    const computed = getComputedStyle(element);
+    scene.style.display = computed.display === 'block' ? 'block' : 'inline-block';
+    scene.style.verticalAlign = computed.verticalAlign;
     scene.style.width = `${width}px`;
     scene.style.height = `${height}px`;
     scene.style.perspective = `${Math.round(Math.max(width, height) * 2.2)}px`;
     scene.style.perspectiveOrigin = '50% 50%';
     scene.style.lineHeight = '0';
-    scene.style.borderRadius = getComputedStyle(element).borderRadius;
+    scene.style.borderRadius = computed.borderRadius;
     scene.style.overflow = 'visible';
     scene.style.setProperty('--gmixer-cube-w', `${width}px`);
     scene.style.setProperty('--gmixer-cube-h', `${height}px`);

@@ -1,4 +1,16 @@
-import { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE } from './messages.js';
+import {
+  MSG_OPEN_SETTINGS,
+  MSG_OPEN_WALKTHROUGH,
+  MSG_TOGGLE_SETTINGS,
+  MSG_TOGGLE_SITE,
+} from './messages.js';
+
+const QUEUEABLE_TYPES = new Set([
+  MSG_TOGGLE_SETTINGS,
+  MSG_TOGGLE_SITE,
+  MSG_OPEN_SETTINGS,
+  MSG_OPEN_WALKTHROUGH,
+]);
 
 const QUEUE_KEY = '__gmixerPendingRuntimeMessages';
 const READY_KEY = '__gmixerSettingsHostReady';
@@ -17,7 +29,7 @@ export function installEarlyMessageQueue() {
     if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
     chrome.runtime.onMessage.addListener((message) => {
       if (globalThis[READY_KEY]) return;
-      if (message?.type === MSG_TOGGLE_SETTINGS || message?.type === MSG_TOGGLE_SITE) {
+      if (QUEUEABLE_TYPES.has(message?.type)) {
         pendingQueue().push(message.type);
       }
     });

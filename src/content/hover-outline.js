@@ -27,6 +27,7 @@ export class HoverOutline {
         this._paintAt(this._lastX, this._lastY);
       });
     };
+    this._flashTimer = 0;
     this._onScroll = () => {
       if (this.current) this._positionOver(this.current);
     };
@@ -66,6 +67,8 @@ export class HoverOutline {
     window.removeEventListener('scroll', this._onScroll, { capture: true });
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
+    if (this._flashTimer) clearTimeout(this._flashTimer);
+    this._flashTimer = 0;
     this.current = null;
     this.overlay?.remove();
     this.overlay = null;
@@ -171,7 +174,9 @@ export class HoverOutline {
     if (!this.overlay || !this.animated) return;
     const prev = this.overlay.style.boxShadow;
     this.overlay.style.boxShadow = `0 0 0 3px ${this.color}, 0 0 28px ${this.color}`;
-    setTimeout(() => {
+    if (this._flashTimer) clearTimeout(this._flashTimer);
+    this._flashTimer = window.setTimeout(() => {
+      this._flashTimer = 0;
       if (this.overlay) this.overlay.style.boxShadow = prev;
     }, 160);
   }

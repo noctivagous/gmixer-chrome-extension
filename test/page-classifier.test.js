@@ -104,6 +104,9 @@ describe('page-classifier', () => {
     assert.equal(root._children[0].getAttribute(ROLE_ATTR), 'main');
     assert.equal(article.getAttribute(ROLE_ATTR), 'article');
     assert.equal(img.getAttribute(MEDIA_ATTR), 'article-image');
+
+    const skipped = classifySubtree(root, { skipClassified: true });
+    assert.ok(skipped.scanned >= 2);
   });
 
   it('does not classify Slashdot-style story title/byline spans as articles', () => {

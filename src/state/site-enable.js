@@ -13,18 +13,6 @@ export function isMasterThemingEnabled() {
 }
 
 /**
- * Whether theming should paint on a given host (master AND optional per-site).
- * @param {string} [hostname]
- * @returns {boolean}
- */
-export function isSiteThemingEnabled(hostname = typeof location !== 'undefined' ? location.hostname : '') {
-  if (!isMasterThemingEnabled()) return false;
-  if (!hostname) return true;
-  const override = store.getState().perSite?.[hostname];
-  return override?.enabled !== false;
-}
-
-/**
  * Flip master theming for all tabs / hosts.
  * @returns {Promise<boolean>} the new enabled state
  */

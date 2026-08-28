@@ -13,7 +13,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 const shared = {
   bundle: true,
   minify: MINIFY,
-  sourcemap: MINIFY ? false : 'inline',
+  sourcemap: MINIFY ? 'external' : 'inline',
   target: ['chrome122'], // Opera GX current Chromium engine only
   // Critical: Lit's package exports have a "node" condition that pulls in
   // @lit-labs/ssr-dom-shim and can leave global customElements null/broken.

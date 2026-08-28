@@ -122,10 +122,6 @@ const FONTS_RAW = [
 /** @type {FontEntry[]} */
 export const FONTS = FONTS_RAW.map(enrichFontEntry);
 
-export function getFontsByCategory(categoryId) {
-  return FONTS.filter((font) => font.category === categoryId);
-}
-
 export function getFontById(id) {
   return FONTS.find((font) => font.id === id) ?? null;
 }

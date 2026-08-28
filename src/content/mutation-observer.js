@@ -63,7 +63,13 @@ export function startMutationObserver(handlers) {
     pendingRoots = new Set();
     cascadeThreat = false;
 
-    if (urlChanged) onNavigation();
+    // SPA route change: skip incremental classify/CSS so we don't paint the
+    // new DOM with the previous route's identity sample. The navigation
+    // handler runs a full resample after the page settles.
+    if (urlChanged) {
+      onNavigation();
+      return;
+    }
     if (roots.length) onSubtree(roots);
     if (threatened) onCascadeThreat();
   };

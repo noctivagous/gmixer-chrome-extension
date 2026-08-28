@@ -12,6 +12,7 @@
 
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
     const data = event.data;
     if (!data || data.type !== RESPONSE_TYPE || typeof data.id !== 'string') return;
     const entry = pending.get(data.id);
@@ -32,7 +33,7 @@
           method,
           args: args || [],
         },
-        '*'
+        window.location.origin
       );
       window.setTimeout(() => {
         if (!pending.has(id)) return;

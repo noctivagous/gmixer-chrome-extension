@@ -8,6 +8,7 @@
 // enabled with a scope that cares about backgrounds — most installs never
 // pay this cost.
 import { BACKGROUND_IMAGE_ATTR } from './style-injector.js';
+import { MAX_BACKGROUND_IMAGE_SCAN } from './scan-limits.js';
 
 export const BACKGROUND_IMAGE_OVERLAY_CLASS = 'gmixer-bgimg-overlay';
 
@@ -15,8 +16,46 @@ export const BACKGROUND_IMAGE_OVERLAY_CLASS = 'gmixer-bgimg-overlay';
 // this into a jank source — same "cheap sampling" philosophy as
 // page-sampler.js, just applied to a bigger candidate set since coverage
 // (finding every themed hero banner) matters more here than for sampling.
-const MAX_SCAN = 3000;
+const MAX_SCAN = MAX_BACKGROUND_IMAGE_SCAN;
 const SKIP_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'SOURCE', 'SCRIPT', 'STYLE', 'NOSCRIPT']);
+
+/**
+ * Walk elements under `root` without materializing the full `querySelectorAll('*')`
+ * NodeList on huge injected subtrees. Stops after `max` nodes.
+ * @param {ParentNode} root
+ * @param {number} max
+ * @returns {Generator<Element>}
+ */
+function* walkElements(root, max) {
+  let count = 0;
+  const includeRoot = root.nodeType === Node.ELEMENT_NODE && root !== document.body;
+  if (includeRoot) {
+    yield /** @type {Element} */ (root);
+    count += 1;
+    if (count >= max) return;
+  }
+
+  if (typeof document !== 'undefined' && typeof document.createTreeWalker === 'function') {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node && count < max) {
+      yield /** @type {Element} */ (node);
+      count += 1;
+      node = walker.nextNode();
+    }
+    return;
+  }
+
+  const fallback =
+    includeRoot
+      ? [/** @type {Element} */ (root), ...Array.from(root.querySelectorAll('*'))]
+      : Array.from(root.querySelectorAll('*'));
+  for (const el of fallback) {
+    if (count >= max) return;
+    yield el;
+    count += 1;
+  }
+}
 
 /**
  * @param {{ enabled: boolean, scope: 'images'|'backgrounds'|'both' }|null|undefined} imageFilter
@@ -35,13 +74,8 @@ export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}) {
 export function tagBackgroundImageElements(root = document.body) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
 
-  const candidates =
-    root.nodeType === Node.ELEMENT_NODE && root !== document.body
-      ? [root, ...Array.from(root.querySelectorAll('*'))]
-      : Array.from(root.querySelectorAll('*'));
-
   let scanned = 0;
-  for (const el of candidates) {
+  for (const el of walkElements(root, MAX_SCAN)) {
     if (scanned >= MAX_SCAN) break;
     if (
       SKIP_TAGS.has(el.tagName) ||

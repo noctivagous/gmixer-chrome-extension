@@ -107,7 +107,7 @@ structural/identity split or preserve/harmonize modes.
 | Bg overlays | `src/content/background-image-tagger.js` |
 | Timing | `src/content/content-start.js`, `content-end.js`, `mutation-observer.js` |
 | Intensity setting | `src/state/schema.js`, `popup/components/color-panel.js` |
-| Orphan tonal overlay API | `src/content/tonal-surface-layer.js` (`ensureTonalSurfaceLayers` unused) |
+| Tonal overlay teardown | `src/content/tonal-surface-layer.js` (`removeTonalSurfaceLayers` only; overlays are legacy) |
 
 Related notes: `refs/GMIXER_DEBUG_MODE.md` (debug hooks for `samplePage` /
 `findPrimaryBackground`), `product description.txt` (intensity + role palette).

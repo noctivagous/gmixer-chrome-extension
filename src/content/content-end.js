@@ -12,7 +12,7 @@
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle } from './style-injector.js';
 import { startMutationObserver } from './mutation-observer.js';
-import { writeCssCache, clearCssCache } from './css-cache.js';
+import { cssCacheScope, writeCssCache, clearCssCache } from './css-cache.js';
 import { NavigationController } from './navigation-controller.js';
 import { initSettingsHost } from './settings-host.js';
 import {
@@ -24,10 +24,12 @@ import { waitForPageSettle } from './page-settle.js';
 import { syncLinkShimmer, rescanLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
 import { syncPanScan } from './pan-scan.js';
 import { syncRotatingCube } from './rotating-cube.js';
+import { LAYOUT_RESAMPLE_DEBOUNCE_MS, SPA_ROUTE_DEBOUNCE_MS } from './adaptive-timing.js';
 
 async function main() {
   await store.ready;
   const hostname = location.hostname;
+  const getScope = () => cssCacheScope(location);
 
   let sample = null;
   let lastLayoutKey = '';
@@ -54,7 +56,7 @@ async function main() {
     syncRotatingCube(resolved);
     const css = buildCss(resolved, sample);
     injectStyle(css);
-    writeCssCache(hostname, css);
+    writeCssCache(hostname, getScope(), resolved, css);
     nav.sync();
     syncLinkShimmer(resolved);
     lastLayoutKey = layoutKey();
@@ -75,7 +77,7 @@ async function main() {
     },
   });
 
-  startMutationObserver({
+  const stopObserving = startMutationObserver({
     // New page content: reclassify / retag the added subtree, then reassert CSS.
     onSubtree(roots) {
       const resolved = store.getResolvedStateForHost(hostname);
@@ -113,8 +115,15 @@ async function main() {
     onNavigation: scheduleSpaResample,
   });
 
-  store.subscribe(reapply);
+  const unsubscribe = store.subscribe(reapply);
   initSettingsHost();
+
+  const teardown = () => {
+    unsubscribe();
+    stopObserving();
+    nav.destroy();
+  };
+  window.addEventListener('pagehide', teardown, { once: true });
 
   // Compile-time flag from build.js (--debug). False builds drop this import.
   if (__GMIXER_DEBUG__) {
@@ -147,7 +156,7 @@ function watchLayoutAndSpa(reapply, layout) {
         if (next === layout.getLastKey()) return;
         layout.setLastKey(next);
         reapply();
-      }, 400)
+      }, LAYOUT_RESAMPLE_DEBOUNCE_MS)
     );
   };
 
@@ -158,7 +167,7 @@ function watchLayoutAndSpa(reapply, layout) {
     clearTimeout(routeTimer);
     routeTimer = window.setTimeout(() => {
       void waitForPageSettle().then(reapply);
-    }, 100);
+    }, SPA_ROUTE_DEBOUNCE_MS);
   };
   window.addEventListener('popstate', onSpaNav);
   window.addEventListener('hashchange', onSpaNav);

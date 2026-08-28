@@ -33,6 +33,15 @@ const FIELD_STORAGE_AREAS = {
 
 const PER_SITE_AREA = 'local';
 
+function isInvalidatedExtensionContext(err) {
+  return /Extension context invalidated|context invalidated/i.test(String(err?.message || err));
+}
+
+function warnUnlessInvalidated(action, err) {
+  if (isInvalidatedExtensionContext(err)) return;
+  console.warn(`[gMixer] ${action} failed`, err);
+}
+
 function splitGlobal(global) {
   const sync = {};
   const local = {};
@@ -58,9 +67,8 @@ export async function loadPersistedState() {
       chrome.storage.sync.get(STORAGE_KEY),
       chrome.storage.local.get(STORAGE_KEY),
     ]);
-  } catch {
-    // A content script can outlive an extension reload. Its context is no
-    // longer usable, so let the caller continue with defaults.
+  } catch (err) {
+    warnUnlessInvalidated('storage load', err);
     return null;
   }
 
@@ -104,8 +112,8 @@ export async function persistState(state) {
       chrome.storage.sync.set(syncPayload),
       chrome.storage.local.set(localPayload),
     ]);
-  } catch {
-    // Ignore writes from a stale content/popup context after extension reload.
+  } catch (err) {
+    warnUnlessInvalidated('storage write', err);
   }
 }
 
@@ -117,7 +125,9 @@ export function onPersistedStateChanged(callback) {
     if ((area === 'sync' || area === 'local') && STORAGE_KEY in changes) {
       // Do not leave an async storage callback unhandled when the extension
       // is reloaded while this content script is still resident.
-      Promise.resolve().then(callback).catch(() => {});
+      Promise.resolve().then(callback).catch((err) => {
+        warnUnlessInvalidated('storage sync', err);
+      });
     }
   };
   try {

@@ -1,4 +1,5 @@
 import { normalizeEffects } from '../config/effects-catalog.js';
+import { MAX_MEDIA_EFFECT_SCAN } from './scan-limits.js';
 
 export const FRAME_ATTR = 'data-gmixer-pan-scan-frame';
 export const TARGET_ATTR = 'data-gmixer-pan-scan-target';
@@ -43,7 +44,10 @@ function teardown() {
 
 function addFrames() {
   const media = new Set();
-  for (const image of document.querySelectorAll('img')) {
+  const images = document.images;
+  const limit = Math.min(images.length, MAX_MEDIA_EFFECT_SCAN);
+  for (let i = 0; i < limit; i++) {
+    const image = images[i];
     if (image.hasAttribute(REST_ATTR)) continue;
     if (image.closest(`#gmixer-settings, [${FRAME_ATTR}]`)) continue;
     media.add(image.closest('picture') || image);
@@ -60,13 +64,14 @@ function addFrames() {
 
     const frame = document.createElement('span');
     frame.setAttribute(FRAME_ATTR, '');
-    frame.style.display = getComputedStyle(element).display === 'block' ? 'block' : 'inline-block';
+    const computed = getComputedStyle(element);
+    frame.style.display = computed.display === 'block' ? 'block' : 'inline-block';
     frame.style.position = 'relative';
     frame.style.width = `${width}px`;
     frame.style.height = `${height}px`;
     frame.style.overflow = 'hidden';
-    frame.style.verticalAlign = getComputedStyle(element).verticalAlign;
-    frame.style.borderRadius = getComputedStyle(element).borderRadius;
+    frame.style.verticalAlign = computed.verticalAlign;
+    frame.style.borderRadius = computed.borderRadius;
     frame.style.lineHeight = '0';
 
     element.parentNode?.insertBefore(frame, element);

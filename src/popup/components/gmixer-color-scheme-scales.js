@@ -14,12 +14,14 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       display: grid;
       gap: var(--gm-space-2, 16px);
       width: 100%;
+      outline: none;
     }
     .scheme-row {
       display: grid;
       grid-template-columns: 100px 1fr;
       align-items: center;
       gap: 12px;
+      outline: none;
     }
     .scheme-row.compact {
       grid-template-columns: minmax(0, 1fr);
@@ -34,6 +36,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       display: grid;
       grid-template-rows: repeat(3, auto);
       gap: 4px;
+      outline: none;
     }
     .scale {
       display: flex;
@@ -54,9 +57,12 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       z-index: 1;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     }
+    .swatch:focus,
+    .swatch:focus-visible {
+      outline: none;
+    }
     .swatch.active {
-      outline: 2px solid var(--gm-accent, #8b5cf6);
-      outline-offset: 1px;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
     }
     .scale-label {
       min-width: 3.5rem;

@@ -63,6 +63,7 @@ function installMainWorldBridge(api) {
   // Content script handles page-world requests.
   window.addEventListener('message', async (event) => {
     if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
     const data = event.data;
     if (!data || data.type !== REQUEST_TYPE || typeof data.id !== 'string') return;
     if (typeof data.method !== 'string') return;
@@ -80,7 +81,7 @@ function installMainWorldBridge(api) {
     } catch (err) {
       response.error = err instanceof Error ? err.message : String(err);
     }
-    window.postMessage(response, '*');
+    window.postMessage(response, window.location.origin);
   });
 
   // Inject the page-world stub via extension URL (CSP-safe vs inline script).

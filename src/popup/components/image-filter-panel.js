@@ -27,7 +27,6 @@ const CATEGORY_PRESETS = [
 ];
 
 const SCOPES = [
-  { id: 'off', label: 'No media' },
   { id: 'images', label: 'Images/video only' },
   { id: 'backgrounds', label: 'Background images only' },
   { id: 'both', label: 'Both' },
@@ -159,18 +158,28 @@ export class ImageFilterPanel extends StoreBoundElement {
 
     return html`
       <div class="apply-filter-row">
+        <input
+          id="image-filter-enabled"
+          type="checkbox"
+          .checked=${filter.enabled}
+          @change=${(event) => {
+            const enabled = event.target.checked;
+            /** @type {Record<string, unknown>} */
+            const imageFilter = { enabled };
+            // Blank-slate default is preset "none"; turning the filter on
+            // without a visible preset still looks like a no-op.
+            if (enabled && (!filter.preset || filter.preset === 'none')) {
+              imageFilter.preset = 'monochrome';
+            }
+            this.updateGlobal({ imageFilter });
+          }}
+        />
         <label for="image-filter-scope">Apply filter to</label>
         <select
           id="image-filter-scope"
-          .value=${filter.enabled ? filter.scope : 'off'}
-          @change=${(e) => {
-            const scope = e.target.value;
-            this.updateGlobal({
-              imageFilter: {
-                enabled: scope !== 'off',
-                ...(scope === 'off' ? {} : { scope }),
-              },
-            });
+          .value=${filter.scope || 'images'}
+          @change=${(event) => {
+            this.updateGlobal({ imageFilter: { scope: event.target.value } });
           }}
         >
           ${SCOPES.map(
@@ -266,6 +275,17 @@ export class ImageFilterPanel extends StoreBoundElement {
         </div>
       </details>
     `;
+  }
+
+  updateGlobal(patch) {
+    super.updateGlobal(patch);
+    this.dispatchEvent(
+      new CustomEvent('change', {
+        bubbles: true,
+        composed: true,
+        detail: { filterEnabled: patch.imageFilter?.enabled },
+      })
+    );
   }
 }
 

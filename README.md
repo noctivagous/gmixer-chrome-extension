@@ -79,6 +79,15 @@ gmixer-chrome-extension/
   Accent, Link, Border, and Focus roles.
   Empty overrides retain generated defaults; explicit overrides are preserved.
 
+## Permissions
+
+`<all_urls>` host permissions and content-script matches are required: gMixer
+is a universal re-themer and must inject CSS on whatever page the user opens
+(http(s), file, and most intranet hosts). `web_accessible_resources` exposes
+bundled `fonts/*` so `@font-face` can load from the stylesheet, and
+`debug-bridge.js` only in debug builds (the production build still lists it
+but `installDebugApi` is compiled out unless `__GMIXER_DEBUG__` is true).
+
 ## Fonts
 
 55 Peter Wiegel freeware fonts under `extension/fonts/<category>/` — see

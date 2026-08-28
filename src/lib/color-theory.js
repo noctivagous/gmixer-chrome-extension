@@ -41,7 +41,9 @@ export function hslToHex({ h, s, l }) {
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = lNorm - c / 2;
 
-  let [r, g, b] = [0, 0, 0];
+  let r;
+  let g;
+  let b;
   if (h < 60) [r, g, b] = [c, x, 0];
   else if (h < 120) [r, g, b] = [x, c, 0];
   else if (h < 180) [r, g, b] = [0, c, x];
@@ -231,7 +233,7 @@ export function getColorScale(hex, type, steps = 5) {
  * GUI controls, then once more for cards and other larger containers.
  * Keeps hue with the page bg so themed shells do not read as leftover slabs.
  */
-export function deriveSurface(backgroundHex, _isDark) {
+export function deriveSurface(backgroundHex) {
   const { h, s, l } = hexToHsl(backgroundHex);
   const surfaceIsDark = l < 50;
   return hslToHex({

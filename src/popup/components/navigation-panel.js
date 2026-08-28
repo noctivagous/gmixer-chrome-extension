@@ -13,6 +13,10 @@ export class NavigationPanel extends StoreBoundElement {
       gap: 6px;
       margin-bottom: 10px;
     }
+    label.toggle-row {
+      margin: 0;
+      font-size: 12px;
+    }
     .toggle-row label {
       margin: 0;
       font-size: 12px;
@@ -36,52 +40,62 @@ export class NavigationPanel extends StoreBoundElement {
     if (!nav) return html``;
 
     return html`
-      <div class="toggle-row">
+      <label class="toggle-row">
         <input
           type="checkbox"
+          role="switch"
+          aria-checked=${nav.enabled}
           .checked=${nav.enabled}
           @change=${(e) => this.updateGlobal({ navigation: { enabled: e.target.checked } })}
         />
-        <label><strong>Enable navigation keys</strong></label>
-      </div>
+        <strong>Enable navigation keys</strong>
+      </label>
       <p>Imported from KeyPilot. Off by default — nothing below binds a key until this is checked.</p>
       <p>When enabled: hover shows an outline on clickable elements; <strong>F</strong> clicks,
         <strong>D</strong> goes back, <strong>R</strong> goes forward. Keys are ignored while typing in fields.</p>
 
       <div class="sub" aria-disabled=${!nav.enabled}>
-        <div class="toggle-row">
+        <label class="toggle-row">
           <input
             type="checkbox"
+            role="switch"
+            aria-checked=${nav.clickElement}
             .checked=${nav.clickElement}
             @change=${(e) => this.updateGlobal({ navigation: { clickElement: e.target.checked } })}
           />
-          <label>Click Element (F)</label>
-        </div>
-        <div class="toggle-row">
+          Click Element (F)
+        </label>
+        <label class="toggle-row">
           <input
             type="checkbox"
+            role="switch"
+            aria-checked=${nav.back}
             .checked=${nav.back}
             @change=${(e) => this.updateGlobal({ navigation: { back: e.target.checked } })}
           />
-          <label>Back (D)</label>
-        </div>
-        <div class="toggle-row">
+          Back (D)
+        </label>
+        <label class="toggle-row">
           <input
             type="checkbox"
+            role="switch"
+            aria-checked=${nav.forward}
             .checked=${nav.forward}
             @change=${(e) => this.updateGlobal({ navigation: { forward: e.target.checked } })}
           />
-          <label>Forward (R)</label>
-        </div>
-        <div class="toggle-row">
+          Forward (R)
+        </label>
+        <label class="toggle-row">
           <input
             type="checkbox"
+            role="switch"
+            aria-checked=${nav.hoverOutlineAnimated}
             .checked=${nav.hoverOutlineAnimated}
             @change=${(e) =>
               this.updateGlobal({ navigation: { hoverOutlineAnimated: e.target.checked } })}
           />
-          <label>Animated hover outline</label>
-        </div>
+          Animated hover outline
+        </label>
       </div>
     `;
   }

@@ -81,7 +81,7 @@ export function createDefaultState() {
         enabled: false,
         preset: 'none',
         customFilter: '',
-        scope: 'both', // 'images' | 'backgrounds' | 'both'
+        scope: 'images', // 'images' | 'backgrounds' | 'both'
         revealOnHover: true,
       },
       // Empty category entries inherit the active theme pack's media slots.
@@ -152,8 +152,8 @@ export function createDefaultState() {
         walkthroughCompleted: false,
       },
     },
-    // Per-site overrides layered on top of `global`. Keyed by hostname so
-    // this never needs a storage migration to add per-site support later.
+    // Per-site overrides layered on top of `global` via
+    // `store.getResolvedStateForHost(hostname)`. Keyed by hostname.
     perSite: {
       // 'example.com': { enabled: true, color: { baseColor: '#00ffaa' } }
     },

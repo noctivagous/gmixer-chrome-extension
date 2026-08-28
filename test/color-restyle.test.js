@@ -430,7 +430,6 @@ describe('buildCss page paint', () => {
     global.themeMode = 'dark';
     global.color.intensity = 10;
     global.color.identityMode = 'restyle';
-    const theme = buildPalette(global.color.baseColor, global.color.scheme, 'dark');
     // Intensity still blends neutrals, but headers use structural fills like Tone.
     const css = buildCss(global, pageWithBrandIdentity());
     assert.match(css, /--site-header-background-color: var\(--gmixer-bg-secondary\)/);

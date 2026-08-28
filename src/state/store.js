@@ -4,7 +4,7 @@
 // writes via `store.update()`. Nothing touches chrome.storage or postMessage
 // directly outside of this module and storage-adapter.js.
 
-import { createDefaultState } from './schema.js';
+import { createDefaultState, SCHEMA_VERSION } from './schema.js';
 import { loadPersistedState, persistState, onPersistedStateChanged } from './storage-adapter.js';
 
 function deepMerge(base, patch) {
@@ -21,26 +21,14 @@ function deepMerge(base, patch) {
   return result;
 }
 
-function migrateTypography(state, persisted) {
-  const persistedFonts = persisted?.global?.fonts;
-  if (!persistedFonts || persistedFonts.headings) return state;
-  const fonts = state.global.fonts;
-  state.global.fonts = {
-    ...fonts,
-    headings: {
-      h1: persistedFonts.headers || fonts.headings.h1,
-      h2: persistedFonts.subheadings || fonts.headings.h2,
-      h3: persistedFonts.subheadings || fonts.headings.h3,
-      h4: persistedFonts.subheadings || fonts.headings.h4,
-      h5: persistedFonts.subheadings || fonts.headings.h5,
-      h6: persistedFonts.subheadings || fonts.headings.h6,
-    },
-  };
-  return state;
-}
-
-function applyMigrations(state, persisted) {
-  return migrateTypography(state, persisted);
+export function isCurrentPersistedState(persisted) {
+  return !!(
+    persisted &&
+    typeof persisted === 'object' &&
+    persisted.version === SCHEMA_VERSION &&
+    persisted.global &&
+    typeof persisted.global === 'object'
+  );
 }
 
 export class SettingsStore {
@@ -55,13 +43,13 @@ export class SettingsStore {
 
   async _init() {
     const persisted = await loadPersistedState();
-    if (persisted) {
-      this._state = applyMigrations(deepMerge(this._state, persisted), persisted);
+    if (isCurrentPersistedState(persisted)) {
+      this._state = deepMerge(this._state, persisted);
     }
     onPersistedStateChanged(async () => {
       const latest = await loadPersistedState();
-      if (latest) {
-        this._state = applyMigrations(deepMerge(createDefaultState(), latest), latest);
+      if (isCurrentPersistedState(latest)) {
+        this._state = deepMerge(createDefaultState(), latest);
         this._notify();
       }
     });

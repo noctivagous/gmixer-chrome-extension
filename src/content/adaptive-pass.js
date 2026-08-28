@@ -15,9 +15,6 @@ import {
   tagBackgroundImageElements,
   removeBackgroundImageOverlays,
 } from './background-image-tagger.js';
-import {
-  removeTonalSurfaceLayers,
-} from './tonal-surface-layer.js';
 import { removeStyle } from './style-injector.js';
 
 /**
@@ -39,7 +36,6 @@ export function runAdaptivePass(resolved) {
   // site's own colors, not on gMixer's previous pass. This is synchronous, so
   // no paint occurs between removal and the caller's replacement stylesheet.
   removeStyle();
-  removeTonalSurfaceLayers();
   removeBackgroundImageOverlays();
   const classification = classifyPage();
   // Classification marks ads before the sample walk so identity scoring can
@@ -62,7 +58,7 @@ export function runAdaptivePass(resolved) {
  * @returns {{ stamped: number, scanned: number }}
  */
 export function runAdaptiveSubtreePass(root, resolved) {
-  const classification = classifySubtree(root);
+  const classification = classifySubtree(root, { skipClassified: true });
 
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements(root);
@@ -73,7 +69,6 @@ export function runAdaptiveSubtreePass(root, resolved) {
 
 /** Tear down adaptive DOM annotations when gMixer is disabled for the host. */
 export function clearAdaptivePass() {
-  removeTonalSurfaceLayers();
   removeBackgroundImageOverlays();
   // Link shimmer is owned by content-end (stopLinkShimmer) so we do not import
   // it here and create a cycle with style-injector consumers.

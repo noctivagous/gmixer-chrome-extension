@@ -5,6 +5,8 @@
 // roles for the restyle engine, and is re-run on newly added subtrees by the
 // MutationObserver.
 //
+import { MAX_CLASSIFIER_SCAN } from './scan-limits.js';
+
 export const ROLE_ATTR = 'data-gmixer-role';
 export const MEDIA_ATTR = 'data-gmixer-media';
 export const CONFIDENCE_ATTR = 'data-gmixer-confidence';
@@ -29,7 +31,7 @@ const TONE_RANK_ROLES = new Set([
   'hero',
   'main',
 ]);
-const MAX_SCAN = 2500;
+const MAX_SCAN = MAX_CLASSIFIER_SCAN;
 const classificationCache = new WeakMap();
 
 const STRUCTURAL_RULES = [
@@ -629,19 +631,26 @@ export function assignToneSteps(root = document.body, steps = SURFACE_LADDER_STE
  * Safe to call repeatedly — attributes are idempotent.
  *
  * @param {ParentNode} [root]
+ * @param {{ skipClassified?: boolean }} [options]
+ *   When true (incremental mutation pass), already-stamped nodes keep their
+ *   attributes so we don't clear/restamp and re-run getComputedStyle on them.
  * @returns {{ stamped: number, scanned: number, surfaces: number, toneSteps: number }}
  */
-export function classifySubtree(root = document.body) {
+export function classifySubtree(root = document.body, options = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') {
     return { stamped: 0, scanned: 0, surfaces: 0, toneSteps: 0 };
   }
 
+  const skipClassified = options.skipClassified === true;
   let stamped = 0;
   let scanned = 0;
   for (const el of elementsUnder(root)) {
     if (scanned >= MAX_SCAN) break;
     if (!isOwnedByGmixer(el)) {
       scanned += 1;
+      if (skipClassified && (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR))) {
+        continue;
+      }
       clearClassification(el);
       const classification = classifyElement(el);
       if (classification) {

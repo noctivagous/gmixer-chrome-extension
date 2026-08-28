@@ -38,6 +38,11 @@ export class ClippingPanel extends StoreBoundElement {
       align-items: center;
       gap: 6px;
     }
+    label.toggle-row {
+      margin: 0;
+      opacity: 1;
+      font-size: 12px;
+    }
   `;
 
   render() {
@@ -45,14 +50,16 @@ export class ClippingPanel extends StoreBoundElement {
     if (!clipping) return html``;
 
     return html`
-      <div class="toggle-row">
+      <label class="toggle-row">
         <input
           type="checkbox"
+          role="switch"
+          aria-checked=${clipping.enabled}
           .checked=${clipping.enabled}
           @change=${(e) => this.updateGlobal({ clipping: { enabled: e.target.checked } })}
         />
-        <label style="margin:0">Enable corner clipping</label>
-      </div>
+        Enable corner clipping
+      </label>
 
       <label>Preset</label>
       <select @change=${(e) => this.updateGlobal({ clipping: { preset: e.target.value } })}>

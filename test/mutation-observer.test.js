@@ -103,8 +103,11 @@ describe('mutation-observer', () => {
     };
 
     let navigationCount = 0;
+    let subtreeCount = 0;
     startMutationObserver({
-      onSubtree() {},
+      onSubtree() {
+        subtreeCount += 1;
+      },
       onCascadeThreat() {},
       onNavigation() {
         navigationCount += 1;
@@ -121,5 +124,6 @@ describe('mutation-observer', () => {
     ]);
     await Promise.resolve();
     assert.equal(navigationCount, 1);
+    assert.equal(subtreeCount, 0);
   });
 });

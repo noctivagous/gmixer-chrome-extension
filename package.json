@@ -14,6 +14,7 @@
     "fonts:fetch": "node scripts/fetch-wiegel-fonts.mjs",
     "fonts:google": "node scripts/fetch-google-fonts.mjs",
     "fonts:reclassify": "node scripts/reclassify-fonts.mjs",
+    "lint": "eslint src test build.js scripts",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
@@ -21,6 +22,9 @@
     "lit": "^3.2.0"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0"
   }
 }

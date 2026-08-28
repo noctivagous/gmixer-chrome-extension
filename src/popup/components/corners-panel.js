@@ -43,6 +43,11 @@ export class CornersPanel extends StoreBoundElement {
       align-items: center;
       gap: 6px;
     }
+    label.toggle-row {
+      margin: 0;
+      opacity: 1;
+      font-size: 12px;
+    }
     .toggle-row label {
       margin: 0;
     }
@@ -85,14 +90,16 @@ export class CornersPanel extends StoreBoundElement {
     const bevel = corners.bevel ?? {};
 
     return html`
-      <div class="toggle-row">
+      <label class="toggle-row">
         <input
           type="checkbox"
+          role="switch"
+          aria-checked=${corners.enabled}
           .checked=${corners.enabled}
           @change=${(e) => this.updateGlobal({ corners: { enabled: e.target.checked } })}
         />
-        <label>Override corner radius</label>
-      </div>
+        Override corner radius
+      </label>
       <p class="hint">
         Forces the same radius on matching elements (e.g. 0 for sharp corners on every site).
         When Clipping is also on, Corners wins on shared properties.
@@ -117,17 +124,19 @@ export class CornersPanel extends StoreBoundElement {
       <div class="corners-grid">
         ${CORNER_KEYS.map(
           (corner) => html`
-            <div class="toggle-row">
+            <label class="toggle-row">
               <input
                 type="checkbox"
+                role="switch"
+                aria-checked=${!!bevel[corner.id]}
                 .checked=${!!bevel[corner.id]}
                 @change=${(e) =>
                   this.updateGlobal({
                     corners: { bevel: { [corner.id]: e.target.checked } },
                   })}
               />
-              <label>${corner.label}</label>
-            </div>
+              ${corner.label}
+            </label>
           `
         )}
       </div>

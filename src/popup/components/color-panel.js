@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
 import { buildPalette, hexToHsl, hslToHex, SCHEMES } from '../../lib/color-theory.js';
+import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
 import { defineElement } from '../../lib/define-element.js';
 
@@ -111,7 +112,7 @@ export class ColorPanel extends StoreBoundElement {
     }
     .color-selection-grid {
       display: grid;
-      grid-template-columns: auto 42px 1fr;
+      grid-template-columns: auto 106px 1fr;
       gap: 16px;
       align-items: start;
       margin-bottom: 16px;
@@ -157,7 +158,7 @@ export class ColorPanel extends StoreBoundElement {
     }
     .hsl-sliders {
       display: grid;
-      grid-template-columns: repeat(2, 18px);
+      grid-template-columns: repeat(2, 50px);
       gap: 6px;
       justify-content: center;
       min-height: 160px;
@@ -168,13 +169,67 @@ export class ColorPanel extends StoreBoundElement {
       gap: 5px;
       justify-items: center;
       font-size: 9px;
-      opacity: 0.75;
+      opacity: 0.9;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.7));
+      font-weight: 700;
+    }
+    .hsl-slider-shell {
+      position: relative;
+      width: 50px;
+      height: 150px;
+    }
+    .hsl-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px;
+      background-image:
+        linear-gradient(to top, var(--hsl-band-0-a), var(--hsl-band-0-b)),
+        linear-gradient(to top, var(--hsl-band-1-a), var(--hsl-band-1-b)),
+        linear-gradient(to top, var(--hsl-band-2-a), var(--hsl-band-2-b)),
+        linear-gradient(to top, var(--hsl-band-3-a), var(--hsl-band-3-b));
+      background-size: calc(100% / var(--hsl-band-count, 1)) 100%;
+      background-position:
+        calc(0 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(1 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(2 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(3 * 100% / var(--hsl-band-count, 1)) 0;
+      background-repeat: no-repeat;
+      pointer-events: none;
     }
     .hsl-slider input {
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: 150px;
+      height: 50px;
       margin: 0;
-      writing-mode: vertical-lr;
-      direction: rtl;
+      transform: translate(-50%, -50%) rotate(-90deg);
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    .hsl-slider input::-webkit-slider-runnable-track {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 0;
+      height: 50px;
+    }
+    .hsl-slider input::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 10px;
+      height: 48px;
+      margin: 0;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+      cursor: grab;
     }
     .scheme-options {
       display: flex;
@@ -360,8 +415,26 @@ export class ColorPanel extends StoreBoundElement {
       <div class="color-selection-grid">
         <gmixer-color-wheel></gmixer-color-wheel>
         <div class="hsl-sliders" aria-label="Color adjustments">
-          ${this._renderVerticalHslSlider('S', 'Saturation', hsl.s, 0, 100, 's')}
-          ${this._renderVerticalHslSlider('L', 'Lightness', hsl.l, 8, 92, 'l')}
+          ${this._renderVerticalHslSlider(
+            'S',
+            'Saturation',
+            hsl.s,
+            0,
+            100,
+            's',
+            color.baseColor,
+            color.scheme
+          )}
+          ${this._renderVerticalHslSlider(
+            'L',
+            'Lightness',
+            hsl.l,
+            8,
+            92,
+            'l',
+            color.baseColor,
+            color.scheme
+          )}
         </div>
         <div>
           <div class="scheme-options" role="group" aria-label="Color scheme">
@@ -496,18 +569,25 @@ export class ColorPanel extends StoreBoundElement {
     this.updateGlobal({ color: { baseColor: hslToHex({ ...hsl, [key]: Number(value) }) } });
   }
 
-  _renderVerticalHslSlider(shortLabel, label, value, min, max, key) {
+  _renderVerticalHslSlider(shortLabel, label, value, min, max, key, baseColor, scheme) {
     return html`
       <label class="hsl-slider">
-        <input
-          type="range"
-          min=${min}
-          max=${max}
-          step="1"
-          .value=${String(Math.round(value))}
-          aria-label=${label}
-          @input=${(event) => this._setHsl(key, event.target.value)}
-        />
+        <span class="hsl-slider-shell">
+          <span
+            class="hsl-track"
+            style=${schemeHslTrackStyle(baseColor, scheme, key)}
+            aria-hidden="true"
+          ></span>
+          <input
+            type="range"
+            min=${min}
+            max=${max}
+            step="1"
+            .value=${String(Math.round(value))}
+            aria-label=${label}
+            @input=${(event) => this._setHsl(key, event.target.value)}
+          />
+        </span>
         <span>${shortLabel}</span>
       </label>
     `;

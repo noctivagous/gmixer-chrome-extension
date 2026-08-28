@@ -1,7 +1,8 @@
-import { html, css } from 'lit';
+import { html, css, svg } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
 import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theory.js';
+import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { defineElement } from '../../lib/define-element.js';
 
 import '../../popup/components/color-panel.js';
@@ -17,11 +18,11 @@ function schemeDot(angleDeg, fill, radius = 7) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
   const cx = 12 + Math.cos(rad) * radius;
   const cy = 12 + Math.sin(rad) * radius;
-  return html`<circle cx=${cx.toFixed(2)} cy=${cy.toFixed(2)} r="2.6" fill=${fill} />`;
+  return svg`<circle cx=${cx.toFixed(2)} cy=${cy.toFixed(2)} r="2.6" fill=${fill} />`;
 }
 
 function schemeIconRing() {
-  return html`
+  return svg`
     <circle
       cx="12"
       cy="12"
@@ -45,34 +46,34 @@ function schemeCategoryIcon(schemeId) {
   const indigo = '#6366f1';
 
   /** @type {import('lit').TemplateResult} */
-  let dots = html``;
+  let dots = svg``;
   switch (schemeId) {
     case 'analog':
-      dots = html`
+      dots = svg`
         ${schemeDot(-28, warm)}
         ${schemeDot(0, base)}
         ${schemeDot(28, gold)}
       `;
       break;
     case 'complement':
-      dots = html`${schemeDot(0, base)} ${schemeDot(180, green)}`;
+      dots = svg`${schemeDot(0, base)} ${schemeDot(180, green)}`;
       break;
     case 'splitComplement':
-      dots = html`
+      dots = svg`
         ${schemeDot(0, base)}
         ${schemeDot(152, teal)}
         ${schemeDot(208, indigo)}
       `;
       break;
     case 'triadic':
-      dots = html`
+      dots = svg`
         ${schemeDot(0, base)}
         ${schemeDot(120, green)}
         ${schemeDot(240, blue)}
       `;
       break;
     case 'tetradic':
-      dots = html`
+      dots = svg`
         ${schemeDot(0, base)}
         ${schemeDot(90, gold)}
         ${schemeDot(180, green)}
@@ -80,7 +81,7 @@ function schemeCategoryIcon(schemeId) {
       `;
       break;
     default:
-      dots = html`${schemeDot(0, base)}`;
+      dots = svg`${schemeDot(0, base)}`;
       break;
   }
 
@@ -94,6 +95,53 @@ function schemeCategoryIcon(schemeId) {
       focusable="false"
     >
       ${schemeIconRing()} ${dots}
+    </svg>
+  `;
+}
+
+/** @param {number} index */
+function walkthroughTabIcon(index) {
+  const icons = [
+    svg`
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 4v16" />
+    `,
+    svg`
+      <path d="M12 3C7 3 3 7 3 12s4 9 9 9c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1a1.6 1.6 0 0 1 1.6-1.6h2c3.1 0 5.6-2.5 5.6-5.6C22 6.4 17.5 3 12 3Z" />
+      <circle cx="8" cy="9" r=".6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="7" r=".6" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="9" r=".6" fill="currentColor" stroke="none" />
+    `,
+    svg`
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9" r="1.5" />
+      <path d="m4 17 4.5-4 3.5 3 3-3 5 4" />
+    `,
+    svg`
+      <path d="M5 6V4h14v2" />
+      <path d="M12 4v16" />
+      <path d="M8 20h8" />
+    `,
+    svg`
+      <path d="m12 3 1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4L12 3Z" />
+      <path d="m19 16 .6 2.4L22 19l-2.4.6L19 22l-.6-2.4L16 19l2.4-.6L19 16Z" />
+    `,
+  ];
+  return html`
+    <svg
+      class="tab-icon"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      ${icons[index] || icons[0]}
     </svg>
   `;
 }
@@ -126,43 +174,111 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     .header {
-      padding: var(--gm-space-3, 24px) var(--gm-space-3, 24px) var(--gm-space-2, 16px);
+      padding: 0 0 var(--gm-space-2, 16px);
       border-bottom: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
       text-align: center;
     }
 
-    h2 {
+    .titlebar {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) 40px;
+      align-items: center;
+      gap: 8px;
+      padding: var(--gm-space-2, 16px) var(--gm-space-3, 24px);
+      border-bottom: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+    }
+
+    .titlebar .brand {
+      grid-column: 2;
       margin: 0;
       font-size: 20px;
       font-weight: 700;
       letter-spacing: -0.01em;
+      text-align: center;
+    }
+
+    .titlebar .close {
+      grid-column: 3;
+      justify-self: end;
+      position: static;
+      top: auto;
+      right: auto;
+      padding: 4px 8px;
+      border: 0;
+      background: transparent;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.65));
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .titlebar .close:hover,
+    .titlebar .close:focus-visible {
+      color: var(--gm-text, #f2eefc);
     }
 
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       justify-content: center;
       gap: 8px;
-      margin-top: 16px;
+      margin: 16px var(--gm-space-3, 24px) 0;
+    }
+
+    .step-description {
+      margin: 16px 0 0;
+      padding: 14px var(--gm-space-3, 24px) 0;
+      border-top: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+      font-size: 14px;
+      line-height: 1.45;
+      text-align: left;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.75));
     }
 
     .tab {
-      display: grid;
-      place-items: center;
-      width: 8px;
-      height: 8px;
-      padding: 0;
-      border: 0;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.2);
-      color: transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 6px 12px 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--gm-muted, rgba(242, 238, 252, 0.72));
       cursor: pointer;
-      transition: background 200ms ease;
+      font: 650 11px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+    }
+
+    .tab-icon {
+      display: block;
+      flex: 0 0 18px;
+      width: 18px;
+      height: 18px;
+      opacity: 0.55;
     }
 
     .tab:hover,
-    .tab:focus-visible,
+    .tab:focus-visible {
+      color: var(--gm-text, #f2eefc);
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(139, 92, 246, 0.12);
+    }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--gm-accent, #7c3aed);
+      outline-offset: 2px;
+    }
+
     .tab[aria-selected='true'] {
-      background: var(--gm-accent, #7c3aed);
+      color: var(--gm-text, #f2eefc);
+      border-color: var(--gm-accent, #7c3aed);
+      background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
+    }
+
+    .tab[aria-selected='true'] .tab-icon {
+      opacity: 1;
       box-shadow: 0 0 8px var(--gm-accent, #7c3aed);
     }
 
@@ -183,25 +299,62 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     .preview {
+      display: flex;
+      flex-direction: column;
       min-width: 0;
-      padding: var(--gm-space-3, 24px);
-      overflow-y: auto;
+      min-height: 0;
+      padding: var(--gm-space-2, 16px);
+      overflow: hidden;
       border-left: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
       background: rgba(0, 0, 0, 0.16);
     }
 
-    .preview-label {
-      display: block;
-      margin: 0 0 var(--gm-space-2, 16px);
-      color: var(--gm-muted, rgba(242, 238, 252, 0.65));
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+    .preview-card {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.12));
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .preview-titlebar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 4px 12px;
+      border-bottom: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--gm-text, #f2eefc);
+      font: 700 11px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-align: center;
+    }
+
+    .preview-body {
+      flex: 1;
+      min-height: 0;
+      padding: 12px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #6d36c9 #11151c;
     }
 
     .slide {
       animation: fadeIn 300ms ease-out;
+    }
+
+    .slide:focus,
+    .slide:focus-visible {
+      outline: none;
+    }
+
+    gmixer-color-scheme-scales {
+      outline: none;
     }
 
     @keyframes fadeIn {
@@ -211,7 +364,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     .footer {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 8px;
       padding: var(--gm-space-2, 16px) var(--gm-space-3, 24px);
       border-top: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
       background: rgba(0, 0, 0, 0.18);
@@ -247,30 +401,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
     button.nav:disabled {
       opacity: 0.3;
       cursor: not-allowed;
-    }
-
-    .intro-text {
-      font-size: 14px;
-      margin-bottom: 24px;
-      color: var(--gm-muted, rgba(242, 238, 252, 0.75));
-    }
-
-    .close {
-      position: absolute;
-      top: 12px;
-      right: 16px;
-      padding: 4px 8px;
-      border: 0;
-      background: transparent;
-      color: var(--gm-muted, rgba(242, 238, 252, 0.65));
-      cursor: pointer;
-      font-size: 18px;
-      line-height: 1;
-    }
-
-    .close:hover,
-    .close:focus-visible {
-      color: var(--gm-text, #f2eefc);
     }
 
     .scheme-options {
@@ -355,14 +485,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     .color-picker-row {
       display: grid;
-      grid-template-columns: auto 42px;
+      grid-template-columns: auto 106px;
       gap: 16px;
       align-items: start;
     }
 
     .hsl-sliders {
       display: grid;
-      grid-template-columns: repeat(2, 18px);
+      grid-template-columns: repeat(2, 50px);
       gap: 6px;
       justify-content: center;
       min-height: 160px;
@@ -377,12 +507,67 @@ export class GmixerWalkthrough extends StoreBoundElement {
       font: 700 9px/1 system-ui, sans-serif;
     }
 
+    .hsl-slider-shell {
+      position: relative;
+      width: 50px;
+      height: 150px;
+    }
+
+    .hsl-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px;
+      background-image:
+        linear-gradient(to top, var(--hsl-band-0-a), var(--hsl-band-0-b)),
+        linear-gradient(to top, var(--hsl-band-1-a), var(--hsl-band-1-b)),
+        linear-gradient(to top, var(--hsl-band-2-a), var(--hsl-band-2-b)),
+        linear-gradient(to top, var(--hsl-band-3-a), var(--hsl-band-3-b));
+      background-size: calc(100% / var(--hsl-band-count, 1)) 100%;
+      background-position:
+        calc(0 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(1 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(2 * 100% / var(--hsl-band-count, 1)) 0,
+        calc(3 * 100% / var(--hsl-band-count, 1)) 0;
+      background-repeat: no-repeat;
+      pointer-events: none;
+    }
+
     .hsl-slider input {
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: 150px;
+      height: 50px;
       margin: 0;
-      writing-mode: vertical-lr;
-      direction: rtl;
-      accent-color: var(--gm-accent, #7c3aed);
+      transform: translate(-50%, -50%) rotate(-90deg);
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .hsl-slider input::-webkit-slider-runnable-track {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 0;
+      height: 50px;
+    }
+
+    .hsl-slider input::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 10px;
+      height: 48px;
+      margin: 0;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+      cursor: grab;
     }
 
     .grayscale-control {
@@ -644,10 +829,41 @@ export class GmixerWalkthrough extends StoreBoundElement {
         min-height: auto;
       }
 
-      .hsl-slider input {
+      .hsl-slider-shell {
         width: 100%;
-        writing-mode: initial;
-        direction: initial;
+        height: 50px;
+      }
+
+      .hsl-track {
+        background-image:
+          linear-gradient(to right, var(--hsl-band-0-a), var(--hsl-band-0-b)),
+          linear-gradient(to right, var(--hsl-band-1-a), var(--hsl-band-1-b)),
+          linear-gradient(to right, var(--hsl-band-2-a), var(--hsl-band-2-b)),
+          linear-gradient(to right, var(--hsl-band-3-a), var(--hsl-band-3-b));
+        background-size: 100% calc(100% / var(--hsl-band-count, 1));
+        background-position:
+          0 calc(0 * 100% / var(--hsl-band-count, 1)),
+          0 calc(1 * 100% / var(--hsl-band-count, 1)),
+          0 calc(2 * 100% / var(--hsl-band-count, 1)),
+          0 calc(3 * 100% / var(--hsl-band-count, 1));
+      }
+
+      .hsl-slider input {
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 50px;
+        transform: none;
+      }
+
+      .hsl-slider input::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 50px;
+      }
+
+      .hsl-slider input::-webkit-slider-thumb {
+        width: 10px;
+        height: 48px;
       }
     }
 
@@ -703,13 +919,15 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _close() {
-    const popover = document.getElementById('gmixer-walkthrough-host');
-    if (popover && typeof popover.hidePopover === 'function') {
-      popover.hidePopover();
-    }
+    this._dismissWalkthrough();
   }
 
   _finish() {
+    this._dismissWalkthrough();
+  }
+
+  /** Closing or finishing both permanently dismiss auto-open onboarding. */
+  _dismissWalkthrough() {
     this.updateGlobal({ ui: { walkthroughCompleted: true } });
     const popover = document.getElementById('gmixer-walkthrough-host');
     if (popover && typeof popover.hidePopover === 'function') {
@@ -722,7 +940,12 @@ export class GmixerWalkthrough extends StoreBoundElement {
       (node) => node?.tagName === 'INPUT' || node?.tagName === 'SELECT'
     );
     // An explicit "off" checkbox selection is a choice not to opt in.
-    if (control?.tagName === 'INPUT' && control.type === 'checkbox' && !control.checked) return;
+    if (
+      (control?.tagName === 'INPUT' && control.type === 'checkbox' && !control.checked) ||
+      event?.detail?.filterEnabled === false
+    ) {
+      return;
+    }
 
     const patch = {
       activeThemePackId: 'user-made',
@@ -854,18 +1077,25 @@ export class GmixerWalkthrough extends StoreBoundElement {
     });
   }
 
-  _renderColorHslSlider(shortLabel, label, value, min, max, key) {
+  _renderColorHslSlider(shortLabel, label, value, min, max, key, baseColor, scheme) {
     return html`
       <label class="hsl-slider">
-        <input
-          type="range"
-          min=${min}
-          max=${max}
-          step="1"
-          .value=${String(Math.round(value))}
-          aria-label=${label}
-          @input=${(event) => this._setColorHsl(key, event.target.value)}
-        />
+        <span class="hsl-slider-shell">
+          <span
+            class="hsl-track"
+            style=${schemeHslTrackStyle(baseColor, scheme, key)}
+            aria-hidden="true"
+          ></span>
+          <input
+            type="range"
+            min=${min}
+            max=${max}
+            step="1"
+            .value=${String(Math.round(value))}
+            aria-label=${label}
+            @input=${(event) => this._setColorHsl(key, event.target.value)}
+          />
+        </span>
         <span>${shortLabel}</span>
       </label>
     `;
@@ -874,8 +1104,10 @@ export class GmixerWalkthrough extends StoreBoundElement {
   render() {
     return html`
       <div class="header">
-        <button type="button" class="close" aria-label="Close walkthrough" @click=${this._close}>×</button>
-        <h2>${this._getTitle()}</h2>
+        <div class="titlebar">
+          <h2 class="brand">Welcome to gMixer</h2>
+          <button type="button" class="close" aria-label="Close walkthrough" @click=${this._close}>×</button>
+        </div>
         <div class="tabs" role="tablist" aria-label="Walkthrough steps">
           ${[0, 1, 2, 3, 4].map(
             (i) => html`
@@ -889,10 +1121,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
                 tabindex=${i === this.currentSlide ? '0' : '-1'}
                 @click=${() => this._selectSlide(i)}
                 @keydown=${(event) => this._onTabKeyDown(event, i)}
-              ></button>
+              >${walkthroughTabIcon(i)}<span>${this._getTabLabel(i)}</span></button>
             `
           )}
         </div>
+        <p class="step-description">${this._getDescription()}</p>
       </div>
       <div class="main">
         <div class="content">
@@ -904,9 +1137,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
             aria-label=${this._getTitle()}
           >${this._renderSlide()}</div>
         </div>
-        <aside class="preview" aria-label="Live theme preview">
-          <span class="preview-label">Live preview</span>
-          <gmixer-theme-preview-panel></gmixer-theme-preview-panel>
+        <aside class="preview">
+          <div class="preview-card" aria-labelledby="walkthrough-preview-title">
+            <div class="preview-titlebar" id="walkthrough-preview-title">Live Preview</div>
+            <div class="preview-body">
+              <gmixer-theme-preview-panel ?hide-pack-name=${true}></gmixer-theme-preview-panel>
+            </div>
+          </div>
         </aside>
       </div>
       <div class="footer">
@@ -918,7 +1155,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
           Back
         </button>
         <button class="nav primary" @click=${this._next}>
-          ${this.currentSlide === 4 ? 'Finish' : 'Next'}
+          ${this.currentSlide === 4 ? 'Finish' : `Next: ${this._getTabLabel(this.currentSlide + 1)}`}
         </button>
       </div>
     `;
@@ -926,13 +1163,34 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _getTitle(index = this.currentSlide) {
     const titles = [
-      'Welcome to gMixer',
+      'Tone',
       'Color Scheme',
       'Chroming Media',
       'Typography',
       'Effects',
     ];
     return titles[index];
+  }
+
+  _getTabLabel(index = this.currentSlide) {
+    const labels = ['Tone', 'Color Scheme', 'Chroming Media', 'Typography', 'Effects'];
+    return labels[index] || this._getTitle(index);
+  }
+
+  _getDescription(index = this.currentSlide) {
+    if (index === 1) {
+      return this._isColorSchemeEnabled()
+        ? 'How do you want it to look? Pick a base color and a scheme.'
+        : 'Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.';
+    }
+    const descriptions = [
+      'Welcome to gMixer, a web page themer. To start, choose the light mode for pages.',
+      '',
+      'How do you want images and videos to look?',
+      'Choose the typefaces that fit your style.',
+      'Finally, add some visual effects to the page.',
+    ];
+    return descriptions[index] || '';
   }
 
   _renderSlide() {
@@ -957,9 +1215,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
     const activeModeMeta = THEME_MODES.find((mode) => mode.id === activeMode) || THEME_MODES[2];
     const activePalette = this._tonePalette(activeMode);
     return html`
-      <p class="intro-text">
-        Welcome to gMixer, a web page themer. To start, choose the light mode for pages.
-      </p>
       <div class="tone-picker">
         <div class="tone-tabs" role="tablist" aria-label="Select tone">
           ${THEME_MODES.map((mode, index) => {
@@ -1022,20 +1277,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
     const monochromeLightness = Math.round(hexToHsl(color?.baseColor || '#8a8a8a').l);
     const colorHsl = hexToHsl(color?.baseColor || '#8a8a8a');
     return html`
-      <p class="intro-text">
-        ${colorEnabled
-          ? 'How do you want it to look? Pick a base color and a scheme.'
-          : 'Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.'}
-      </p>
       <div class="color-mode-switch" role="group" aria-label="Color mode">
-        <button
-          type="button"
-          class="color-mode-option"
-          aria-pressed=${colorEnabled}
-          @click=${() => this._setColorMode(true)}
-        >
-          Color
-        </button>
         <button
           type="button"
           class="color-mode-option"
@@ -1044,6 +1286,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
         >
           Monochrome
         </button>
+        <button
+          type="button"
+          class="color-mode-option"
+          aria-pressed=${colorEnabled}
+          @click=${() => this._setColorMode(true)}
+        >
+          Color
+        </button>
       </div>
       <div class="color-slide">
         ${colorEnabled
@@ -1051,8 +1301,26 @@ export class GmixerWalkthrough extends StoreBoundElement {
               <div class="color-picker-row">
                 <gmixer-color-wheel></gmixer-color-wheel>
                 <div class="hsl-sliders" aria-label="Color adjustments">
-                  ${this._renderColorHslSlider('S', 'Saturation', colorHsl.s, 0, 100, 's')}
-                  ${this._renderColorHslSlider('L', 'Lightness', colorHsl.l, 8, 92, 'l')}
+                  ${this._renderColorHslSlider(
+                    'S',
+                    'Saturation',
+                    colorHsl.s,
+                    0,
+                    100,
+                    's',
+                    color?.baseColor || '#8a8a8a',
+                    color?.scheme || 'analog'
+                  )}
+                  ${this._renderColorHslSlider(
+                    'L',
+                    'Lightness',
+                    colorHsl.l,
+                    8,
+                    92,
+                    'l',
+                    color?.baseColor || '#8a8a8a',
+                    color?.scheme || 'analog'
+                  )}
                 </div>
               </div>
             `
@@ -1112,7 +1380,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _renderSlide3() {
     return html`
-      <p class="intro-text">How do you want images and videos to look?</p>
       <gmixer-image-filter-panel
         @change=${(event) => this._activateSection('filter', event)}
       ></gmixer-image-filter-panel>
@@ -1121,7 +1388,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _renderSlide4() {
     return html`
-      <p class="intro-text">Choose the typefaces that fit your style.</p>
       <gmixer-fonts-panel
         @change=${(event) => this._activateSection('fonts', event)}
       ></gmixer-fonts-panel>
@@ -1130,7 +1396,6 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _renderSlide5() {
     return html`
-      <p class="intro-text">Finally, add some visual effects to the page.</p>
       <gmixer-effects-panel
         @change=${(event) => this._activateSection('effects', event)}
       ></gmixer-effects-panel>

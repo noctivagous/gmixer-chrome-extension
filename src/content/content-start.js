@@ -18,20 +18,28 @@
 // refreshes with the true current settings (still without page sampling).
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle, STYLE_ELEMENT_ID } from './style-injector.js';
-import { readCssCache, writeCssCache, clearCssCache } from './css-cache.js';
+import {
+  cssCacheFingerprint,
+  cssCacheScope,
+  readCssCache,
+  writeCssCache,
+  clearCssCache,
+} from './css-cache.js';
 import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
 
 async function applyStaticTheme() {
   const hostname = location.hostname;
+  const scope = cssCacheScope(location);
 
   // Kick the cache read immediately — don't wait for store merge.
-  const cachePromise = readCssCache(hostname).then((cachedCss) => {
-    if (cachedCss && !document.getElementById(STYLE_ELEMENT_ID)) {
-      injectStyle(cachedCss);
+  const cachePromise = readCssCache(hostname, scope).then((cached) => {
+    if (cached && !document.getElementById(STYLE_ELEMENT_ID)) {
+      injectStyle(cached.css);
     }
+    return cached;
   });
 
-  await Promise.all([store.ready, cachePromise]);
+  const [, cached] = await Promise.all([store.ready, cachePromise]);
 
   const resolved = store.getResolvedStateForHost(hostname);
   if (resolved.enabled === false) {
@@ -40,10 +48,21 @@ async function applyStaticTheme() {
     return;
   }
 
+  // The early cache read intentionally races settings resolution. Once the
+  // current settings are known, replace any stale cached theme immediately.
+  const fingerprint = cssCacheFingerprint(resolved);
+  const cacheMatches =
+    cached?.scope === scope && cached.fingerprint === fingerprint;
+
+  // Keep a validated analyzed stylesheet in place until document_end can
+  // perform its synchronous adaptive refresh. This avoids downgrading a good
+  // cache hit back to the less complete static stylesheet.
+  if (cacheMatches && cached.css) return;
+
   // Static only: pure theme palette, no live page sample.
   const css = buildCss(resolved, null);
   injectStyle(css);
-  await writeCssCache(hostname, css);
+  await writeCssCache(hostname, scope, resolved, css);
 }
 
 installEarlyMessageQueue();

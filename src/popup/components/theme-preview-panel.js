@@ -6,6 +6,7 @@ import { getFontById } from '../../config/fonts.js';
 import { createDefaultState } from '../../state/schema.js';
 import { roleColors } from './palette-swatches.js';
 import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
+import { imageFilterPresetCss } from '../../content/style-injector.js';
 import { defineElement } from '../../lib/define-element.js';
 
 function paletteForPack(pack, mode = 'dark') {
@@ -44,6 +45,10 @@ const SAMPLE_IMAGE_SRC = `data:image/svg+xml,${SAMPLE_IMAGE_SVG}`;
  * Tone Light/Gray/Dark controls live in gmixer-color-panel (merged Color module).
  */
 export class ThemePreviewPanel extends StoreBoundElement {
+  static properties = {
+    hidePackName: { type: Boolean, attribute: 'hide-pack-name' },
+  };
+
   static styles = css`
     :host {
       display: grid;
@@ -143,9 +148,6 @@ export class ThemePreviewPanel extends StoreBoundElement {
       border-radius: 4px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       background: #2a2438;
-    }
-    .blurb-image[data-filter='monochrome'] {
-      filter: grayscale(1) contrast(1.08);
     }
     .blurb-image-caption {
       margin: 0;
@@ -264,13 +266,28 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const captionFamily = fontFamily(fonts.captions?.fontId);
     const uiFamily = fontFamily(fonts.ui?.fontId || fonts.paragraph?.fontId);
     const codeFamily = fontFamily(fonts.code?.fontId);
-    const mediaFilter = global?.imageFilter?.enabled
-      ? global.imageFilter.preset
-      : pack.media?.defaultFilter && pack.media.defaultFilter !== 'none'
+    const filterState = global?.imageFilter;
+    const filterSectionOn = global?.sections?.filter === true;
+    const colorOn = global?.sections?.color === true;
+    // Match page paint: Media section + imageFilter.enabled, and only when
+    // scope includes images (the sample is an <img>, not a background).
+    const applyPreviewFilter =
+      filterSectionOn &&
+      filterState?.enabled &&
+      filterState.scope !== 'backgrounds' &&
+      filterState.preset &&
+      filterState.preset !== 'none';
+    const packFallbackFilter =
+      !applyPreviewFilter && pack.media?.defaultFilter && pack.media.defaultFilter !== 'none'
         ? pack.media.defaultFilter
-        : pack.patch?.imageFilter?.enabled
+        : !applyPreviewFilter && pack.patch?.imageFilter?.enabled
           ? pack.patch.imageFilter.preset
           : 'none';
+    const mediaFilter = applyPreviewFilter ? filterState.preset : packFallbackFilter;
+    const mediaFilterCss =
+      mediaFilter && mediaFilter !== 'none'
+        ? imageFilterPresetCss(mediaFilter, colors, filterState?.customFilter || '', { colorOn })
+        : 'none';
     const effectsOn = previewEffectsActive(global);
     const previewEffectsCss = effectsOn
       ? buildPreviewEffectsCss(global.effects, { accent: colors.accent })
@@ -281,7 +298,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
         ? html`<style>${previewEffectsCss}</style>`
         : null}
       <div class="theme-preview">
-        <strong class="pack-name">${pack.label}</strong>
+        ${this.hidePackName ? null : html`<strong class="pack-name">${pack.label}</strong>`}
         <div
           class="blurb"
           style="
@@ -347,6 +364,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                   width="160"
                   height="120"
                   data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
+                  style=${mediaFilterCss !== 'none' ? `filter: ${mediaFilterCss}` : ''}
                   draggable="false"
                 />
               </span>

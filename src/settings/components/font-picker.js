@@ -16,6 +16,7 @@ export class FontPicker extends LitElement {
     target: { type: String },
     showAll: { type: Boolean, attribute: 'show-all' },
     open: { state: true },
+    activeId: { state: true },
   };
 
   static styles = css`
@@ -130,6 +131,7 @@ export class FontPicker extends LitElement {
     this.target = '';
     this.showAll = false;
     this.open = false;
+    this.activeId = '';
     this._onDocClick = (e) => {
       if (!this.open) return;
       if (!e.composedPath().includes(this)) this.open = false;
@@ -146,6 +148,12 @@ export class FontPicker extends LitElement {
     document.removeEventListener('click', this._onDocClick, true);
   }
 
+  updated(changed) {
+    if (changed.has('open') && this.open) {
+      this.renderRoot?.querySelector?.('#gmixer-font-list')?.focus?.();
+    }
+  }
+
   _fonts() {
     if (this.target) {
       return getFontsForTarget(this.target, { showAll: this.showAll });
@@ -160,6 +168,65 @@ export class FontPicker extends LitElement {
     return bits.join(' · ');
   }
 
+  _ids() {
+    return this._fonts().map((font) => font.id);
+  }
+
+  _moveActive(delta) {
+    const ids = this._ids();
+    if (ids.length === 0) return;
+    const current = this.activeId || this.value || ids[0];
+    const index = Math.max(0, ids.indexOf(current));
+    const next = ids[(index + delta + ids.length) % ids.length];
+    this.activeId = next;
+    this.updateComplete.then(() => {
+      this.renderRoot?.querySelector?.(`#gmixer-font-${next}`)?.scrollIntoView?.({ block: 'nearest' });
+    });
+  }
+
+  _onTriggerKey(e) {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      this.open = true;
+      this.activeId = this.value || this._ids()[0] || '';
+    }
+  }
+
+  _onListKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.open = false;
+      this.renderRoot?.querySelector?.('.trigger')?.focus?.();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this._moveActive(1);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this._moveActive(-1);
+      return;
+    }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      const ids = this._ids();
+      this.activeId = ids[0] || '';
+      return;
+    }
+    if (e.key === 'End') {
+      e.preventDefault();
+      const ids = this._ids();
+      this.activeId = ids[ids.length - 1] || '';
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (this.activeId) this._pick(this.activeId);
+    }
+  }
+
   render() {
     const fonts = this._fonts();
     const current = getFontById(this.value) || fonts[0];
@@ -167,14 +234,24 @@ export class FontPicker extends LitElement {
       category,
       fonts: fonts.filter((f) => f.category === category.id),
     })).filter((g) => g.fonts.length > 0);
+    const listId = 'gmixer-font-list';
+    const triggerId = 'gmixer-font-trigger';
+    const activeId = this.activeId || this.value || current?.id || '';
 
     return html`
       <button
+        id=${triggerId}
         type="button"
         class="trigger"
         aria-haspopup="listbox"
         aria-expanded=${this.open}
-        @click=${() => (this.open = !this.open)}
+        aria-label=${`Font: ${current?.label || 'Choose font'}`}
+        aria-controls=${listId}
+        @click=${() => {
+          this.open = !this.open;
+          if (this.open) this.activeId = this.value || fonts[0]?.id || '';
+        }}
+        @keydown=${this._onTriggerKey}
       >
         <span class="trigger-meta">
           <span style="font-family: ${current?.family || 'inherit'}">${current?.label || 'Font'}</span>
@@ -186,7 +263,15 @@ export class FontPicker extends LitElement {
       </button>
       ${this.open
         ? html`
-            <ul class="list" role="listbox">
+            <ul
+              id=${listId}
+              class="list"
+              role="listbox"
+              tabindex="0"
+              aria-labelledby=${triggerId}
+              aria-activedescendant=${activeId ? `gmixer-font-${activeId}` : ''}
+              @keydown=${this._onListKey}
+            >
               ${byCategory.length === 0
                 ? html`<li class="empty">No fonts for this role — enable Show all.</li>`
                 : byCategory.map(
@@ -196,10 +281,12 @@ export class FontPicker extends LitElement {
                         (font) => html`
                           <li role="none">
                             <button
+                              id=${`gmixer-font-${font.id}`}
                               type="button"
                               class="option"
                               role="option"
                               aria-selected=${font.id === this.value}
+                              @mouseenter=${() => (this.activeId = font.id)}
                               @click=${() => this._pick(font.id)}
                             >
                               <span style="font-family: ${font.family}">${font.label}</span>

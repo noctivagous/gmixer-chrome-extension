@@ -14,6 +14,7 @@ import { GRID, GRID_CSS_VARS } from '../settings/tokens.js';
 import { ensureDocumentFontFaces } from '../lib/font-faces.js';
 import {
   MSG_TOGGLE_SETTINGS,
+  MSG_OPEN_SETTINGS,
   MSG_TOGGLE_SITE,
   MSG_OPEN_WALKTHROUGH,
 } from '../messaging/messages.js';
@@ -21,6 +22,7 @@ import { drainEarlyMessageQueue } from '../messaging/early-message-queue.js';
 import { toggleSiteTheming } from '../state/site-enable.js';
 import { createDefaultState } from '../state/schema.js';
 import { store } from '../state/store.js';
+import { isTypingContext } from './clickable-detector.js';
 
 export const SETTINGS_POPOVER_ID = 'gmixer-settings';
 export const WALKTHROUGH_POPOVER_ID = 'gmixer-walkthrough-host';
@@ -181,6 +183,7 @@ export async function ensureSettingsPopover() {
     el.id = SETTINGS_POPOVER_ID;
     el.setAttribute('popover', 'manual');
     el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'gMixer Settings');
     el.appendChild(document.createElement('gmixer-settings'));
     document.documentElement.appendChild(el);
@@ -200,6 +203,7 @@ export async function ensureWalkthroughPopover() {
     el.id = WALKTHROUGH_POPOVER_ID;
     el.setAttribute('popover', 'manual');
     el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'gMixer Walkthrough');
     el.appendChild(document.createElement('gmixer-walkthrough'));
     document.documentElement.appendChild(el);
@@ -214,6 +218,7 @@ export async function openWalkthroughPopover() {
   if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
     el.showPopover();
   }
+  focusFirstIn(el);
   return el;
 }
 
@@ -247,6 +252,7 @@ async function applySettingsOpenDom(open) {
     const el = await ensureSettingsPopover();
     if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
       el.showPopover();
+      focusFirstIn(el);
     }
     return;
   }
@@ -301,15 +307,112 @@ export async function toggleSettingsPopover() {
   return true;
 }
 
+function isWalkthroughOpen() {
+  const el = document.getElementById(WALKTHROUGH_POPOVER_ID);
+  return !!el?.matches?.(':popover-open');
+}
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function firstFocusable(root) {
+  if (!root) return null;
+  if (root.shadowRoot) {
+    const inner = root.shadowRoot.querySelector(FOCUSABLE);
+    if (inner) return inner;
+  }
+  try {
+    const light = root.querySelector?.(FOCUSABLE);
+    if (light) return light;
+  } catch {
+    // Invalid selector context in some hosts.
+  }
+  const tree = root.querySelectorAll?.('*') ?? [];
+  for (const child of tree) {
+    if (child.shadowRoot) {
+      const inner = child.shadowRoot.querySelector(FOCUSABLE);
+      if (inner) return inner;
+    }
+  }
+  return null;
+}
+
+function focusFirstIn(root) {
+  const target = firstFocusable(root);
+  if (target && typeof target.focus === 'function') target.focus();
+}
+
+function focusablesIn(root) {
+  /** @type {HTMLElement[]} */
+  const out = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (node.shadowRoot) visit(node.shadowRoot);
+    const list = node.querySelectorAll?.(FOCUSABLE);
+    if (!list) return;
+    for (const el of list) {
+      out.push(el);
+      if (el.shadowRoot) visit(el.shadowRoot);
+    }
+  };
+  visit(root);
+  return out.filter((el) => {
+    if (el.disabled || el.getAttribute?.('aria-hidden') === 'true') return false;
+    const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+    return !style || (style.visibility !== 'hidden' && style.display !== 'none');
+  });
+}
+
+function trapTab(event, root) {
+  if (event.key !== 'Tab' || !root) return;
+  const items = focusablesIn(root);
+  if (items.length === 0) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  const activeInside =
+    root.contains(active) ||
+    items.includes(/** @type {HTMLElement} */ (active));
+  if (event.shiftKey) {
+    if (!activeInside || active === first) {
+      event.preventDefault();
+      last.focus();
+    }
+  } else if (!activeInside || active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function isTypingTarget(target) {
-  if (!target || target.nodeType !== Node.ELEMENT_NODE) return false;
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
-  return false;
+  return isTypingContext(target);
 }
 
 async function onKeyDown(e) {
+  if (e.key === 'Escape') {
+    if (isWalkthroughOpen()) {
+      e.preventDefault();
+      const walkthrough = document.getElementById(WALKTHROUGH_POPOVER_ID);
+      if (walkthrough && typeof walkthrough.hidePopover === 'function') {
+        walkthrough.hidePopover();
+      }
+      return;
+    }
+    if (isPopoverOpen()) {
+      e.preventDefault();
+      await closeSettingsPopover();
+      return;
+    }
+  }
+
+  const activePopover = isWalkthroughOpen()
+    ? document.getElementById(WALKTHROUGH_POPOVER_ID)
+    : isPopoverOpen()
+      ? document.getElementById(SETTINGS_POPOVER_ID)
+      : null;
+  if (activePopover) {
+    trapTab(e, activePopover);
+  }
+
   if (!(e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)) return;
   if (isTypingTarget(e.target)) return;
 
@@ -331,6 +434,12 @@ function onRuntimeMessage(message, _sender, sendResponse) {
   if (message?.type === MSG_TOGGLE_SETTINGS) {
     toggleSettingsPopover()
       .then((open) => sendResponse({ ok: true, open }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+  if (message?.type === MSG_OPEN_SETTINGS) {
+    openSettingsPopover()
+      .then(() => sendResponse({ ok: true, open: true }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
   }
@@ -376,5 +485,7 @@ export function initSettingsHost() {
         void initializeWalkthrough().then(() => openWalkthroughPopover());
       }
     })
-    .catch(() => {});
+    .catch((err) => {
+      console.warn('[gMixer] settings host failed to initialize', err);
+    });
 }
