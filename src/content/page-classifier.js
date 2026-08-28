@@ -5,6 +5,9 @@
 // roles for the restyle engine, and is re-run on newly added subtrees by the
 // MutationObserver.
 //
+// Prefer size/tag/ARIA heuristics over host-specific code. Do not branch on
+// hostname when a generic rule can cover the same layout pattern.
+//
 import { MAX_CLASSIFIER_SCAN } from './scan-limits.js';
 
 export const ROLE_ATTR = 'data-gmixer-role';
@@ -122,7 +125,7 @@ const SURFACE_SKIP_TAGS = new Set([
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
 const TOKEN_RE = /[\s_-]+/;
 const SURFACE_PROMOTE_MAX_DEPTH = 3;
-/** Large page canvases (Gmail panes, full-width wrappers) hide slabs far below depth 3. */
+/** Large page canvases hide slabs far below depth 3. Size heuristic — no host checks. */
 const SURFACE_PROMOTE_DEEP_DEPTH = 16;
 const SURFACE_PROMOTE_MIN_WIDTH = 40;
 const SURFACE_PROMOTE_MIN_HEIGHT = 16;
@@ -303,10 +306,11 @@ export function classifyElement(el) {
     }
   }
 
-  if (tag !== 'IMG' && tag !== 'VIDEO') {
+  if (tag !== 'IMG' && tag !== 'VIDEO' && !PHRASING_TAGS.has(tag)) {
     if (typeof getComputedStyle === 'function') {
       const style = getComputedStyle(el);
-      if (style.backgroundImage && style.backgroundImage !== 'none') {
+      const bgImage = style.backgroundImage || '';
+      if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
         const value = {
           media: 'background-image',
           confidence: 0.78,
@@ -350,9 +354,11 @@ function firstCssColorToken(value) {
   return match ? match[0] : '';
 }
 
-function captureNativeLuminance(el) {
-  if (typeof getComputedStyle !== 'function') return;
-  const style = getComputedStyle(el);
+function captureNativeLuminance(el, style) {
+  if (!style) {
+    if (typeof getComputedStyle !== 'function') return;
+    style = getComputedStyle(el);
+  }
   let lum = relativeLuminanceFromCss(style.backgroundColor || '');
   if (lum == null) {
     lum = relativeLuminanceFromCss(firstCssColorToken(style.backgroundImage || ''));
@@ -436,18 +442,28 @@ export function stampOpaquePaintTargets(root = document.body) {
       ? document
       : root;
   const nodes = scope.querySelectorAll?.(OPAQUE_PAINT_TARGET_SELECTORS) || [];
-  let stamped = 0;
+  /** @type {{ el: Element, style: CSSStyleDeclaration }[]} */
+  const toStamp = [];
+  /** @type {Element[]} */
+  const toClear = [];
   for (const el of nodes) {
     if (isOwnedByGmixer(el)) continue;
-    if (isOpaqueBackground(el)) {
-      const had = el.hasAttribute(NATIVE_L_ATTR);
-      captureNativeLuminance(el);
-      if (!had && el.hasAttribute(NATIVE_L_ATTR)) stamped += 1;
+    const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+    if (style && isOpaqueBackground(el, style)) {
+      toStamp.push({ el, style });
     } else {
-      // Transparent layout hosts must not keep a fill gate.
-      el.removeAttribute(NATIVE_L_ATTR);
-      el.removeAttribute(TONE_STEP_ATTR);
+      toClear.push(el);
     }
+  }
+  let stamped = 0;
+  for (const { el, style } of toStamp) {
+    const had = el.hasAttribute(NATIVE_L_ATTR);
+    captureNativeLuminance(el, style);
+    if (!had && el.hasAttribute(NATIVE_L_ATTR)) stamped += 1;
+  }
+  for (const el of toClear) {
+    el.removeAttribute(NATIVE_L_ATTR);
+    el.removeAttribute(TONE_STEP_ATTR);
   }
   return stamped;
 }
@@ -483,9 +499,11 @@ function hasCssGradientFill(backgroundImage) {
   return CSS_GRADIENT_RE.test(backgroundImage || '');
 }
 
-function isOpaqueBackground(el) {
-  if (typeof getComputedStyle !== 'function') return false;
-  const style = getComputedStyle(el);
+function isOpaqueBackground(el, style) {
+  if (!style) {
+    if (typeof getComputedStyle !== 'function') return false;
+    style = getComputedStyle(el);
+  }
   const bg = style.backgroundColor || '';
   if (bg && bg !== 'transparent') {
     const rgba = bg.match(
@@ -645,7 +663,7 @@ function isLargePaintedSheet(el) {
   if (typeof el.getBoundingClientRect !== 'function') return false;
   const rect = el.getBoundingClientRect();
   const vw = typeof window !== 'undefined' ? window.innerWidth || 0 : 0;
-  // Inbox/list rows are wide and short (Gmail `tr` ~40px).
+  // Inbox/list rows are wide and short (~40px). Size-only — no host checks.
   if (
     vw > 0 &&
     rect.width >= vw * 0.6 &&
@@ -655,7 +673,7 @@ function isLargePaintedSheet(el) {
   ) {
     return true;
   }
-  // Mid-width opaque cards/search shells (X.com sidebar widgets).
+  // Mid-width opaque cards / search shells.
   if (
     rect.width >= 240 &&
     rect.width <= 480 &&
@@ -676,9 +694,9 @@ function isLargePaintedSheet(el) {
 
 /**
  * Seed large page sheets that are opaque but were not stamped by structural
- * rules. Walks through transparent layout wrappers so `body > div.bg-white`,
- * Gmail panes, and table-free sidebar columns are found without matching
- * only `section`/`main`.
+ * rules. Walks through transparent layout wrappers so `body > div.bg-white`
+ * and table-free sidebar columns are found without matching only
+ * `section`/`main`. Do not add hostname branches.
  *
  * @param {ParentNode} root
  * @returns {number}
@@ -722,7 +740,7 @@ export function seedPageSheets(root) {
   }
 
   // Mutation subtree passes receive the added node itself (e.g. a hydrated
-  // `body > div.bg-white` or a Gmail inbox row). Walk only sees children.
+  // `body > div.bg-white` or a list row). Walk only sees children.
   consider(start);
 
   let budget = SHEET_WALK_BUDGET;
@@ -802,19 +820,22 @@ export function classifySubtree(root = document.body, options = {}) {
   const skipClassified = options.skipClassified === true;
   let stamped = 0;
   let scanned = 0;
+  /** @type {{ el: Element, classification: ReturnType<typeof classifyElement> }[]} */
+  const pending = [];
   for (const el of elementsUnder(root)) {
     if (scanned >= MAX_SCAN) break;
-    if (!isOwnedByGmixer(el)) {
-      scanned += 1;
-      if (skipClassified && (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR))) {
-        continue;
-      }
-      clearClassification(el);
-      const classification = classifyElement(el);
-      if (classification) {
-        stamp(el, classification);
-        stamped += 1;
-      }
+    if (isOwnedByGmixer(el)) continue;
+    scanned += 1;
+    if (skipClassified && (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR))) {
+      continue;
+    }
+    pending.push({ el, classification: classifyElement(el) });
+  }
+  for (const { el, classification } of pending) {
+    if (!skipClassified) clearClassification(el);
+    if (classification) {
+      stamp(el, classification);
+      stamped += 1;
     }
   }
 

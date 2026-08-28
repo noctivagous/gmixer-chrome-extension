@@ -1,4 +1,4 @@
-import { MAX_MEDIA_EFFECT_SCAN } from './scan-limits.js';
+import { MAX_MEDIA_EFFECT_SCAN, MIN_MEDIA_EFFECT_PX } from './scan-limits.js';
 
 export const SCENE_ATTR = 'data-gmixer-rotating-cube-scene';
 export const CUBE_ATTR = 'data-gmixer-rotating-cube';
@@ -39,21 +39,27 @@ function addCubes() {
     media.add(image.closest('picture') || image);
   }
 
+  /** @type {{ element: HTMLElement, width: number, height: number, computed: CSSStyleDeclaration }[]} */
+  const measured = [];
   for (const element of media) {
     if (!(element instanceof HTMLElement)) continue;
     if (element.parentElement?.hasAttribute(SCENE_ATTR)) continue;
     if (element.parentElement?.hasAttribute(FACE_ATTR)) continue;
-
     const width = element.offsetWidth;
     const height = element.offsetHeight;
-    if (!width || !height) continue;
+    if (width < MIN_MEDIA_EFFECT_PX || height < MIN_MEDIA_EFFECT_PX) continue;
+    measured.push({ element, width, height, computed: getComputedStyle(element) });
+  }
+
+  for (const { element, width, height, computed } of measured) {
+    if (element.parentElement?.hasAttribute(SCENE_ATTR)) continue;
+    if (element.parentElement?.hasAttribute(FACE_ATTR)) continue;
 
     // Keep the original WxH face; depth follows the shorter side for a cuboid.
     const depth = Math.max(32, Math.round(Math.min(width, height)));
 
     const scene = document.createElement('span');
     scene.setAttribute(SCENE_ATTR, '');
-    const computed = getComputedStyle(element);
     scene.style.display = computed.display === 'block' ? 'block' : 'inline-block';
     scene.style.verticalAlign = computed.verticalAlign;
     scene.style.width = `${width}px`;

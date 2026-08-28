@@ -1,5 +1,5 @@
 import { normalizeEffects } from '../config/effects-catalog.js';
-import { MAX_MEDIA_EFFECT_SCAN } from './scan-limits.js';
+import { MAX_MEDIA_EFFECT_SCAN, MIN_MEDIA_EFFECT_PX } from './scan-limits.js';
 
 export const FRAME_ATTR = 'data-gmixer-pan-scan-frame';
 export const TARGET_ATTR = 'data-gmixer-pan-scan-target';
@@ -53,18 +53,22 @@ function addFrames() {
     media.add(image.closest('picture') || image);
   }
 
+  /** @type {{ element: HTMLElement, width: number, height: number, computed: CSSStyleDeclaration }[]} */
+  const measured = [];
   for (const element of media) {
     if (!(element instanceof HTMLElement) || element.parentElement?.hasAttribute(FRAME_ATTR)) {
       continue;
     }
-
     const width = element.offsetWidth;
     const height = element.offsetHeight;
-    if (!width || !height) continue;
+    if (width < MIN_MEDIA_EFFECT_PX || height < MIN_MEDIA_EFFECT_PX) continue;
+    measured.push({ element, width, height, computed: getComputedStyle(element) });
+  }
 
+  for (const { element, width, height, computed } of measured) {
+    if (element.parentElement?.hasAttribute(FRAME_ATTR)) continue;
     const frame = document.createElement('span');
     frame.setAttribute(FRAME_ATTR, '');
-    const computed = getComputedStyle(element);
     frame.style.display = computed.display === 'block' ? 'block' : 'inline-block';
     frame.style.position = 'relative';
     frame.style.width = `${width}px`;
@@ -101,9 +105,12 @@ function bindTargets(panScan) {
     const image = frame.querySelector(`img:not([${REST_ATTR}])`);
     if (!(image instanceof HTMLElement)) continue;
 
-    syncRestTwin(frame, image, panScan);
-
     if (image.dataset.gmixerPanScanBound === '1') {
+      if (panScan.loop === 'fade') {
+        if (!frame.querySelector(`[${REST_ATTR}]`)) syncRestTwin(frame, image, panScan);
+      } else {
+        frame.querySelector(`[${REST_ATTR}]`)?.remove();
+      }
       applyParams(image, panScan);
       if (image.dataset.gmixerPanScanMotion !== panScan.motion) {
         image.dataset.gmixerPanScanMotion = panScan.motion;
@@ -113,6 +120,8 @@ function bindTargets(panScan) {
       }
       continue;
     }
+
+    syncRestTwin(frame, image, panScan);
 
     image.dataset.gmixerPanScanBound = '1';
     image.dataset.gmixerPanScanMotion = panScan.motion;

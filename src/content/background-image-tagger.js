@@ -6,7 +6,7 @@
 // *resolved* background-image, and stamp a data attribute on matches so
 // the CSS selector can reach them too. Only runs when the image filter is
 // enabled with a scope that cares about backgrounds — most installs never
-// pay this cost.
+// pay this cost. Tag by computed style, not by hostname.
 import { BACKGROUND_IMAGE_ATTR } from './style-injector.js';
 import { MAX_BACKGROUND_IMAGE_SCAN } from './scan-limits.js';
 
@@ -17,7 +17,36 @@ export const BACKGROUND_IMAGE_OVERLAY_CLASS = 'gmixer-bgimg-overlay';
 // page-sampler.js, just applied to a bigger candidate set since coverage
 // (finding every themed hero banner) matters more here than for sampling.
 const MAX_SCAN = MAX_BACKGROUND_IMAGE_SCAN;
-const SKIP_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'SOURCE', 'SCRIPT', 'STYLE', 'NOSCRIPT']);
+const SKIP_TAGS = new Set([
+  'IMG',
+  'VIDEO',
+  'PICTURE',
+  'SOURCE',
+  'SCRIPT',
+  'STYLE',
+  'NOSCRIPT',
+  'BR',
+  'WBR',
+  'HR',
+  'PATH',
+  'SVG',
+  'CANVAS',
+]);
+const SKIP_PHRASING = new Set([
+  'A',
+  'ABBR',
+  'B',
+  'EM',
+  'I',
+  'LABEL',
+  'SMALL',
+  'SPAN',
+  'STRONG',
+  'SUB',
+  'SUP',
+  'TIME',
+  'U',
+]);
 
 /**
  * Walk elements under `root` without materializing the full `querySelectorAll('*')`
@@ -74,30 +103,50 @@ export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}) {
 export function tagBackgroundImageElements(root = document.body) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
 
+  /** @type {Element[]} */
+  const toTag = [];
+  /** @type {Element[]} */
+  const toUntag = [];
   let scanned = 0;
   for (const el of walkElements(root, MAX_SCAN)) {
     if (scanned >= MAX_SCAN) break;
     if (
       SKIP_TAGS.has(el.tagName) ||
+      SKIP_PHRASING.has(el.tagName) ||
       el.classList?.contains(BACKGROUND_IMAGE_OVERLAY_CLASS) ||
       el.closest('#gmixer-settings')
-    ) continue;
+    ) {
+      continue;
+    }
     scanned++;
+
+    // Already tagged from a prior pass: skip getComputedStyle. Incremental
+    // mutations must not re-read the whole tree.
+    if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) {
+      if (!el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
+        toTag.push(el);
+      }
+      continue;
+    }
 
     const bg = getComputedStyle(el).backgroundImage;
     const hasImage = !!bg && bg !== 'none' && bg.includes('url(');
-    if (hasImage) {
-      if (!el.hasAttribute(BACKGROUND_IMAGE_ATTR)) el.setAttribute(BACKGROUND_IMAGE_ATTR, '');
-      if (!el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
-        const overlay = document.createElement('span');
-        overlay.className = BACKGROUND_IMAGE_OVERLAY_CLASS;
-        overlay.setAttribute('aria-hidden', 'true');
-        el.prepend(overlay);
-      }
-    } else if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) {
-      el.removeAttribute(BACKGROUND_IMAGE_ATTR);
-      el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)?.remove();
+    if (hasImage) toTag.push(el);
+    else if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) toUntag.push(el);
+  }
+
+  for (const el of toTag) {
+    if (!el.hasAttribute(BACKGROUND_IMAGE_ATTR)) el.setAttribute(BACKGROUND_IMAGE_ATTR, '');
+    if (!el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
+      const overlay = document.createElement('span');
+      overlay.className = BACKGROUND_IMAGE_OVERLAY_CLASS;
+      overlay.setAttribute('aria-hidden', 'true');
+      el.prepend(overlay);
     }
+  }
+  for (const el of toUntag) {
+    el.removeAttribute(BACKGROUND_IMAGE_ATTR);
+    el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)?.remove();
   }
 }
 

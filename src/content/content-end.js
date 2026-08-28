@@ -9,6 +9,9 @@
 // Also: re-assert the stylesheet into <head>, refresh the session CSS cache
 // for the next navigation's document_start, sync opt-in navigation, and
 // mount the in-page Settings host (toolbar / Alt+M / Alt+N).
+//
+// Performance: keep this host-agnostic. Prefer URL-shape, size, and tag
+// heuristics over `hostname === …` special cases.
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle } from './style-injector.js';
 import { startMutationObserver } from './mutation-observer.js';
@@ -24,7 +27,12 @@ import { waitForPageSettle } from './page-settle.js';
 import { syncLinkShimmer, rescanLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
 import { syncPanScan } from './pan-scan.js';
 import { syncRotatingCube } from './rotating-cube.js';
-import { LAYOUT_RESAMPLE_DEBOUNCE_MS, SPA_ROUTE_DEBOUNCE_MS } from './adaptive-timing.js';
+import {
+  LAYOUT_RESAMPLE_DEBOUNCE_MS,
+  MUTATION_DEBOUNCE_MS,
+  SPA_ROUTE_DEBOUNCE_MS,
+  isDocumentNavigation,
+} from './adaptive-timing.js';
 
 async function main() {
   await store.ready;
@@ -77,26 +85,41 @@ async function main() {
     },
   });
 
-  const stopObserving = startMutationObserver({
-    // New page content: reclassify / retag the added subtree, then reassert CSS.
-    onSubtree(roots) {
-      const resolved = store.getResolvedStateForHost(hostname);
-      if (resolved.enabled === false) {
-        syncPanScan(resolved);
-        syncRotatingCube(resolved);
-        removeStyle();
-        clearAdaptivePass();
-        stopLinkShimmer();
-        return;
-      }
-      for (const root of roots) {
-        runAdaptiveSubtreePass(root, resolved);
-      }
+  let mutationTimer = 0;
+  /** @type {Element[]} */
+  let queuedRoots = [];
+
+  const flushSubtree = () => {
+    mutationTimer = 0;
+    const roots = collapseMutationRoots(queuedRoots);
+    queuedRoots = [];
+    const resolved = store.getResolvedStateForHost(hostname);
+    if (resolved.enabled === false) {
       syncPanScan(resolved);
       syncRotatingCube(resolved);
-      injectStyle(buildCss(resolved, sample));
-      syncLinkShimmer(resolved);
-      rescanLinkShimmer();
+      removeStyle();
+      clearAdaptivePass();
+      stopLinkShimmer();
+      return;
+    }
+    for (const root of roots) {
+      runAdaptiveSubtreePass(root, resolved);
+    }
+    syncPanScan(resolved);
+    syncRotatingCube(resolved);
+    // CSS is generated from resolved + identity sample, not from stamps.
+    // Rebuilding/re-appending the stylesheet on every mutation batch forces
+    // style recalc; cascade-order threats reassert via onCascadeThreat.
+    syncLinkShimmer(resolved);
+    rescanLinkShimmer();
+  };
+
+  const stopObserving = startMutationObserver({
+    // New page content: reclassify / retag the added subtree.
+    onSubtree(roots) {
+      queuedRoots.push(...roots);
+      if (mutationTimer) return;
+      mutationTimer = window.setTimeout(flushSubtree, MUTATION_DEBOUNCE_MS);
     },
     // Stylesheets or head changes: cascade order may have beaten us — reassert.
     onCascadeThreat() {
@@ -121,6 +144,7 @@ async function main() {
   const teardown = () => {
     unsubscribe();
     stopObserving();
+    if (mutationTimer) window.clearTimeout(mutationTimer);
     nav.destroy();
   };
   window.addEventListener('pagehide', teardown, { once: true });
@@ -134,6 +158,26 @@ async function main() {
 
 function layoutKey() {
   return `${window.innerWidth}x${window.innerHeight}:${Math.round(document.documentElement.scrollHeight / 200)}`;
+}
+
+/**
+ * Drop disconnected nodes and children of another queued root so one
+ * pane insert is classified once, not once per nested widget.
+ * @param {Element[]} roots
+ * @returns {Element[]}
+ */
+function collapseMutationRoots(roots) {
+  const unique = [];
+  const seen = new Set();
+  for (const el of roots) {
+    if (!el || seen.has(el)) continue;
+    if (typeof el.isConnected === 'boolean' && !el.isConnected) continue;
+    seen.add(el);
+    unique.push(el);
+  }
+  return unique.filter(
+    (el) => !unique.some((other) => other !== el && typeof other.contains === 'function' && other.contains(el))
+  );
 }
 
 /**
@@ -163,7 +207,12 @@ function watchLayoutAndSpa(reapply, layout) {
   window.addEventListener('resize', scheduleLayoutResample, { passive: true });
 
   let routeTimer = 0;
+  let lastHref = globalThis.location?.href ?? '';
   const onSpaNav = () => {
+    const nextHref = globalThis.location?.href ?? '';
+    const documentNav = isDocumentNavigation(lastHref, nextHref);
+    lastHref = nextHref;
+    if (!documentNav) return;
     clearTimeout(routeTimer);
     routeTimer = window.setTimeout(() => {
       void waitForPageSettle().then(reapply);

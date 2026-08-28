@@ -116,6 +116,21 @@ describe('page-classifier', () => {
     assert.equal(classifyElement(col)?.role, 'sidebar');
   });
 
+  it('does not classify phrasing nodes as background-image media from computed style', () => {
+    const previous = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundImage: 'url("https://example.test/icon.png")',
+      backgroundColor: 'transparent',
+    });
+    try {
+      assert.equal(classifyElement(el('span', { class: 'icon' })), null);
+      const stage = classifyElement(el('div', { class: 'photo-stage' }));
+      assert.equal(stage?.media, 'background-image');
+    } finally {
+      globalThis.getComputedStyle = previous;
+    }
+  });
+
   it('does not classify Slashdot-style story title/byline spans as articles', () => {
     const title = el('span', { class: 'story-title' });
     const byline = el('span', { class: 'story-byline' });

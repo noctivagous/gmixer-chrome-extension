@@ -6,7 +6,10 @@
 //
 // Never imported from content-start.js. Classification of new subtrees is
 // the adaptive pass's job; this module only detects relevant mutations and
-// forwards roots to the caller.
+// forwards roots to the caller. Route handling uses URL shape (path vs hash),
+// not hostname.
+
+import { isDocumentNavigation } from './adaptive-timing.js';
 
 /**
  * @typedef {object} MutationHandlers
@@ -55,18 +58,19 @@ export function startMutationObserver(handlers) {
 
   const flush = () => {
     pending = false;
+    const previousUrl = lastUrl;
     const currentUrl = globalThis.location?.href ?? '';
-    const urlChanged = currentUrl !== lastUrl;
+    const urlChanged = currentUrl !== previousUrl;
     lastUrl = currentUrl;
     const roots = Array.from(pendingRoots);
     const threatened = cascadeThreat;
     pendingRoots = new Set();
     cascadeThreat = false;
 
-    // SPA route change: skip incremental classify/CSS so we don't paint the
-    // new DOM with the previous route's identity sample. The navigation
-    // handler runs a full resample after the page settles.
-    if (urlChanged) {
+    // Path/search change: skip incremental classify so we don't paint the
+    // new DOM with the previous route's identity sample. Hash-only swaps
+    // keep the same document — classify the added roots. (URL shape, not host.)
+    if (urlChanged && isDocumentNavigation(previousUrl, currentUrl)) {
       onNavigation();
       return;
     }
