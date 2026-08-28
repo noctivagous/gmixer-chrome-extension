@@ -112,14 +112,34 @@ export class ColorPanel extends StoreBoundElement {
     }
     .color-selection-grid {
       display: grid;
-      grid-template-columns: auto 106px 1fr;
+      grid-template-columns: 160px 106px;
       gap: 16px;
       align-items: start;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       margin-bottom: 16px;
       padding: 16px;
       background: rgba(0, 0, 0, 0.2);
       border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .color-selection-grid .scheme-options,
+    .color-selection-grid gmixer-color-scheme-scales {
+      grid-column: 1 / -1;
+      min-width: 0;
+      width: 100%;
+    }
+    .color-selection-grid .scheme-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .color-selection-grid .scheme-option {
+      min-width: 0;
+      padding: 8px 6px;
+      overflow-wrap: anywhere;
     }
     @media (max-width: 480px) {
       .color-selection-grid {
@@ -436,21 +456,19 @@ export class ColorPanel extends StoreBoundElement {
             color.scheme
           )}
         </div>
-        <div>
-          <div class="scheme-options" role="group" aria-label="Color scheme">
-            ${SCHEMES.filter((scheme) => scheme.id !== 'monochrome').map(
-              (scheme) => html`
-                <button
-                  type="button"
-                  class="scheme-option"
-                  aria-pressed=${color.scheme === scheme.id}
-                  @click=${() => this.updateGlobal({ color: { scheme: scheme.id } })}
-                >${scheme.label}</button>
-              `
-            )}
-          </div>
-          <gmixer-color-scheme-scales active-scheme-only></gmixer-color-scheme-scales>
+        <div class="scheme-options" role="group" aria-label="Color scheme">
+          ${SCHEMES.filter((scheme) => scheme.id !== 'monochrome').map(
+            (scheme) => html`
+              <button
+                type="button"
+                class="scheme-option"
+                aria-pressed=${color.scheme === scheme.id}
+                @click=${() => this.updateGlobal({ color: { scheme: scheme.id } })}
+              >${scheme.label}</button>
+            `
+          )}
         </div>
+        <gmixer-color-scheme-scales active-scheme-only></gmixer-color-scheme-scales>
       </div>
 
       <label>Site identity</label>

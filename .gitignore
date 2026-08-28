@@ -11,6 +11,7 @@ extension/background.js.map
 # Scratch directory used by scripts/fetch-wiegel-fonts.mjs
 .tmp-fonts/
 .tmp-fonts-*.json
+tmp/
 
 *.log
 .DS_Store

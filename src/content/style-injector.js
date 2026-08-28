@@ -562,11 +562,14 @@ function roleCss(
       --header-bg: ${headerFill} !important;
       --header-color: ${headerText} !important;
       background-color: ${headerFill} !important;
+      /* Gradients paint above background-color (NTD/Epoch-style mastheads). */
+      background-image: none !important;
       color: ${headerText} !important;
     }
 
     ${maybeOpaque(NAV_CHROME_SELECTORS)} {
       background-color: ${navFill} !important;
+      background-image: none !important;
       color: ${navText} !important;
     }
   `;
@@ -606,11 +609,13 @@ function roleCss(
     }
 
     /* Semantic page regions — opaque-only skips transparent layout wrappers. */
-    ${maybeOpaque(`body > header, body > footer, body > nav, body > aside,
+    ${maybeOpaque(`body > header, body > footer, body footer, body [data-gmixer-role="footer"],
+    body > nav, body > aside,
     body > section,
     body > [role="banner"], body > [role="contentinfo"],
     body > [role="navigation"], body > [role="complementary"]`)} {
       background-color: var(--gmixer-bg-secondary) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -645,6 +650,7 @@ function roleCss(
       ul,
       ol,
       li,
+      div,
       menu,
       button,
       [role="button"],
@@ -812,11 +818,23 @@ function roleCss(
     }
 
     /* Nested ink nodes inherit the host color we set above so site rules on
-       span/div inside links and headings cannot keep dark text on dark tone. */
+       span/div inside links and headings cannot keep dark text on dark tone.
+       X/React apps put body copy on hashed span/div classes, not p/li. */
     a *,
     h1 *, h2 *, h3 *, h4 *, h5 *, h6 *,
     [role="heading"] *,
-    p *, li *, td *, th *, blockquote *, label * {
+    p *, li *, td *, th *, blockquote *, label *,
+    [data-gmixer-role="main"] :is(div, span),
+    [data-gmixer-role="article"] :is(div, span),
+    [data-gmixer-role="article-body"] :is(div, span),
+    [data-gmixer-role="surface"] :is(div, span),
+    [data-gmixer-role="sidebar"] :is(div, span),
+    [data-gmixer-role="header"] :is(div, span),
+    [data-gmixer-role="footer"] :is(div, span),
+    [data-gmixer-role="card"] :is(div, span),
+    [data-gmixer-role="hero"] :is(div, span),
+    [role="main"] :is(div, span),
+    [role="complementary"] :is(div, span) {
       color: inherit !important;
     }
 
@@ -826,6 +844,30 @@ function roleCss(
 
     a:active * {
       color: inherit !important;
+    }
+
+    /* Beat painted-host span/div inherit so links/headings keep their roles. */
+    [data-gmixer-role] a,
+    [data-gmixer-role] a:link,
+    [data-gmixer-role] a:visited {
+      color: var(--gmixer-link) !important;
+    }
+    [data-gmixer-role] a * {
+      color: inherit !important;
+    }
+    [data-gmixer-role] a:hover,
+    [data-gmixer-role] a:focus-visible,
+    [data-gmixer-role] a:hover *,
+    [data-gmixer-role] a:focus-visible * {
+      color: var(--gmixer-brand-hover) !important;
+    }
+    [data-gmixer-role] :is(h1, h2, h3, h4, h5, h6, [role="heading"]) {
+      color: var(--gmixer-accent) !important;
+    }
+    [data-gmixer-role] :is(h1, h2, h3, h4, h5, h6, [role="heading"]) a,
+    [data-gmixer-role] :is(h1, h2, h3, h4, h5, h6, [role="heading"]) a:link,
+    [data-gmixer-role] :is(h1, h2, h3, h4, h5, h6, [role="heading"]) a:visited {
+      color: var(--gmixer-accent) !important;
     }
 
     /* Heading links belong to the heading role, not ordinary body links. */

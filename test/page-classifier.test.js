@@ -5,6 +5,8 @@ import {
   classifyElement,
   classifySubtree,
   promotePaintedSurfaces,
+  seedPageSheets,
+  stampOpaquePaintTargets,
   assignToneSteps,
   ROLE_ATTR,
   MEDIA_ATTR,
@@ -107,6 +109,11 @@ describe('page-classifier', () => {
 
     const skipped = classifySubtree(root, { skipClassified: true });
     assert.ok(skipped.scanned >= 2);
+  });
+
+  it('classifies data-testid sidebarColumn as sidebar', () => {
+    const col = el('div', { 'data-testid': 'sidebarColumn' });
+    assert.equal(classifyElement(col)?.role, 'sidebar');
   });
 
   it('does not classify Slashdot-style story title/byline spans as articles', () => {
@@ -265,6 +272,354 @@ describe('page-classifier', () => {
       assert.equal(item.getAttribute(ROLE_ATTR), null);
     } finally {
       globalThis.getComputedStyle = previous;
+    }
+  });
+
+  function mockAttrs(initial = {}) {
+    const a = { ...initial };
+    return {
+      getAttribute: (name) => a[name] ?? null,
+      setAttribute: (name, value) => {
+        a[name] = String(value);
+      },
+      removeAttribute: (name) => {
+        delete a[name];
+      },
+      hasAttribute: (name) => name in a,
+    };
+  }
+
+  it('seeds large opaque canvases through transparent layout wrappers', () => {
+    const sheet = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'bg-white' }),
+      getBoundingClientRect: () => ({
+        width: 1200,
+        height: 800,
+        top: 0,
+        left: 0,
+        right: 1200,
+        bottom: 800,
+      }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    const wrap = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [sheet],
+      ...mockAttrs({ class: 'pagecont' }),
+      getBoundingClientRect: () => ({
+        width: 1200,
+        height: 800,
+        top: 0,
+        left: 0,
+        right: 1200,
+        bottom: 800,
+      }),
+      _bg: 'rgba(0, 0, 0, 0)',
+    };
+    const column = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ id: 'countercol' }),
+      getBoundingClientRect: () => ({
+        width: 177,
+        height: 500,
+        top: 80,
+        left: 900,
+        right: 1077,
+        bottom: 580,
+      }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    const body = {
+      tagName: 'BODY',
+      nodeType: 1,
+      children: [wrap, column],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({ width: 1200, height: 800 }),
+      _bg: 'rgb(26, 15, 15)',
+    };
+    sheet.parentElement = wrap;
+    wrap.parentElement = body;
+    column.parentElement = body;
+
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.document = { body, documentElement: body };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      const stamped = seedPageSheets(body);
+      assert.equal(stamped, 2);
+      assert.equal(sheet.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(column.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(wrap.getAttribute(ROLE_ATTR), null);
+
+      // MutationObserver subtree pass receives the added canvas itself.
+      const hydrated = {
+        tagName: 'DIV',
+        nodeType: 1,
+        children: [],
+        ...mockAttrs({ class: 'relative z-10 bg-white' }),
+        getBoundingClientRect: () => ({
+          width: 1200,
+          height: 800,
+          top: 0,
+          left: 0,
+          right: 1200,
+          bottom: 800,
+        }),
+        _bg: 'rgb(255, 255, 255)',
+      };
+      assert.equal(seedPageSheets(hydrated), 1);
+      assert.equal(hydrated.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('stamps native luminance from CSS gradient fills on transparent headers', () => {
+    const header = {
+      tagName: 'HEADER',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'Header_header' }),
+      getBoundingClientRect: () => ({ width: 1200, height: 60 }),
+      _bg: 'rgba(0, 0, 0, 0)',
+      _bgImage: 'linear-gradient(208deg, rgb(0, 102, 203) 41.12%, rgb(0, 65, 129) 131.51%)',
+    };
+    const root = {
+      nodeType: 11,
+      querySelectorAll: (selector) => {
+        if (String(selector).includes('header') || String(selector).includes('HEADER')) {
+          return [header];
+        }
+        return [header];
+      },
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: node._bgImage || 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 1);
+      assert.ok(header.hasAttribute(NATIVE_L_ATTR));
+      assert.notEqual(header.getAttribute(NATIVE_L_ATTR), '0.0000');
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds mid-width opaque cards and composers as page sheets', () => {
+    const card = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'widget' }),
+      getBoundingClientRect: () => ({
+        width: 350,
+        height: 300,
+        top: 80,
+        left: 1200,
+        right: 1550,
+        bottom: 380,
+      }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    const composer = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'composer' }),
+      getBoundingClientRect: () => ({
+        width: 518,
+        height: 56,
+        top: 118,
+        left: 660,
+        right: 1178,
+        bottom: 174,
+      }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1905, innerHeight: 940 };
+    globalThis.document = {
+      body: { tagName: 'BODY', nodeType: 1, children: [] },
+      documentElement: { tagName: 'HTML', nodeType: 1 },
+    };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(seedPageSheets(card), 1);
+      assert.equal(card.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(seedPageSheets(composer), 1);
+      assert.equal(composer.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds wide short list rows as page sheets', () => {
+    const row = {
+      tagName: 'TR',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'zA yO' }),
+      getBoundingClientRect: () => ({
+        width: 900,
+        height: 40,
+        top: 200,
+        left: 0,
+        right: 900,
+        bottom: 240,
+      }),
+      _bg: 'rgb(242, 246, 252)',
+    };
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1000, innerHeight: 800 };
+    globalThis.document = {
+      body: { tagName: 'BODY', nodeType: 1, children: [] },
+      documentElement: { tagName: 'HTML', nodeType: 1 },
+    };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(seedPageSheets(row), 1);
+      assert.equal(row.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('does not promote opaque strips inside classified navigation under a surface host', () => {
+    const strip = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'bg-[#FAFAFA]' }),
+      getBoundingClientRect: () => ({ width: 957, height: 48 }),
+      _bg: 'rgb(250, 250, 250)',
+    };
+    const nav = {
+      tagName: 'NAV',
+      nodeType: 1,
+      children: [strip],
+      ...mockAttrs({ [ROLE_ATTR]: 'navigation' }),
+      getBoundingClientRect: () => ({ width: 1200, height: 48 }),
+      _bg: 'rgb(58, 35, 35)',
+    };
+    const surface = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [nav],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface' }),
+      getBoundingClientRect: () => ({ width: 1200, height: 800 }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    strip.parentElement = nav;
+    nav.parentElement = surface;
+
+    const root = {
+      nodeType: 11,
+      querySelectorAll: (selector) => {
+        if (selector === `[${ROLE_ATTR}]`) return [surface, nav];
+        return [];
+      },
+    };
+
+    const previous = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      assert.equal(promotePaintedSurfaces(root), 0);
+      assert.equal(strip.getAttribute(ROLE_ATTR), null);
+    } finally {
+      globalThis.getComputedStyle = previous;
+    }
+  });
+
+  it('promotes deep opaque list rows under a large page-sheet surface', () => {
+    const row = {
+      tagName: 'TR',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'zA' }),
+      getBoundingClientRect: () => ({ width: 800, height: 40 }),
+      _bg: 'rgb(242, 246, 252)',
+    };
+    let inner = row;
+    for (let i = 0; i < 10; i += 1) {
+      const wrap = {
+        tagName: 'DIV',
+        nodeType: 1,
+        children: [inner],
+        ...mockAttrs({ class: `nH-${i}` }),
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+        _bg: 'rgba(0, 0, 0, 0)',
+      };
+      inner.parentElement = wrap;
+      inner = wrap;
+    }
+    const surface = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [inner],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface' }),
+      getBoundingClientRect: () => ({ width: 1000, height: 800 }),
+      _bg: 'rgb(255, 255, 255)',
+    };
+    inner.parentElement = surface;
+
+    const root = {
+      nodeType: 11,
+      querySelectorAll: (selector) => {
+        if (selector === `[${ROLE_ATTR}]`) return [surface];
+        return [];
+      },
+    };
+
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1000, innerHeight: 800 };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      const promoted = promotePaintedSurfaces(root);
+      assert.equal(promoted, 1);
+      assert.equal(row.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
     }
   });
 });

@@ -73,6 +73,14 @@ const SURFACE_HOST_ROLES = new Set([
   'card',
   'sidebar',
   'hero',
+  'surface',
+]);
+
+/** Nested hosts that should run their own promote pass — do not walk into them. */
+const SURFACE_WALK_STOP_ROLES = new Set([
+  ...SURFACE_HOST_ROLES,
+  'header',
+  'navigation',
 ]);
 
 const SURFACE_HOST_PRIORITY = {
@@ -82,6 +90,7 @@ const SURFACE_HOST_PRIORITY = {
   hero: 3,
   sidebar: 4,
   main: 5,
+  surface: 6,
 };
 
 const SURFACE_SKIP_TAGS = new Set([
@@ -113,8 +122,13 @@ const SURFACE_SKIP_TAGS = new Set([
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
 const TOKEN_RE = /[\s_-]+/;
 const SURFACE_PROMOTE_MAX_DEPTH = 3;
+/** Large page canvases (Gmail panes, full-width wrappers) hide slabs far below depth 3. */
+const SURFACE_PROMOTE_DEEP_DEPTH = 16;
 const SURFACE_PROMOTE_MIN_WIDTH = 40;
 const SURFACE_PROMOTE_MIN_HEIGHT = 16;
+const SURFACE_PROMOTE_DEEP_MIN_WIDTH = 80;
+const SURFACE_PROMOTE_DEEP_MIN_HEIGHT = 28;
+const SURFACE_PROMOTE_DEEP_MIN_AREA = 4000;
 
 /**
  * Phrasing / inline hosts must never become structural paint roles from
@@ -169,7 +183,7 @@ function tokensFor(el) {
   // Split on separators first, then camelCase, so
   // `showcaseSubbrandsArticleTitle` → showcase, subbrands, article, title
   // instead of one blob that substring-matches "article".
-  const raw = `${el.id || ''} ${el.getAttribute?.('class') || ''} ${el.getAttribute?.('aria-label') || ''}`;
+  const raw = `${el.id || ''} ${el.getAttribute?.('class') || ''} ${el.getAttribute?.('aria-label') || ''} ${el.getAttribute?.('data-testid') || ''}`;
   const parts = raw.split(TOKEN_RE).filter(Boolean);
   const out = [];
   for (const part of parts) {
@@ -331,9 +345,18 @@ function relativeLuminanceFromCss(bg) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+function firstCssColorToken(value) {
+  const match = (value || '').match(/rgba?\([^)]+\)/i);
+  return match ? match[0] : '';
+}
+
 function captureNativeLuminance(el) {
   if (typeof getComputedStyle !== 'function') return;
-  const lum = relativeLuminanceFromCss(getComputedStyle(el).backgroundColor || '');
+  const style = getComputedStyle(el);
+  let lum = relativeLuminanceFromCss(style.backgroundColor || '');
+  if (lum == null) {
+    lum = relativeLuminanceFromCss(firstCssColorToken(style.backgroundImage || ''));
+  }
   if (lum == null) return;
   el.setAttribute(NATIVE_L_ATTR, lum.toFixed(4));
 }
@@ -346,6 +369,7 @@ function captureNativeLuminance(el) {
 const OPAQUE_PAINT_TARGET_SELECTORS = [
   'body > header',
   'body > footer',
+  'body footer',
   'body > nav',
   'body > aside',
   'body > section',
@@ -453,20 +477,33 @@ function elementsUnder(root) {
   return root.nodeType === 1 ? [root, ...descendants] : descendants;
 }
 
+const CSS_GRADIENT_RE = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/i;
+
+function hasCssGradientFill(backgroundImage) {
+  return CSS_GRADIENT_RE.test(backgroundImage || '');
+}
+
 function isOpaqueBackground(el) {
   if (typeof getComputedStyle !== 'function') return false;
-  const bg = getComputedStyle(el).backgroundColor || '';
-  if (!bg || bg === 'transparent') return false;
-  const rgba = bg.match(
-    /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i
-  );
-  if (!rgba) return true;
-  if (rgba[4] === undefined) return true;
-  const alpha = parseFloat(rgba[4]);
-  if (Number.isNaN(alpha)) return true;
-  // css opacity channel: 0 or 0% is transparent; 1 or 100% is opaque
-  if (String(rgba[4]).includes('%')) return alpha > 0;
-  return alpha > 0;
+  const style = getComputedStyle(el);
+  const bg = style.backgroundColor || '';
+  if (bg && bg !== 'transparent') {
+    const rgba = bg.match(
+      /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i
+    );
+    if (!rgba) return true;
+    if (rgba[4] === undefined) return true;
+    const alpha = parseFloat(rgba[4]);
+    if (Number.isNaN(alpha)) return true;
+    // css opacity channel: 0 or 0% is transparent; 1 or 100% is opaque
+    if (String(rgba[4]).includes('%')) {
+      if (alpha > 0) return true;
+    } else if (alpha > 0) {
+      return true;
+    }
+  }
+  // Brand chrome often paints with linear-gradient and a transparent color.
+  return hasCssGradientFill(style.backgroundImage || '');
 }
 
 /**
@@ -509,14 +546,16 @@ export function promotePaintedSurfaces(root = document.body) {
    * @param {string} hostRole
    * @param {Element} el
    * @param {number} depth
+   * @param {number} maxDepth
    */
-  function visit(host, hostRole, el, depth) {
+  function visit(host, hostRole, el, depth, maxDepth) {
     if (budget <= 0) return;
-    if (depth > SURFACE_PROMOTE_MAX_DEPTH) return;
+    if (depth > maxDepth) return;
 
     // Nested classified hosts (e.g. header inside article) get their own pass.
+    // Also stop at header/nav chrome so page-sheet walks do not elevate menu fills.
     const nestedRole = depth >= 1 ? el.getAttribute?.(ROLE_ATTR) : null;
-    if (nestedRole && SURFACE_HOST_ROLES.has(nestedRole)) return;
+    if (nestedRole && SURFACE_WALK_STOP_ROLES.has(nestedRole)) return;
 
     budget -= 1;
 
@@ -531,8 +570,12 @@ export function promotePaintedSurfaces(root = document.body) {
       let sizedOk = true;
       if (typeof el.getBoundingClientRect === 'function') {
         const rect = el.getBoundingClientRect();
-        sizedOk =
-          rect.width >= SURFACE_PROMOTE_MIN_WIDTH && rect.height >= SURFACE_PROMOTE_MIN_HEIGHT;
+        const deep = depth > SURFACE_PROMOTE_MAX_DEPTH;
+        sizedOk = deep
+          ? rect.width >= SURFACE_PROMOTE_DEEP_MIN_WIDTH &&
+            rect.height >= SURFACE_PROMOTE_DEEP_MIN_HEIGHT &&
+            rect.width * rect.height >= SURFACE_PROMOTE_DEEP_MIN_AREA
+          : rect.width >= SURFACE_PROMOTE_MIN_WIDTH && rect.height >= SURFACE_PROMOTE_MIN_HEIGHT;
       }
       if (sizedOk) {
         stamp(el, result('surface', 0.8, [`opaque surface inside ${hostRole}`]));
@@ -540,11 +583,11 @@ export function promotePaintedSurfaces(root = document.body) {
       }
     }
 
-    if (depth >= SURFACE_PROMOTE_MAX_DEPTH) return;
+    if (depth >= maxDepth) return;
     const children = el.children;
     if (!children) return;
     for (let i = 0; i < children.length; i += 1) {
-      visit(host, hostRole, children[i], depth + 1);
+      visit(host, hostRole, children[i], depth + 1, maxDepth);
       if (budget <= 0) return;
     }
   }
@@ -552,10 +595,11 @@ export function promotePaintedSurfaces(root = document.body) {
   for (const host of hosts) {
     if (budget <= 0) break;
     const hostRole = host.getAttribute(ROLE_ATTR) || '';
+    const maxDepth = promoteMaxDepthFor(host);
     const children = host.children;
     if (!children) continue;
     for (let i = 0; i < children.length; i += 1) {
-      visit(host, hostRole, children[i], 1);
+      visit(host, hostRole, children[i], 1, maxDepth);
       if (budget <= 0) break;
     }
   }
@@ -563,13 +607,83 @@ export function promotePaintedSurfaces(root = document.body) {
 }
 
 /**
- * Seed large page sheets (e.g. body > section white canvases) that are opaque
- * but were not stamped by structural rules.
+ * Shallow promotion for tight article/card hosts; deep walks for large page
+ * canvases whose painted descendants sit many wrappers below the host.
+ * @param {Element} host
+ */
+function promoteMaxDepthFor(host) {
+  const role = host.getAttribute?.(ROLE_ATTR) || '';
+  if (role !== 'surface' && role !== 'main' && role !== 'sidebar') return SURFACE_PROMOTE_MAX_DEPTH;
+  if (typeof window === 'undefined' || typeof host.getBoundingClientRect !== 'function') {
+    return SURFACE_PROMOTE_MAX_DEPTH;
+  }
+  const rect = host.getBoundingClientRect();
+  const vw = window.innerWidth || 0;
+  const largeCanvas = (vw > 0 && rect.width >= vw * 0.4 && rect.height >= 160) || rect.height >= 400;
+  return largeCanvas ? SURFACE_PROMOTE_DEEP_DEPTH : SURFACE_PROMOTE_MAX_DEPTH;
+}
+
+const SHEET_SKIP_TAGS = new Set([
+  ...SURFACE_SKIP_TAGS,
+  ...PHRASING_TAGS,
+  'HEAD',
+  'META',
+  'NOSCRIPT',
+  'SCRIPT',
+  'STYLE',
+  'TEMPLATE',
+]);
+const SHEET_MAX_DEPTH = 20;
+const SHEET_WALK_BUDGET = 1200;
+
+/**
+ * Full-width canvases and tall columns that keep native light fills after
+ * html/body are restyled. Size-only — no site-specific class names.
+ * @param {Element} el
+ */
+function isLargePaintedSheet(el) {
+  if (typeof el.getBoundingClientRect !== 'function') return false;
+  const rect = el.getBoundingClientRect();
+  const vw = typeof window !== 'undefined' ? window.innerWidth || 0 : 0;
+  // Inbox/list rows are wide and short (Gmail `tr` ~40px).
+  if (
+    vw > 0 &&
+    rect.width >= vw * 0.6 &&
+    rect.height >= 32 &&
+    rect.height <= 120 &&
+    rect.width * rect.height >= 20000
+  ) {
+    return true;
+  }
+  // Mid-width opaque cards/search shells (X.com sidebar widgets).
+  if (
+    rect.width >= 240 &&
+    rect.width <= 480 &&
+    rect.height >= 40 &&
+    rect.width * rect.height >= 14000
+  ) {
+    return true;
+  }
+  // Timeline composer / feed chrome that is wide but not full-viewport.
+  if (rect.width >= 280 && rect.height >= 48 && rect.width * rect.height >= 25000) {
+    return true;
+  }
+  if (rect.width < 120 || rect.height < 80) return false;
+  if (vw > 0 && rect.width >= vw * 0.45 && rect.height >= 160) return true;
+  if (rect.width >= 140 && rect.height >= 240) return true;
+  return rect.width * rect.height >= 80000;
+}
+
+/**
+ * Seed large page sheets that are opaque but were not stamped by structural
+ * rules. Walks through transparent layout wrappers so `body > div.bg-white`,
+ * Gmail panes, and table-free sidebar columns are found without matching
+ * only `section`/`main`.
  *
  * @param {ParentNode} root
  * @returns {number}
  */
-function seedPageSheets(root) {
+export function seedPageSheets(root) {
   if (typeof document === 'undefined') return 0;
   const scope = root === document.body || root === document.documentElement ? document : root;
   const sheets =
@@ -586,6 +700,50 @@ function seedPageSheets(root) {
     stamp(el, result('surface', 0.78, ['opaque page sheet']));
     stamped += 1;
   }
+
+  const start =
+    root === document.body || root === document.documentElement
+      ? document.body
+      : root.nodeType === 1
+        ? /** @type {Element} */ (root)
+        : null;
+  if (!start || typeof start.children === 'undefined') return stamped;
+
+  /**
+   * @param {Element} el
+   */
+  function consider(el) {
+    if (!el || el === document.body || el === document.documentElement) return;
+    if (SHEET_SKIP_TAGS.has(el.tagName) || isOwnedByGmixer(el)) return;
+    if (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR)) return;
+    if (!isOpaqueBackground(el) || !isLargePaintedSheet(el)) return;
+    stamp(el, result('surface', 0.78, ['opaque page sheet']));
+    stamped += 1;
+  }
+
+  // Mutation subtree passes receive the added node itself (e.g. a hydrated
+  // `body > div.bg-white` or a Gmail inbox row). Walk only sees children.
+  consider(start);
+
+  let budget = SHEET_WALK_BUDGET;
+  /**
+   * @param {Element} el
+   * @param {number} depth
+   */
+  function walk(el, depth) {
+    if (budget <= 0 || depth > SHEET_MAX_DEPTH) return;
+    const children = el.children;
+    if (!children) return;
+    for (let i = 0; i < children.length; i += 1) {
+      if (budget <= 0) return;
+      const child = children[i];
+      if (SHEET_SKIP_TAGS.has(child.tagName) || isOwnedByGmixer(child)) continue;
+      budget -= 1;
+      consider(child);
+      walk(child, depth + 1);
+    }
+  }
+  walk(start, 0);
   return stamped;
 }
 
@@ -661,7 +819,16 @@ export function classifySubtree(root = document.body, options = {}) {
   }
 
   const sheets = seedPageSheets(root);
-  const surfaces = promotePaintedSurfaces(root);
+  let surfaces = promotePaintedSurfaces(root);
+  // SPA widgets (X.com trending/follow) often land under an already-classified
+  // sidebar after the first pass. Re-promote that small host so new opaque
+  // cards get stamped without re-walking the main feed.
+  if (root.nodeType === 1) {
+    const host = /** @type {Element} */ (root).closest?.(`[${ROLE_ATTR}]`);
+    if (host && host.getAttribute(ROLE_ATTR) === 'sidebar') {
+      surfaces += promotePaintedSurfaces(host);
+    }
+  }
   stampOpaquePaintTargets(root);
   const toneSteps = assignToneSteps(root);
   return {

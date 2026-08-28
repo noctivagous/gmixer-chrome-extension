@@ -57,6 +57,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     .scale {
       display: flex;
       gap: 2px;
+      min-width: 0;
     }
     :host([compact]) .scale {
       gap: 1px;
@@ -65,11 +66,13 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     }
     .swatch {
       display: block;
+      flex: 1 1 0;
       width: 100%;
       aspect-ratio: 1;
       border-radius: 2px;
       cursor: pointer;
       border: 1px solid rgba(255, 255, 255, 0.1);
+      min-width: 0;
       padding: 0;
       transition: transform 120ms ease, box-shadow 120ms ease;
     }

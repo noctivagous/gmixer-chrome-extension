@@ -340,6 +340,9 @@ describe('buildCss page paint', () => {
     assert.match(css, /data-gmixer-tone-step="0"/);
     assert.match(css, /data-gmixer-tone-step="2"/);
     assert.match(css, /body #main\[data-gmixer-native-l\]/);
+    assert.match(css, /body footer\[data-gmixer-native-l\]/);
+    assert.match(css, /\[data-gmixer-role="footer"\]\[data-gmixer-native-l\]/);
+    assert.match(css, /nav[\s\S]*:is\([\s\S]*div,/);
     assert.doesNotMatch(css, /ntv-preview/);
     assert.doesNotMatch(css, /listingResult/);
     assert.doesNotMatch(css, /trending__wrapper/);
@@ -450,8 +453,20 @@ describe('buildCss page paint', () => {
     const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /Header\/nav menus share one chrome fill/);
     assert.match(css, /\[data-gmixer-role="header"\],\s*\[data-gmixer-role="navigation"\]/);
-    assert.match(css, /ul,\s*ol,\s*li,\s*menu,\s*button/);
+    assert.match(css, /ul,\s*ol,\s*li,\s*div,\s*menu,\s*button/);
     assert.match(css, /background-color: transparent !important;/);
+  });
+
+  it('clears header/nav/footer CSS gradients so brand mastheads follow Tone', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(
+      css,
+      /body header\[data-gmixer-native-l\][\s\S]*background-image: none !important/
+    );
+    assert.match(
+      css,
+      /body footer\[data-gmixer-native-l\][\s\S]*background-image: none !important/
+    );
   });
 
   it('remaps common header CSS variables on semantic header selectors', () => {
@@ -475,6 +490,8 @@ describe('buildCss page paint', () => {
     const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /a \*,[\s\S]*h1 \*, h2 \*, h3 \*, h4 \*, h5 \*, h6 \*,[\s\S]*color: inherit !important/);
     assert.match(css, /a:hover \*, a:focus-visible \*[\s\S]*color: inherit !important/);
+    assert.match(css, /\[data-gmixer-role="article"\] :is\(div, span\)/);
+    assert.match(css, /\[data-gmixer-role\] a[\s\S]*color: var\(--gmixer-link\) !important/);
   });
 
   it('renders category media slots independently from the global filter', () => {
