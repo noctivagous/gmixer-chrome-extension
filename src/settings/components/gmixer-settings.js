@@ -2,6 +2,7 @@ import { html, css, unsafeCSS } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { store } from '../../state/store.js';
 import { buildPalette, hexToHsl, hslToHex } from '../../lib/color-theory.js';
+import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { emptyColorOverrides } from '../../lib/effective-palette.js';
 import { getFontById } from '../../config/fonts.js';
 
@@ -1060,11 +1061,15 @@ export class GmixerSettings extends StoreBoundElement {
     if (id === 'color' && enabled) {
       const color = this.state?.global?.color;
       const hsl = hexToHsl(color?.baseColor || '#8a8a8a');
+      const scheme = color?.scheme === 'monochrome' ? 'analog' : color?.scheme || 'analog';
+      const baseColor = hslToHex({ ...hsl, s: Math.max(hsl.s, 70) });
+      const mode = this.state?.global?.themeMode || 'dark';
       patch.activeThemePackId = 'user-made';
       patch.color = {
-        scheme: color?.scheme === 'monochrome' ? 'analog' : color?.scheme || 'analog',
-        baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
-        schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+        scheme,
+        baseColor,
+        schemeBaseColor: baseColor,
+        swatchAssignments: autoAssignSwatches(baseColor, scheme, mode),
       };
     }
     if (id === 'color' && !enabled) {
@@ -1083,7 +1088,7 @@ export class GmixerSettings extends StoreBoundElement {
       preview: 'Live sample of the active theme pack',
       filter: 'Style images, video, and background media',
       tone: 'Light | Gray | Dark surface direction',
-      color: 'Base color, relationships, palette, and identity',
+      color: 'Pipeline: scheme → hue → S/L; drag surfaces onto swatches',
       fonts: 'Separate roles for hierarchy and UI',
       shape: 'Clip paths, radius, and corner geometry',
       effects: 'Per-category glow, pan & scan, flash, and page motion',

@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
-import { hexToHsl, hslToHex, accentHueOffsets } from '../../lib/color-theory.js';
+import { hexToHsl, hslToHex, hueRingHex, accentHueOffsets } from '../../lib/color-theory.js';
 import { defineElement } from '../../lib/define-element.js';
 
 export class GmixerColorWheel extends StoreBoundElement {
@@ -98,11 +98,14 @@ export class GmixerColorWheel extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return html``;
 
-    const { h, s, l } = hexToHsl(color.baseColor);
+    const { h, l } = hexToHsl(color.baseColor);
     const radius = 60;
     const wheelAngle = this.monochrome ? (l / 100) * 360 : h;
     const mainPos = this._getPos(wheelAngle, radius + 10);
     const offsets = this.monochrome ? [] : accentHueOffsets(color.scheme);
+    // Ring samples are always s=1.0, l=0.5 — this is the base-color pick,
+    // not the working color after saturation/lightness sliders.
+    const ringColor = hueRingHex(h);
 
     return html`
       <div
@@ -111,7 +114,7 @@ export class GmixerColorWheel extends StoreBoundElement {
         @pointermove=${this._onPointerMove}
         @pointerup=${this._onPointerUp}
         @pointercancel=${this._onPointerUp}
-        style="--current-color: ${color.baseColor}"
+        style="--current-color: ${this.monochrome ? color.baseColor : ringColor}"
       >
         <div
           class="handle"
@@ -119,7 +122,7 @@ export class GmixerColorWheel extends StoreBoundElement {
         ></div>
         ${offsets.map((offset) => {
           const accentPos = this._getPos(h + offset, radius);
-          const accentColor = hslToHex({ h: h + offset, s, l });
+          const accentColor = hueRingHex(h + offset);
           return html`
             <div
               class="accent-dot"
@@ -181,8 +184,8 @@ export class GmixerColorWheel extends StoreBoundElement {
       return;
     }
 
-    // Saturation is intentionally preserved: the Saturation slider is the
-    // explicit source of truth after Color mode establishes an initial value.
+    // Pipeline step 2: pick hue from the ring (s=1.0, l=0.5). Scheme (step 1)
+    // is left alone; saturation and lightness stay with step 3.
     const newHex = hslToHex({ ...hsl, h: angle });
 
     this.updateGlobal({ color: { baseColor: newHex, schemeBaseColor: newHex } });

@@ -7,7 +7,16 @@ import { createDefaultState } from '../../state/schema.js';
 import { effectiveRoleColors, roleColors } from './palette-swatches.js';
 import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
 import { imageFilterPresetCss } from '../../content/style-injector.js';
+import { PALETTE_FILTER_PRESETS } from '../../config/image-filter-presets.js';
 import { defineElement } from '../../lib/define-element.js';
+import {
+  PREVIEW_FONT_SLOTS,
+  fontIdForPreviewSlot,
+  fontsPatchForPreviewSlot,
+  resolvePreviewTarget,
+  samePreviewTarget,
+} from './preview-inspect.js';
+import '../../settings/components/font-picker.js';
 
 function paletteForPack(pack, mode = 'dark') {
   const base = createDefaultState().global.color;
@@ -18,6 +27,18 @@ function paletteForPack(pack, mode = 'dark') {
 function fontFamily(fontId) {
   return getFontById(fontId)?.family || 'system-ui, sans-serif';
 }
+
+const MEDIA_FILTER_PRESETS = [
+  { id: 'none', label: 'none' },
+  { id: 'grayscale', label: 'grayscale' },
+  { id: 'sepia', label: 'sepia' },
+  { id: 'invert', label: 'invert' },
+  { id: 'monochrome', label: 'monochrome' },
+  { id: 'duotone', label: 'duotone', requiresColor: true },
+  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
+  { id: 'link-wash', label: 'link wash', requiresColor: true },
+  { id: 'custom', label: 'custom' },
+];
 
 /** Colorful inline sample used in theme blurbs (no external asset). */
 const SAMPLE_IMAGE_SVG = encodeURIComponent(`
@@ -43,10 +64,19 @@ const SAMPLE_IMAGE_SRC = `data:image/svg+xml,${SAMPLE_IMAGE_SVG}`;
 /**
  * Live theme pack preview (type, surfaces, sample media).
  * Tone Light/Gray/Dark controls live in gmixer-color-panel (merged Color module).
+ * Hover shows a role tooltip; click pins compact editors for that region.
  */
 export class ThemePreviewPanel extends StoreBoundElement {
   static properties = {
     hidePackName: { type: Boolean, attribute: 'hide-pack-name' },
+    /** @type {import('./preview-inspect.js').PreviewInspectTarget|null} */
+    _hoverTarget: { state: true },
+    /** @type {import('./preview-inspect.js').PreviewInspectTarget|null} */
+    _pinnedTarget: { state: true },
+    _tooltipX: { state: true },
+    _tooltipY: { state: true },
+    _pinX: { state: true },
+    _pinY: { state: true },
   };
 
   static styles = css`
@@ -55,6 +85,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
       gap: var(--gm-space-2, 16px);
     }
     .theme-preview {
+      position: relative;
       display: grid;
       gap: 8px;
     }
@@ -64,12 +95,14 @@ export class ThemePreviewPanel extends StoreBoundElement {
       line-height: var(--gm-baseline, 24px);
     }
     .blurb {
+      position: relative;
       display: grid;
       gap: 12px;
       padding: 12px;
       border: 1px solid transparent;
       border-radius: 8px;
       box-sizing: border-box;
+      cursor: crosshair;
     }
     .blurb-top {
       display: grid;
@@ -220,6 +253,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
       letter-spacing: 0.06em;
       text-transform: uppercase;
       opacity: 0.72;
+      pointer-events: none;
     }
     .blurb-card-title {
       margin: 0;
@@ -246,6 +280,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
       letter-spacing: 0.06em;
       text-transform: uppercase;
       opacity: 0.72;
+      pointer-events: none;
     }
     .blurb-field {
       width: 100%;
@@ -258,6 +293,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
       font-size: 11px;
       line-height: 1.3;
       box-sizing: border-box;
+      pointer-events: auto;
     }
     .blurb-button {
       justify-self: start;
@@ -271,6 +307,138 @@ export class ThemePreviewPanel extends StoreBoundElement {
       font-weight: 600;
       line-height: 1.3;
     }
+    [data-gmixer-preview-role],
+    [data-gmixer-preview-media] {
+      outline: 1px solid transparent;
+      outline-offset: 1px;
+      transition: outline-color 0.12s ease;
+    }
+    .is-hovered {
+      outline-color: rgba(167, 139, 250, 0.55) !important;
+    }
+    .is-pinned {
+      outline-color: rgba(167, 139, 250, 0.95) !important;
+      outline-width: 2px;
+    }
+
+    .preview-inspect {
+      position: absolute;
+      z-index: 30;
+      max-width: min(280px, calc(100% - 16px));
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+    .preview-inspect[data-mode='pinned'] {
+      pointer-events: auto;
+    }
+    .inspect-tooltip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(20, 16, 28, 0.94);
+      color: #f2eefc;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .inspect-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      flex: 0 0 auto;
+    }
+    .inspect-panel {
+      display: grid;
+      gap: 8px;
+      min-width: 220px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(20, 16, 28, 0.96);
+      color: #f2eefc;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    }
+    .inspect-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .inspect-title {
+      margin: 0;
+      font: 700 12px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.02em;
+    }
+    .inspect-dismiss {
+      margin: 0;
+      padding: 0 4px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    .inspect-dismiss:hover,
+    .inspect-dismiss:focus-visible {
+      opacity: 1;
+      outline: none;
+    }
+    .inspect-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .inspect-row.stack {
+      grid-template-columns: 1fr;
+    }
+    .inspect-label {
+      margin: 0;
+      font-size: 10px;
+      opacity: 0.7;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .inspect-panel input[type='color'] {
+      width: 36px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .inspect-panel select,
+    .inspect-panel button.auto {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: inherit;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 4px 6px;
+      cursor: pointer;
+    }
+    .inspect-panel button.auto:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .inspect-panel .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .inspect-panel gmixer-font-picker {
+      display: block;
+      width: 100%;
+    }
     @media (max-width: 560px) {
       .blurb-top {
         grid-template-columns: 1fr;
@@ -281,6 +449,324 @@ export class ThemePreviewPanel extends StoreBoundElement {
       }
     }
   `;
+
+  constructor() {
+    super();
+    this.hidePackName = false;
+    this._hoverTarget = null;
+    this._pinnedTarget = null;
+    this._tooltipX = 0;
+    this._tooltipY = 0;
+    this._pinX = 0;
+    this._pinY = 0;
+    this._onDocKeyDown = this._onDocKeyDown.bind(this);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('keydown', this._onDocKeyDown);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    document.removeEventListener('keydown', this._onDocKeyDown);
+  }
+
+  _onDocKeyDown(event) {
+    if (event.key === 'Escape' && this._pinnedTarget) {
+      this._pinnedTarget = null;
+      this._hoverTarget = null;
+    }
+  }
+
+  /**
+   * @param {PointerEvent} event
+   */
+  _localPoint(event) {
+    const root = this.renderRoot?.querySelector?.('.theme-preview');
+    if (!root) return { x: 0, y: 0 };
+    const rect = root.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
+
+  /**
+   * @param {Event} event
+   */
+  _targetFromEvent(event) {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    for (const node of path) {
+      if (!(node instanceof Element)) continue;
+      if (node.hasAttribute('data-gmixer-preview-inspect')) return null;
+      const hit = resolvePreviewTarget(node, this.renderRoot);
+      if (hit) return hit;
+    }
+    return resolvePreviewTarget(event.target, this.renderRoot);
+  }
+
+  /**
+   * @param {PointerEvent} event
+   */
+  _onPreviewPointerMove(event) {
+    if (this._pinnedTarget) return;
+    const point = this._localPoint(event);
+    this._tooltipX = point.x + 12;
+    this._tooltipY = point.y + 14;
+    this._hoverTarget = this._targetFromEvent(event);
+  }
+
+  _onPreviewPointerLeave() {
+    if (!this._pinnedTarget) this._hoverTarget = null;
+  }
+
+  /**
+   * @param {MouseEvent} event
+   */
+  _onPreviewClick(event) {
+    if (event.target instanceof Element && event.target.closest('[data-gmixer-preview-inspect]')) {
+      return;
+    }
+    const target = this._targetFromEvent(event);
+    if (!target) {
+      this._pinnedTarget = null;
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (samePreviewTarget(this._pinnedTarget, target)) {
+      this._pinnedTarget = null;
+      this._hoverTarget = target;
+      return;
+    }
+    const point = this._localPoint(event);
+    this._pinX = point.x + 12;
+    this._pinY = point.y + 14;
+    this._pinnedTarget = target;
+    this._hoverTarget = null;
+  }
+
+  _dismissPinned(event) {
+    event?.stopPropagation?.();
+    this._pinnedTarget = null;
+  }
+
+  /**
+   * @param {string} roleId
+   * @param {string} hex
+   */
+  _setRoleColor(roleId, hex) {
+    this.updateGlobal({
+      color: {
+        overrides: {
+          [roleId]: hex,
+        },
+      },
+    });
+  }
+
+  /**
+   * @param {string} roleId
+   */
+  _clearRoleColor(roleId) {
+    this._setRoleColor(roleId, '');
+  }
+
+  /**
+   * @param {string} slotKey
+   * @param {string} fontId
+   */
+  _setFontSlot(slotKey, fontId) {
+    this.updateGlobal({
+      fonts: fontsPatchForPreviewSlot(slotKey, fontId),
+    });
+  }
+
+  /**
+   * @param {Partial<{enabled: boolean, preset: string}>} patch
+   */
+  _setImageFilter(patch) {
+    const next = { imageFilter: { ...patch } };
+    if (patch.enabled === true) {
+      next.sections = { filter: true };
+      const current = this.state?.global?.imageFilter;
+      if ((!current?.preset || current.preset === 'none') && !patch.preset) {
+        next.imageFilter.preset = 'monochrome';
+      }
+    }
+    this.updateGlobal(next);
+  }
+
+  /**
+   * Combine hover + pin highlight for a leaf's annotation identity.
+   * @param {{ roleId?: string|null, fontSlot?: string|null, media?: string|null }} leaf
+   */
+  _leafHighlightClass(leaf) {
+    const asTarget = {
+      roleId: leaf.roleId ?? null,
+      fontSlot: leaf.fontSlot ?? null,
+      media: leaf.media ?? null,
+      label: '',
+    };
+    if (samePreviewTarget(this._pinnedTarget, asTarget)) return 'is-pinned';
+    if (!this._pinnedTarget && samePreviewTarget(this._hoverTarget, asTarget)) return 'is-hovered';
+    return '';
+  }
+
+  /**
+   * Clamp floating UI inside the preview card.
+   * @param {number} x
+   * @param {number} y
+   * @param {number} [width]
+   * @param {number} [height]
+   */
+  _clampPos(x, y, width = 240, height = 40) {
+    const root = this.renderRoot?.querySelector?.('.theme-preview');
+    const rw = root?.clientWidth || 320;
+    const rh = root?.clientHeight || 240;
+    const left = Math.max(8, Math.min(x, rw - width - 8));
+    const top = Math.max(8, Math.min(y, rh - height - 8));
+    return { left, top };
+  }
+
+  _renderInspector(colors) {
+    const pinned = this._pinnedTarget;
+    const hover = !pinned ? this._hoverTarget : null;
+    if (!pinned && !hover) return null;
+
+    if (hover) {
+      const { left, top } = this._clampPos(this._tooltipX, this._tooltipY, 180, 28);
+      const swatch = hover.roleId ? colors[hover.roleId] : null;
+      return html`
+        <div
+          class="preview-inspect"
+          data-mode="hover"
+          data-gmixer-preview-inspect
+          style="left:${left}px;top:${top}px"
+        >
+          <div class="inspect-tooltip" role="status">
+            ${swatch
+              ? html`<span class="inspect-swatch" style="background:${swatch}"></span>`
+              : null}
+            <span>${hover.label}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const { left, top } = this._clampPos(this._pinX, this._pinY, 260, 160);
+    const roleId = pinned.roleId;
+    const override = roleId ? this.state?.global?.color?.overrides?.[roleId] || '' : '';
+    const effective = roleId ? override || colors[roleId] : '';
+    const fontSlot = pinned.fontSlot ? PREVIEW_FONT_SLOTS[pinned.fontSlot] : null;
+    const fonts = this.state?.global?.fonts;
+    const fontId = fontSlot ? fontIdForPreviewSlot(fonts, pinned.fontSlot) : '';
+    const filter = this.state?.global?.imageFilter || {};
+    const colorOn = this.state?.global?.sections?.color !== false;
+    const filterOn = this.state?.global?.sections?.filter === true && filter.enabled;
+    const presetOptions = MEDIA_FILTER_PRESETS.filter(
+      (preset) => !preset.requiresColor || colorOn || preset.id === filter.preset
+    );
+
+    return html`
+      <div
+        class="preview-inspect"
+        data-mode="pinned"
+        data-gmixer-preview-inspect
+        style="left:${left}px;top:${top}px"
+        @pointerdown=${(e) => e.stopPropagation()}
+        @click=${(e) => e.stopPropagation()}
+      >
+        <div
+          class="inspect-panel"
+          role="dialog"
+          aria-label=${`Edit ${pinned.label}`}
+        >
+          <div class="inspect-header">
+            <p class="inspect-title">${pinned.label}</p>
+            <button
+              type="button"
+              class="inspect-dismiss"
+              aria-label="Close"
+              @click=${this._dismissPinned}
+            >×</button>
+          </div>
+
+          ${roleId
+            ? html`
+                <div class="inspect-row">
+                  <p class="inspect-label">Color</p>
+                  <input
+                    type="color"
+                    .value=${effective || '#000000'}
+                    aria-label=${`${pinned.label} color`}
+                    title=${override ? 'Custom override' : 'Generated — change to override'}
+                    @input=${(e) => this._setRoleColor(roleId, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    class="auto"
+                    ?disabled=${!override}
+                    @click=${() => this._clearRoleColor(roleId)}
+                  >Auto</button>
+                </div>
+              `
+            : null}
+
+          ${fontSlot
+            ? html`
+                <div class="inspect-row stack">
+                  <p class="inspect-label">${fontSlot.label} font</p>
+                  <gmixer-font-picker
+                    .target=${fontSlot.pickerTarget}
+                    .value=${fontId}
+                    @change=${(e) => this._setFontSlot(pinned.fontSlot, e.detail.value)}
+                  ></gmixer-font-picker>
+                </div>
+              `
+            : null}
+
+          ${pinned.media === 'image'
+            ? html`
+                <div class="inspect-row stack">
+                  <label class="toggle-row">
+                    <input
+                      type="checkbox"
+                      .checked=${filterOn}
+                      @change=${(e) => this._setImageFilter({ enabled: e.target.checked })}
+                    />
+                    Apply image filter
+                  </label>
+                  <select
+                    aria-label="Image filter preset"
+                    .value=${filter.preset || 'none'}
+                    @change=${(e) => {
+                      const preset = e.target.value;
+                      this._setImageFilter({
+                        preset,
+                        enabled: preset !== 'none',
+                      });
+                    }}
+                  >
+                    ${presetOptions.map(
+                      (preset) => html`
+                        <option value=${preset.id} ?selected=${preset.id === (filter.preset || 'none')}>
+                          ${preset.label}
+                        </option>
+                      `
+                    )}
+                  </select>
+                  ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
+                    ? html`<p class="inspect-label">Palette wash needs Color on</p>`
+                    : null}
+                </div>
+              `
+            : null}
+        </div>
+      </div>
+    `;
+  }
 
   render() {
     const global = this.state?.global;
@@ -337,13 +823,17 @@ export class ThemePreviewPanel extends StoreBoundElement {
       : '';
     const useRotatingCube =
       effectsOn && global.effects?.categories?.images?.effect === 'rotating-cube';
+
+    const hl = (leaf) => this._leafHighlightClass(leaf);
+
     const previewImage = (face = '') => html`
       <img
-        class=${`blurb-image ${face}`.trim()}
+        class=${`blurb-image ${face} ${hl({ media: 'image' })}`.trim()}
         src=${SAMPLE_IMAGE_SRC}
         alt=""
         width="160"
         height="120"
+        data-gmixer-preview-media="image"
         data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
         style=${mediaFilterCss !== 'none' ? `filter: ${mediaFilterCss}` : ''}
         draggable="false"
@@ -357,59 +847,98 @@ export class ThemePreviewPanel extends StoreBoundElement {
       <div class="theme-preview">
         ${this.hidePackName ? null : html`<strong class="pack-name">${pack.label}</strong>`}
         <div
-          class="blurb"
+          class=${`blurb ${hl({ roleId: 'background' })}`.trim()}
+          data-gmixer-preview-role="background"
           style="
             background: ${colors.background};
             color: ${colors.text};
             border-color: ${colors.border};
           "
           aria-label="${pack.label} preview"
+          @pointermove=${this._onPreviewPointerMove}
+          @pointerleave=${this._onPreviewPointerLeave}
+          @click=${this._onPreviewClick}
         >
           <p
             class="blurb-nav"
             style="font-family: ${uiFamily}; border-color: ${colors.border}"
           >
-            <span class="blurb-nav-link" style="color: ${colors.navLink}">Home</span>
-            <span class="blurb-nav-link" style="color: ${colors.navLink}">Topics</span>
-            <span class="blurb-nav-link" style="color: ${colors.navLink}">About</span>
+            <span
+              class=${`blurb-nav-link ${hl({ roleId: 'navLink', fontSlot: 'ui' })}`.trim()}
+              data-gmixer-preview-role="navLink"
+              data-gmixer-preview-font="ui"
+              style="color: ${colors.navLink}"
+              >Home</span
+            >
+            <span
+              class=${`blurb-nav-link ${hl({ roleId: 'navLink', fontSlot: 'ui' })}`.trim()}
+              data-gmixer-preview-role="navLink"
+              data-gmixer-preview-font="ui"
+              style="color: ${colors.navLink}"
+              >Topics</span
+            >
+            <span
+              class=${`blurb-nav-link ${hl({ roleId: 'navLink', fontSlot: 'ui' })}`.trim()}
+              data-gmixer-preview-role="navLink"
+              data-gmixer-preview-font="ui"
+              style="color: ${colors.navLink}"
+              >About</span
+            >
           </p>
           <div class="blurb-top">
             <div class="blurb-copy">
               <p
-                class="blurb-kicker"
+                class=${`blurb-kicker ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="muted"
+                data-gmixer-preview-font="captions"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Caption / kicker
               </p>
               <p
-                class="blurb-title"
+                class=${`blurb-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
+                data-gmixer-preview-role="accent"
+                data-gmixer-preview-font="headings.h1"
                 style="font-family: ${headerFamily}; color: ${colors.accent}"
               >
                 ${pack.label} headline
               </p>
               <p
-                class="blurb-subhead"
+                class=${`blurb-subhead ${hl({ roleId: 'link', fontSlot: 'headings.h2' })}`.trim()}
+                data-gmixer-preview-role="link"
+                data-gmixer-preview-font="headings.h2"
                 style="font-family: ${subheadFamily}; color: ${colors.link}"
               >
                 Subheading for section hierarchy
               </p>
-              <p class="blurb-body" style="font-family: ${bodyFamily}">
+              <p
+                class=${`blurb-body ${hl({ roleId: 'text', fontSlot: 'paragraph' })}`.trim()}
+                data-gmixer-preview-role="text"
+                data-gmixer-preview-font="paragraph"
+                style="font-family: ${bodyFamily}; color: ${colors.text}"
+              >
                 ${pack.description}
               </p>
               <p
-                class="blurb-caption"
+                class=${`blurb-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="muted"
+                data-gmixer-preview-font="captions"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Caption text for asides, timestamps, and supporting notes.
               </p>
               <p class="blurb-meta">
                 <span
-                  class="blurb-link"
+                  class=${`blurb-link ${hl({ roleId: 'link', fontSlot: 'paragraph' })}`.trim()}
+                  data-gmixer-preview-role="link"
+                  data-gmixer-preview-font="paragraph"
                   style="font-family: ${bodyFamily}; color: ${colors.link}"
                   >Sample link</span
                 >
                 <code
-                  class="blurb-code"
+                  class=${`blurb-code ${hl({ roleId: 'surfaceContainers', fontSlot: 'code' })}`.trim()}
+                  data-gmixer-preview-role="surfaceContainers"
+                  data-gmixer-preview-font="code"
                   style="
                     font-family: ${codeFamily};
                     background: ${colors.surfaceContainers};
@@ -436,7 +965,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
                   : previewImage()}
               </span>
               <figcaption
-                class="blurb-image-caption"
+                class=${`blurb-image-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="muted"
+                data-gmixer-preview-font="captions"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Sample photo caption
@@ -445,7 +976,8 @@ export class ThemePreviewPanel extends StoreBoundElement {
           </div>
           <div class="blurb-surfaces">
             <div
-              class="blurb-card"
+              class=${`blurb-card ${hl({ roleId: 'surfaceContainers' })}`.trim()}
+              data-gmixer-preview-role="surfaceContainers"
               style="
                 background: ${colors.surfaceContainers};
                 border-color: ${colors.border};
@@ -456,17 +988,25 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 Surface: Containers
               </p>
               <p
-                class="blurb-card-title"
+                class=${`blurb-card-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
+                data-gmixer-preview-role="accent"
+                data-gmixer-preview-font="headings.h1"
                 style="font-family: ${headerFamily}; color: ${colors.accent}"
               >
                 Card title
               </p>
-              <p class="blurb-card-body" style="font-family: ${bodyFamily}">
+              <p
+                class=${`blurb-card-body ${hl({ roleId: 'text', fontSlot: 'paragraph' })}`.trim()}
+                data-gmixer-preview-role="text"
+                data-gmixer-preview-font="paragraph"
+                style="font-family: ${bodyFamily}"
+              >
                 Larger regions like cards and dialogs.
               </p>
             </div>
             <div
-              class="blurb-gui"
+              class=${`blurb-gui ${hl({ roleId: 'backgroundSecondary' })}`.trim()}
+              data-gmixer-preview-role="backgroundSecondary"
               style="
                 background: ${colors.backgroundSecondary};
                 border-color: ${colors.border};
@@ -474,14 +1014,16 @@ export class ThemePreviewPanel extends StoreBoundElement {
               "
             >
               <p class="blurb-gui-label" style="font-family: ${uiFamily}">
-                Surface: GUI
+                BG:Secondary
               </p>
               <input
-                class="blurb-field"
+                class=${`blurb-field ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
                 type="text"
                 readonly
                 tabindex="-1"
                 value="Text input"
+                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-font="ui"
                 style="
                   font-family: ${uiFamily};
                   background: ${colors.surfaceGui};
@@ -492,8 +1034,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
               />
               <button
                 type="button"
-                class="blurb-button"
+                class=${`blurb-button ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
                 tabindex="-1"
+                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-font="ui"
                 style="
                   font-family: ${uiFamily};
                   background: ${colors.surfaceGui};
@@ -507,6 +1051,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
             </div>
           </div>
         </div>
+        ${this._renderInspector(colors)}
       </div>
     `;
   }

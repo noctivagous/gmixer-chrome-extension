@@ -685,6 +685,12 @@ function roleCss(
           .map((part) => `${part.trim()}[data-gmixer-native-l]`)
           .join(',\n    ')
       : selectors;
+  /** Keep tagged photo backgrounds (overlay path); clear CSS gradients/fills. */
+  const solidPaint = (selectors) =>
+    selectors
+      .split(',')
+      .map((part) => `${part.trim()}:not([${BACKGROUND_IMAGE_ATTR}])`)
+      .join(',\n    ');
 
   const ladder =
     surfaceLadder?.length >= 3
@@ -778,8 +784,12 @@ function roleCss(
     }
 
     /* Main content sheet: opaque-aware (layout-only mains stay transparent). */
-    ${maybeOpaque(`body main, body #main, body [role="main"], body [data-gmixer-role="main"]`)} {
+    ${solidPaint(
+      maybeOpaque(`body main, body #main, body [role="main"], body [data-gmixer-role="main"]`)
+    )} {
       background-color: var(--gmixer-bg-secondary) !important;
+      /* Gradients paint above background-color (HF Tailwind rails/cards). */
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -822,8 +832,9 @@ function roleCss(
       [role="dialog"],
       [popover],
       [data-gmixer-role="surface"]
-    ) {
+    ):not([${BACKGROUND_IMAGE_ATTR}]) {
       background-color: var(--gmixer-surface-gui) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -836,7 +847,7 @@ function roleCss(
       [popover]:popover-open,
       dialog[open],
       [data-gmixer-overlay]
-    )${GMIXER_UI_HOST_NOT},
+    )${GMIXER_UI_HOST_NOT}:not([${BACKGROUND_IMAGE_ATTR}]),
     :is(
       [role="menu"],
       [role="listbox"],
@@ -844,8 +855,9 @@ function roleCss(
       [popover]:popover-open,
       dialog[open],
       [data-gmixer-overlay]
-    )${GMIXER_UI_HOST_NOT} {
+    )${GMIXER_UI_HOST_NOT}:not([${BACKGROUND_IMAGE_ATTR}]) {
       background-color: var(--gmixer-surface-gui) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -933,7 +945,8 @@ function roleCss(
     /* Cards, articles, and promoted nested panels. Default mid ladder stop;
        data-gmixer-tone-step remaps to ranked elevated stops so native
        light/dark relationships survive Light|Gray|Dark. */
-    ${maybeOpaque(`body .card,
+    ${solidPaint(
+      maybeOpaque(`body .card,
     body article,
     body [data-gmixer-role="card"],
     body [data-gmixer-role="article"],
@@ -943,27 +956,34 @@ function roleCss(
     body [data-gmixer-role="hero"],
     body pre, body code, body kbd, body samp,
     body dialog, body [role="dialog"]${GMIXER_UI_HOST_NOT}, body [role="menu"],
-    body [role="listbox"], body [role="alert"]`)} {
+    body [role="listbox"], body [role="alert"]`)
+    )} {
       background-color: var(--gmixer-surface-containers) !important;
+      /* Gradients paint above background-color (HF Tailwind rails/cards). */
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
     /* Open shadow trees have no body ancestor, so the rules above miss
        stamped slabs (ad placements, widget chrome). Same role stamps, no
        host-specific selectors. */
-    ${maybeOpaque(`[data-gmixer-role="card"],
+    ${solidPaint(
+      maybeOpaque(`[data-gmixer-role="card"],
     [data-gmixer-role="article"],
     [data-gmixer-role="article-body"],
     [data-gmixer-role="surface"],
     [data-gmixer-role="sidebar"],
     [data-gmixer-role="hero"],
-    [data-gmixer-role="ad"]`)} {
+    [data-gmixer-role="ad"]`)
+    )} {
       background-color: var(--gmixer-surface-containers) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
-    ${maybeOpaque(`[data-gmixer-role="main"]`)} {
+    ${solidPaint(maybeOpaque(`[data-gmixer-role="main"]`))} {
       background-color: var(--gmixer-bg-secondary) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 

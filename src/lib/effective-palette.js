@@ -6,6 +6,11 @@ import {
   deriveSurfaceLadder,
   hexToHsl,
 } from './color-theory.js';
+import {
+  applySwatchAssignments,
+  hasSwatchAssignments,
+  resolveSwatchAssignments,
+} from './swatch-board.js';
 import { createDefaultState } from '../state/schema.js';
 
 /** Empty Auto overrides (install / theme-pack reset baseline). */
@@ -87,7 +92,16 @@ export function resolveEffectivePalette(global, opts = {}) {
     ? '#8a8a8a'
     : global?.color?.baseColor || '#8a8a8a';
   const themeMode = global?.themeMode || 'dark';
-  const themePalette = buildPalette(paletteBaseColor, paletteScheme, themeMode);
+  const generatedPalette = buildPalette(paletteBaseColor, paletteScheme, themeMode);
+  const storedAssignments = global?.color?.swatchAssignments;
+  const useAssignments =
+    colorOn && !toneFocus && hasSwatchAssignments(storedAssignments);
+  const { board, assignments } = useAssignments
+    ? resolveSwatchAssignments(storedAssignments, paletteBaseColor, paletteScheme, themeMode)
+    : { board: null, assignments: {} };
+  const themePalette = useAssignments
+    ? applySwatchAssignments(generatedPalette, assignments, board)
+    : generatedPalette;
   const overrides = toneFocus ? {} : { ...(global?.color?.overrides ?? {}) };
 
   return {
@@ -98,6 +112,8 @@ export function resolveEffectivePalette(global, opts = {}) {
     themeMode,
     themePalette,
     overrides,
+    swatchBoard: board,
+    swatchAssignments: assignments,
     applyOverrides: !toneFocus,
   };
 }

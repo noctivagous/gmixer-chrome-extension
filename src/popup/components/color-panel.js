@@ -1,12 +1,19 @@
 import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
 import { buildPalette, hexToHsl, hslToHex, SCHEMES } from '../../lib/color-theory.js';
+import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
 import { defineElement } from '../../lib/define-element.js';
 
 import './gmixer-color-wheel.js';
 import './gmixer-color-scheme-scales.js';
+import {
+  colorModeIcon,
+  colorPickerFlowArrow,
+  colorSchemePickerStyles,
+  pickerFieldsetLegend,
+} from './color-scheme-picker-styles.js';
 
 const IDENTITY_MODES = [
   { id: 'preserve', label: 'Preserve site identity' },
@@ -32,7 +39,7 @@ const ROLES = [
 
 /**
  * Color controls, split by settings sections: Tone (Light | Gray | Dark) and
- * Color Scheme (base color, relationships, identity, intensity, overrides).
+ * Color Scheme (hue ring at s=1.0/l=0.5, then S/L sliders, scheme, identity).
  */
 export class ColorPanel extends StoreBoundElement {
   static properties = {
@@ -42,7 +49,9 @@ export class ColorPanel extends StoreBoundElement {
     schemeOnly: { type: Boolean, attribute: 'scheme-only' },
   };
 
-  static styles = css`
+  static styles = [
+    colorSchemePickerStyles,
+    css`
     :host {
       display: grid;
       gap: var(--gm-space-2, 16px);
@@ -113,42 +122,12 @@ export class ColorPanel extends StoreBoundElement {
       font-size: 11px;
       opacity: 0.75;
     }
-    .color-selection-grid {
-      display: grid;
-      grid-template-columns: 160px 106px;
-      gap: 16px;
-      align-items: start;
-      justify-content: center;
-      width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
+    .color-picker-flow {
       margin-bottom: 16px;
-      padding: 16px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .color-selection-grid .scheme-options,
-    .color-selection-grid gmixer-color-scheme-scales {
-      grid-column: 1 / -1;
-      min-width: 0;
-      width: 100%;
-    }
-    .color-selection-grid .scheme-options {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-    }
-    .color-selection-grid .scheme-option {
+    .scheme-fieldset .scheme-option {
       min-width: 0;
       padding: 8px 6px;
-      overflow-wrap: anywhere;
-    }
-    @media (max-width: 480px) {
-      .color-selection-grid {
-        grid-template-columns: 1fr;
-        justify-items: center;
-      }
     }
     .color-mode-switch {
       display: grid;
@@ -178,81 +157,6 @@ export class ColorPanel extends StoreBoundElement {
       color: var(--gm-text, #f2eefc);
       background: var(--gm-accent-soft, rgba(124, 58, 237, 0.28));
       box-shadow: inset 0 -2px 0 var(--gm-accent, #7c3aed);
-    }
-    .hsl-sliders {
-      display: grid;
-      grid-template-columns: repeat(2, 50px);
-      gap: 6px;
-      justify-content: center;
-      min-height: 160px;
-    }
-    .hsl-slider {
-      display: grid;
-      grid-template-rows: 1fr auto;
-      gap: 5px;
-      justify-items: center;
-      font-size: 9px;
-      opacity: 0.9;
-      color: var(--gm-muted, rgba(242, 238, 252, 0.7));
-      font-weight: 700;
-    }
-    .hsl-slider-shell {
-      position: relative;
-      width: 50px;
-      height: 150px;
-    }
-    .hsl-track {
-      position: absolute;
-      inset: 0;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 4px;
-      background-image:
-        linear-gradient(to top, var(--hsl-band-0-a), var(--hsl-band-0-b)),
-        linear-gradient(to top, var(--hsl-band-1-a), var(--hsl-band-1-b)),
-        linear-gradient(to top, var(--hsl-band-2-a), var(--hsl-band-2-b)),
-        linear-gradient(to top, var(--hsl-band-3-a), var(--hsl-band-3-b));
-      background-size: calc(100% / var(--hsl-band-count, 1)) 100%;
-      background-position:
-        calc(0 * 100% / var(--hsl-band-count, 1)) 0,
-        calc(1 * 100% / var(--hsl-band-count, 1)) 0,
-        calc(2 * 100% / var(--hsl-band-count, 1)) 0,
-        calc(3 * 100% / var(--hsl-band-count, 1)) 0;
-      background-repeat: no-repeat;
-      pointer-events: none;
-    }
-    .hsl-slider input {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 150px;
-      height: 50px;
-      margin: 0;
-      transform: translate(-50%, -50%) rotate(-90deg);
-      appearance: none;
-      -webkit-appearance: none;
-      background: transparent;
-      border: 0;
-      padding: 0;
-      cursor: pointer;
-    }
-    .hsl-slider input::-webkit-slider-runnable-track {
-      appearance: none;
-      -webkit-appearance: none;
-      background: transparent;
-      border: 0;
-      height: 50px;
-    }
-    .hsl-slider input::-webkit-slider-thumb {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 10px;
-      height: 48px;
-      margin: 0;
-      border: 1px solid rgba(255, 255, 255, 0.85);
-      border-radius: 2px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-      cursor: grab;
     }
     .scheme-options {
       display: flex;
@@ -335,7 +239,8 @@ export class ColorPanel extends StoreBoundElement {
     .tone-segment[aria-pressed='true'] .tone-caption {
       opacity: 0.9;
     }
-  `;
+  `,
+  ];
 
   constructor() {
     super();
@@ -391,13 +296,13 @@ export class ColorPanel extends StoreBoundElement {
             class="color-mode-option"
             aria-pressed="false"
             @click=${() => this._setColorMode(true)}
-          >Color</button>
+          >${colorModeIcon('color')} Color</button>
           <button
             type="button"
             class="color-mode-option"
             aria-pressed="true"
             @click=${() => this._setColorMode(false)}
-          >Monochrome</button>
+          >${colorModeIcon('monochrome')} Monochrome</button>
         </div>
         <label class="grayscale-control">
           <span class="grayscale-control-header">
@@ -426,53 +331,77 @@ export class ColorPanel extends StoreBoundElement {
           class="color-mode-option"
           aria-pressed=${colorEnabled}
           @click=${() => this._setColorMode(true)}
-        >Color</button>
+        >${colorModeIcon('color')} Color</button>
         <button
           type="button"
           class="color-mode-option"
           aria-pressed=${!colorEnabled}
           @click=${() => this._setColorMode(false)}
-        >Monochrome</button>
+        >${colorModeIcon('monochrome')} Monochrome</button>
       </div>
 
-      <div class="color-selection-grid">
-        <gmixer-color-wheel></gmixer-color-wheel>
-        <div class="hsl-sliders" aria-label="Color adjustments">
-          ${this._renderVerticalHslSlider(
-            'S',
-            'Saturation',
-            hsl.s,
-            0,
-            100,
-            's',
-            color.schemeBaseColor || color.baseColor,
-            color.scheme
-          )}
-          ${this._renderVerticalHslSlider(
-            'L',
-            'Lightness',
-            hsl.l,
-            8,
-            92,
-            'l',
-            color.schemeBaseColor || color.baseColor,
-            color.scheme
-          )}
-        </div>
-        <div class="scheme-options" role="group" aria-label="Color scheme">
-          ${SCHEMES.filter((scheme) => scheme.id !== 'monochrome').map(
-            (scheme) => html`
-              <button
-                type="button"
-                class="scheme-option"
-                aria-pressed=${color.scheme === scheme.id}
-                @click=${() => this.updateGlobal({ color: { scheme: scheme.id } })}
-              >${scheme.label}</button>
-            `
-          )}
-        </div>
-        <gmixer-color-scheme-scales active-scheme-only></gmixer-color-scheme-scales>
+      <div class="color-picker-flow" aria-label="Color scheme pipeline">
+        <fieldset class="picker-fieldset picker-group-fieldset">
+          <legend>Pick Base Colors</legend>
+          <div class="color-picker-pipeline">
+            <fieldset class="picker-fieldset scheme-fieldset">
+              ${pickerFieldsetLegend(1, 'Scheme')}
+              <div class="scheme-options" role="group" aria-label="1. Scheme">
+                ${SCHEMES.filter((scheme) => scheme.id !== 'monochrome').map(
+                  (scheme) => html`
+                    <button
+                      type="button"
+                      class="scheme-option"
+                      aria-pressed=${color.scheme === scheme.id}
+                      @click=${() => this._setScheme(scheme.id)}
+                    >${scheme.label}</button>
+                  `
+                )}
+              </div>
+            </fieldset>
+            ${colorPickerFlowArrow()}
+            <fieldset class="picker-fieldset hue-fieldset">
+              ${pickerFieldsetLegend(2, 'Hue')}
+              <gmixer-color-wheel></gmixer-color-wheel>
+              <span class="hue-caption">Hue</span>
+            </fieldset>
+            ${colorPickerFlowArrow()}
+            <fieldset class="picker-fieldset hsl-fieldset">
+              ${pickerFieldsetLegend(3, 'Saturation & Lightness')}
+              <div class="hsl-sliders" aria-label="Saturation and lightness">
+                ${this._renderVerticalHslSlider(
+                  'S',
+                  'Saturation',
+                  hsl.s,
+                  0,
+                  100,
+                  's',
+                  color.schemeBaseColor || color.baseColor,
+                  color.scheme
+                )}
+                ${this._renderVerticalHslSlider(
+                  'L',
+                  'Lightness',
+                  hsl.l,
+                  8,
+                  92,
+                  'l',
+                  color.schemeBaseColor || color.baseColor,
+                  color.scheme
+                )}
+              </div>
+            </fieldset>
+          </div>
+        </fieldset>
+        <fieldset class="picker-fieldset picker-group-fieldset">
+          <legend>Page Color Assignments</legend>
+          <gmixer-color-scheme-scales active-scheme-only></gmixer-color-scheme-scales>
+        </fieldset>
       </div>
+      <p class="hint">
+        Pipeline: scheme, then hue, then saturation and lightness. Surfaces are pinned to swatches;
+        drag a label to reassign. Hue and S/L recolor the boxes without moving the pins.
+      </p>
 
       <label>Site identity</label>
       <select
@@ -548,6 +477,19 @@ export class ColorPanel extends StoreBoundElement {
     `;
   }
 
+  _setScheme(schemeId) {
+    const color = this.state?.global?.color;
+    if (!color) return;
+    const base = color.schemeBaseColor || color.baseColor;
+    const mode = this.state?.global?.themeMode || 'dark';
+    this.updateGlobal({
+      color: {
+        scheme: schemeId,
+        swatchAssignments: autoAssignSwatches(base, schemeId, mode),
+      },
+    });
+  }
+
   _setOverride(roleId, value) {
     this.updateGlobal({
       color: {
@@ -562,20 +504,30 @@ export class ColorPanel extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
+    const mode = this.state?.global?.themeMode || 'dark';
+    if (enabled) {
+      const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
+      const baseColor = hslToHex({ ...hsl, s: Math.max(hsl.s, 70) });
+      this.updateGlobal({
+        activeThemePackId: 'user-made',
+        sections: { color: true },
+        color: {
+          scheme,
+          baseColor,
+          schemeBaseColor: baseColor,
+          swatchAssignments: autoAssignSwatches(baseColor, scheme, mode),
+        },
+      });
+      return;
+    }
     this.updateGlobal({
       activeThemePackId: 'user-made',
-      sections: { color: enabled },
-      color: enabled
-        ? {
-            scheme: color.scheme === 'monochrome' ? 'analog' : color.scheme,
-            baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
-            schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
-          }
-        : {
-            scheme: 'monochrome',
-            baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
-            schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
-          },
+      sections: { color: false },
+      color: {
+        scheme: 'monochrome',
+        baseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+        schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
+      },
     });
   }
 
@@ -594,7 +546,8 @@ export class ColorPanel extends StoreBoundElement {
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
     const newHex = hslToHex({ ...hsl, [key]: Number(value) });
-    // Match the wheel: keep scheme-base anchored to the live working color.
+    // Pipeline step 3: S/L refine the hue-ring pick. Do not rewrite scheme
+    // (step 1) or hue (step 2). Keep scheme-base aligned with the working color.
     this.updateGlobal({ color: { baseColor: newHex, schemeBaseColor: newHex } });
   }
 

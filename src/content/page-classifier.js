@@ -590,8 +590,47 @@ function effectiveBackground(el, style) {
 }
 
 function firstCssColorToken(value) {
-  const match = (value || '').match(/rgba?\([^)]+\)/i);
+  // Prefer rgb(a) when present; otherwise accept modern CSS color functions /
+  // hex stops (Hugging Face Tailwind gradients often use oklch()).
+  const match = (value || '').match(
+    /rgba?\([^)]+\)|hsla?\([^)]+\)|oklch\([^)]+\)|oklab\([^)]+\)|color\([^)]+\)|#[0-9a-f]{3,8}\b/i
+  );
   return match ? match[0] : '';
+}
+
+/**
+ * Approximate relative luminance for a single CSS color token.
+ * OKLCH/OKLAB expose perceptual L directly — no sRGB round-trip needed.
+ * @param {string} token
+ * @returns {number|null}
+ */
+function luminanceFromCssColorToken(token) {
+  if (!token) return null;
+  const rgba = rgbaFromCss(token);
+  if (rgba) return luminanceFromRgba(rgba);
+
+  const oklike = token.match(/okl(?:ch|ab)\(\s*([-\d.]+%?)/i);
+  if (oklike) {
+    let L = parseFloat(oklike[1]);
+    if (!Number.isFinite(L)) return null;
+    if (String(oklike[1]).includes('%') || L > 1) L /= 100;
+    return Math.max(0, Math.min(1, L));
+  }
+
+  const hex = token.match(/^#([0-9a-f]{3,8})$/i);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3 || h.length === 4) {
+      h = [...h].map((c) => c + c).join('');
+    }
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+    return luminanceFromRgba({ r, g, b, a });
+  }
+
+  return null;
 }
 
 function captureNativeLuminance(el, style) {
@@ -603,7 +642,11 @@ function captureNativeLuminance(el, style) {
   const ownColor = rgbaFromCss(style.backgroundColor || '');
   let lum = ownColor?.a > 0 ? luminanceFromRgba(effectiveBackground(el, style)) : null;
   if (lum == null) {
-    lum = luminanceFromRgba(rgbaFromCss(firstCssColorToken(style.backgroundImage || '')));
+    lum = luminanceFromCssColorToken(firstCssColorToken(style.backgroundImage || ''));
+  }
+  // Unparsed gradient stops still count as a painted sheet for opaque-only.
+  if (lum == null && hasCssGradientFill(style.backgroundImage || '')) {
+    lum = 0.5;
   }
   if (lum == null) return;
   el.setAttribute(NATIVE_L_ATTR, lum.toFixed(4));

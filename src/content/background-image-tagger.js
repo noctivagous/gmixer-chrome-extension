@@ -88,10 +88,15 @@ function* walkElements(root, max) {
 
 /**
  * @param {{ enabled: boolean, scope: 'images'|'backgrounds'|'both' }|null|undefined} imageFilter
+ * @param {Record<string, { filter?: string }>|null|undefined} [mediaStyles]
+ * @param {{ colorOn?: boolean }} [options]
+ *   When color restyle clears surface gradients, tag url() hosts so they are
+ *   excluded from `background-image: none` even if no image filter overlay runs.
  */
-export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}) {
+export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}, options = {}) {
+  if (options.colorOn) return true;
   const globalFilterApplies = !!imageFilter?.enabled && imageFilter.scope !== 'images';
-  const categoryFilterApplies = Object.values(mediaStyles).some(
+  const categoryFilterApplies = Object.values(mediaStyles || {}).some(
     (style) => style?.filter && !['auto', 'none', 'original'].includes(style.filter)
   );
   return globalFilterApplies || categoryFilterApplies;
@@ -99,9 +104,13 @@ export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}) {
 
 /**
  * @param {ParentNode} [root=document.body]
+ * @param {{ createOverlays?: boolean }} [options]
+ *   Overlays are only needed when an image filter blends over the photo.
+ *   Color-only tagging stamps the attr so solid surface paint skips url() hosts.
  */
-export function tagBackgroundImageElements(root = document.body) {
+export function tagBackgroundImageElements(root = document.body, options = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
+  const createOverlays = options.createOverlays !== false;
 
   /** @type {Element[]} */
   const toTag = [];
@@ -123,7 +132,7 @@ export function tagBackgroundImageElements(root = document.body) {
     // Already tagged from a prior pass: skip getComputedStyle. Incremental
     // mutations must not re-read the whole tree.
     if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) {
-      if (!el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
+      if (createOverlays && !el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
         toTag.push(el);
       }
       continue;
@@ -137,7 +146,7 @@ export function tagBackgroundImageElements(root = document.body) {
 
   for (const el of toTag) {
     if (!el.hasAttribute(BACKGROUND_IMAGE_ATTR)) el.setAttribute(BACKGROUND_IMAGE_ATTR, '');
-    if (!el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
+    if (createOverlays && !el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
       const overlay = document.createElement('span');
       overlay.className = BACKGROUND_IMAGE_OVERLAY_CLASS;
       overlay.setAttribute('aria-hidden', 'true');

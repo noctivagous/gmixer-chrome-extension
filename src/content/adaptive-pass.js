@@ -45,10 +45,14 @@ export function runAdaptivePass(resolved) {
   // reject sponsor/creative colors that are unrelated to the site's brand.
   const sample = samplePageRoles();
 
-  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
-    tagBackgroundImageElements();
+  const colorOn = resolved?.sections?.color !== false;
+  const filterOverlays =
+    !!resolved?.imageFilter?.enabled && resolved.imageFilter.scope !== 'images';
+  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles, { colorOn })) {
+    const tagOpts = { createOverlays: filterOverlays };
+    tagBackgroundImageElements(document.body, tagOpts);
     for (const shadow of collectOpenShadowRoots(document.documentElement)) {
-      tagBackgroundImageElements(shadow);
+      tagBackgroundImageElements(shadow, tagOpts);
     }
   }
 
@@ -66,10 +70,14 @@ export function runAdaptivePass(resolved) {
 function runNativeSubtreePass(root, resolved) {
   const classification = classifySubtree(root, { skipClassified: true });
   stampLogoAlpha(root);
-  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
-    tagBackgroundImageElements(root);
+  const colorOn = resolved?.sections?.color !== false;
+  const filterOverlays =
+    !!resolved?.imageFilter?.enabled && resolved.imageFilter.scope !== 'images';
+  if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles, { colorOn })) {
+    const tagOpts = { createOverlays: filterOverlays };
+    tagBackgroundImageElements(root, tagOpts);
     for (const shadow of collectOpenShadowRoots(root)) {
-      tagBackgroundImageElements(shadow);
+      tagBackgroundImageElements(shadow, tagOpts);
     }
   }
   return classification;

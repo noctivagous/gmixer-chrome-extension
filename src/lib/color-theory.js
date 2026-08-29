@@ -34,6 +34,18 @@ export function hexToHsl(hex) {
   return { h, s: s * 100, l: l * 100 };
 }
 
+/**
+ * Hue-ring sample (pipeline step 2): a full hue distribution (H spans 0–360°)
+ * at saturation 1.0 and lightness 0.5. Scheme (step 1) is unchanged by this
+ * pick; saturation and lightness sliders (step 3) refine it afterward.
+ */
+export const HUE_RING = Object.freeze({ s: 100, l: 50 });
+
+/** @param {number} hueDeg */
+export function hueRingHex(hueDeg) {
+  return hslToHex({ h: hueDeg, s: HUE_RING.s, l: HUE_RING.l });
+}
+
 export function hslToHex({ h, s, l }) {
   const sNorm = s / 100;
   const lNorm = l / 100;

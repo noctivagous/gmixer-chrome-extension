@@ -714,6 +714,36 @@ describe('page-classifier', () => {
     }
   });
 
+  it('stamps native luminance from oklch() gradient stops (Tailwind v4 / HF)', () => {
+    const surface = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface' }),
+      getBoundingClientRect: () => ({ width: 800, height: 54 }),
+      _bg: 'rgba(0, 0, 0, 0)',
+      _bgImage:
+        'linear-gradient(oklch(0.987 0.022 95.277) 0%, oklch(0.962 0.059 95.617) 100%)',
+    };
+    const root = {
+      nodeType: 11,
+      querySelectorAll: () => [surface],
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: node._bgImage || 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 1);
+      assert.ok(surface.hasAttribute(NATIVE_L_ATTR));
+      const lum = Number(surface.getAttribute(NATIVE_L_ATTR));
+      assert.ok(lum > 0.9, `expected near-white oklch L, got ${lum}`);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
   it('does not treat a barely visible alpha tint as an opaque surface', () => {
     const panel = {
       tagName: 'DIV',

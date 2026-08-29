@@ -25,6 +25,9 @@ export function createDefaultState() {
       activeThemePackId: 'user-made',
       themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {
+        // Working color after the Color Scheme pipeline:
+        // 1) scheme, 2) hue from the ring (s=1.0, l=0.5), 3) saturation & lightness.
+        // Later steps must not rewrite earlier ones.
         baseColor: '#8a8a8a',
         // Anchor for scheme scales / HSL track gradients. Wheel and HSL sliders
         // keep this aligned with baseColor; tint swatches may diverge.
@@ -41,6 +44,9 @@ export function createDefaultState() {
         // opaque native background (`data-gmixer-native-l`). Transparent layout
         // wrappers stay transparent so they share the page canvas.
         paintOpaqueOnly: true,
+        // Surface → swatch-cell pins (scale/hue/step). Empty = auto-assign.
+        // Coords stay put when hue/S/L change so cell hexes cascade.
+        swatchAssignments: {},
         // Per-role overrides. Empty string = "use the generated/blended palette value".
         overrides: {
           background: '',

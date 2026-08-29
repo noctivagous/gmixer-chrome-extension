@@ -7,6 +7,8 @@ import {
   deriveSurface,
   deriveSurfaceLadder,
   hexToHsl,
+  HUE_RING,
+  hueRingHex,
   resolveGlowColor,
 } from '../src/lib/color-theory.js';
 import {
@@ -26,6 +28,15 @@ function withTonePaint(global) {
 }
 
 describe('color-theory', () => {
+  it('samples the hue ring at saturation 1.0 and lightness 0.5', () => {
+    assert.equal(HUE_RING.s, 100);
+    assert.equal(HUE_RING.l, 50);
+    const red = hexToHsl(hueRingHex(0));
+    assert.equal(Math.round(red.h), 0);
+    assert.ok(Math.abs(red.s - 100) < 1);
+    assert.ok(Math.abs(red.l - 50) < 1);
+  });
+
   it('builds a split-complement palette from a base color', () => {
     const palette = buildPalette('#7c3aed', 'splitComplement');
     assert.match(palette.background, /^#[0-9a-f]{6}$/i);
@@ -366,7 +377,7 @@ describe('buildCss page paint', () => {
     assert.match(css, /--gmixer-surface-containers:/);
     assert.match(
       css,
-      /body \.card\[data-gmixer-native-l\],[\s\S]*background-color: var\(--gmixer-surface-containers\)/
+      /body \.card\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\),[\s\S]*background-color: var\(--gmixer-surface-containers\)/
     );
     assert.doesNotMatch(css, /\.gmixer-tonal-overlay/);
     assert.doesNotMatch(css, /mix-blend-mode: multiply/);
@@ -395,12 +406,12 @@ describe('buildCss page paint', () => {
     assert.match(css, /corner-shape: inherit !important/);
     assert.match(
       css,
-      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*\}[\s\S]*body > header\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-1\)/
+      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*\}[\s\S]*body > header\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)[\s\S]*background-color: var\(--gmixer-surface-1\)/
     );
     // Opaque mains get elevated fill; layout-only mains stay unpainted.
     assert.match(
       css,
-      /body #main\[data-gmixer-native-l\],[\s\S]*body \[role="main"\]\[data-gmixer-native-l\],[\s\S]*body \[data-gmixer-role="main"\]\[data-gmixer-native-l\] \{[\s\S]*background-color: var\(--gmixer-bg-secondary\)/
+      /body #main\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\),[\s\S]*body \[role="main"\]\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\),[\s\S]*body \[data-gmixer-role="main"\]\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\) \{[\s\S]*background-color: var\(--gmixer-bg-secondary\)/
     );
     assert.doesNotMatch(
       css,
@@ -420,9 +431,9 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /body > header\[data-gmixer-native-l\]/);
     assert.match(
       css,
-      /body main, body #main, body \[role="main"\], body \[data-gmixer-role="main"\] \{/
+      /body main:not\(\[data-gmixer-bgimg\]\), body #main:not\(\[data-gmixer-bgimg\]\), body \[role="main"\]:not\(\[data-gmixer-bgimg\]\), body \[data-gmixer-role="main"\]:not\(\[data-gmixer-bgimg\]\) \{/
     );
-    assert.match(css, /body \.card,\s*body article,/);
+    assert.match(css, /body \.card:not\(\[data-gmixer-bgimg\]\),\s*body article:not\(\[data-gmixer-bgimg\]\),/);
   });
 
   function pageWithBrandIdentity() {
@@ -556,7 +567,7 @@ describe('buildCss page paint', () => {
     );
     assert.match(
       css,
-      /\[role="menu"\],\s*\[role="listbox"\],\s*\[role="dialog"\],\s*\[popover\],\s*\[data-gmixer-role="surface"\]\s*\) \{\s*background-color: var\(--gmixer-surface-gui\)/
+      /\[role="menu"\],\s*\[role="listbox"\],\s*\[role="dialog"\],\s*\[popover\],\s*\[data-gmixer-role="surface"\]\s*\):not\(\[data-gmixer-bgimg\]\) \{\s*background-color: var\(--gmixer-surface-gui\)/
     );
     assert.match(css, /\[popover\]:popover-open/);
     assert.match(css, /:not\(#gmixer-settings\):not\(#gmixer-walkthrough-host\)/);
@@ -575,6 +586,22 @@ describe('buildCss page paint', () => {
     assert.match(
       css,
       /body footer\[data-gmixer-native-l\][\s\S]*background-image: none !important/
+    );
+  });
+
+  it('clears article/surface CSS gradients so Tailwind rails follow Tone', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(
+      css,
+      /body \[data-gmixer-role="article"\]\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)/
+    );
+    assert.match(
+      css,
+      /body \[data-gmixer-role="surface"\]\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)[\s\S]*background-image: none !important/
+    );
+    assert.match(
+      css,
+      /body \[data-gmixer-role="main"\]\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)[\s\S]*background-image: none !important/
     );
   });
 
