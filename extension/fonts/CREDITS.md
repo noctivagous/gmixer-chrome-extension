@@ -28,6 +28,8 @@ npm run fonts:google
 
 The remaining typefaces in `extension/fonts/` were created by **Peter Wiegel**
 and downloaded from [peter-wiegel.de](https://www.peter-wiegel.de/).
+The shipped set and UI categories mirror the folders/files under
+`extension/fonts/` (regenerated at build time via `npm run fonts:catalog`).
 
 Per the site FAQ (as of 2021+):
 

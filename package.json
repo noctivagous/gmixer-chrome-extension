@@ -11,6 +11,7 @@
     "build:minify": "node build.js --minify",
     "watch": "node build.js --watch",
     "watch:debug": "node build.js --watch --debug",
+    "fonts:catalog": "node scripts/generate-fonts-catalog.mjs",
     "fonts:fetch": "node scripts/fetch-wiegel-fonts.mjs",
     "fonts:google": "node scripts/fetch-google-fonts.mjs",
     "fonts:reclassify": "node scripts/reclassify-fonts.mjs",

@@ -1,7 +1,9 @@
 // Build script: bundles src/ into extension/ (the unpacked-extension load directory).
 // extension/manifest.json and fonts/ are authored directly and are NOT generated.
+// src/config/fonts.js IS generated from extension/fonts/ before each bundle.
 import { context } from 'esbuild';
 import { mkdirSync } from 'node:fs';
+import { generateFontsCatalog } from './scripts/generate-fonts-catalog.mjs';
 
 const OUT_DIR = 'extension';
 const WATCH = process.argv.includes('--watch');
@@ -9,6 +11,7 @@ const MINIFY = process.argv.includes('--minify');
 const DEBUG = process.argv.includes('--debug') || process.env.GMIXER_DEBUG === '1';
 
 mkdirSync(OUT_DIR, { recursive: true });
+generateFontsCatalog();
 
 const shared = {
   bundle: true,

@@ -4,6 +4,12 @@ import { FONT_CATEGORIES, FONTS, getFontById, getFontsForTarget } from '../../co
 import { isFontSuitableForTarget, unsuitableReason } from '../../config/font-heuristics.js';
 import '../../settings/components/font-picker.js';
 import { defineElement } from '../../lib/define-element.js';
+import {
+  HOVER_LINK_EVENT,
+  HoverLinkOverlay,
+  emitHoverLink,
+  previewElForFontSlot,
+} from '../../lib/hover-link.js';
 
 const HEADING_TARGETS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((tag) => ({
   key: tag,
@@ -34,10 +40,15 @@ const TARGETS = [
   },
 ];
 
+function fontSlotKey(targetKey) {
+  return /^h[1-6]$/.test(targetKey) ? `headings.${targetKey}` : targetKey;
+}
+
 export class FontsPanel extends StoreBoundElement {
   static properties = {
     _showAll: { state: true },
     _selectedHeadings: { state: true },
+    _linkedSlot: { state: true },
   };
 
   static styles = css`
@@ -66,6 +77,15 @@ export class FontsPanel extends StoreBoundElement {
 
     .target {
       margin-bottom: var(--gm-baseline, 24px);
+      border-radius: var(--gm-space-1, 8px);
+      outline: 1px solid transparent;
+      outline-offset: 4px;
+      transition: outline-color 0.12s ease;
+    }
+
+    .target[data-linked='true'],
+    .heading-check[data-linked='true'] {
+      outline-color: rgba(196, 181, 253, 0.75);
     }
 
     .heading-tools {
@@ -95,6 +115,9 @@ export class FontsPanel extends StoreBoundElement {
       font-size: 12px;
       line-height: var(--gm-baseline, 24px);
       cursor: pointer;
+      outline: 1px solid transparent;
+      outline-offset: 2px;
+      border-radius: 4px;
     }
 
     .heading-check input {
@@ -172,6 +195,47 @@ export class FontsPanel extends StoreBoundElement {
     super();
     this._showAll = false;
     this._selectedHeadings = new Set();
+    this._linkedSlot = null;
+    this._hoverLink = null;
+    this._onHoverLink = this._onHoverLink.bind(this);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._hoverLink = new HoverLinkOverlay({
+      kind: 'font-slot',
+      findControl: (id) =>
+        this.renderRoot.querySelector(`.target[data-gmixer-font-slot="${CSS.escape(id)}"]`) ||
+        this.renderRoot.querySelector(`[data-gmixer-font-slot="${CSS.escape(id)}"]`),
+      findPreview: (id) => previewElForFontSlot(this, id),
+    });
+    window.addEventListener(HOVER_LINK_EVENT, this._onHoverLink);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener(HOVER_LINK_EVENT, this._onHoverLink);
+    this._hoverLink?.destroy();
+    this._hoverLink = null;
+    emitHoverLink({ kind: 'font-slot', id: null, source: 'control' });
+  }
+
+  _hoverSlot(slot, on) {
+    if (on) {
+      this._linkedSlot = slot;
+      emitHoverLink({ kind: 'font-slot', id: slot, source: 'control' });
+      return;
+    }
+    if (this._linkedSlot === slot) {
+      this._linkedSlot = null;
+      emitHoverLink({ kind: 'font-slot', id: null, source: 'control' });
+    }
+  }
+
+  _onHoverLink(event) {
+    if (event.detail?.kind !== 'font-slot') return;
+    if (event.detail?.source !== 'preview') return;
+    this._linkedSlot = event.detail.id || null;
   }
 
   _usageLabel(font) {
@@ -208,7 +272,13 @@ export class FontsPanel extends StoreBoundElement {
         <p class="heading-tools-label">Heading groups — select levels, then choose a shared face</p>
         ${HEADING_TARGETS.map(
           (target) => html`
-            <label class="heading-check">
+            <label
+              class="heading-check"
+              data-gmixer-font-slot=${fontSlotKey(target.key)}
+              data-linked=${this._linkedSlot === fontSlotKey(target.key)}
+              @pointerenter=${() => this._hoverSlot(fontSlotKey(target.key), true)}
+              @pointerleave=${() => this._hoverSlot(fontSlotKey(target.key), false)}
+            >
               <input
                 type="checkbox"
                 .checked=${this._selectedHeadings.has(target.key)}
@@ -263,8 +333,15 @@ export class FontsPanel extends StoreBoundElement {
     const available = getFontsForTarget(pickerTarget, { showAll: this._showAll }).length;
     const reason = current && !suitable ? unsuitableReason(current, pickerTarget) : '';
 
+    const slot = fontSlotKey(target.key);
     return html`
-      <div class="target">
+      <div
+        class="target"
+        data-gmixer-font-slot=${slot}
+        data-linked=${this._linkedSlot === slot}
+        @pointerenter=${() => this._hoverSlot(slot, true)}
+        @pointerleave=${() => this._hoverSlot(slot, false)}
+      >
         <div class="target-head">
           <p class="target-label">${target.label}</p>
           <p class="target-hint">${target.hint}</p>

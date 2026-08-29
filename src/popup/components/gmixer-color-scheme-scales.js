@@ -10,6 +10,12 @@ import {
   resolveSwatchAssignments,
 } from '../../lib/swatch-board.js';
 import { defineElement } from '../../lib/define-element.js';
+import {
+  HOVER_LINK_EVENT,
+  HoverLinkOverlay,
+  emitHoverLink,
+  previewElForRole,
+} from '../../lib/hover-link.js';
 
 function chipInk(hex) {
   try {
@@ -35,6 +41,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     activeSchemeOnly: { type: Boolean, attribute: 'active-scheme-only', reflect: true },
     compact: { type: Boolean, reflect: true },
     _dragRole: { state: true },
+    _linkRole: { state: true },
   };
 
   static styles = css`
@@ -165,6 +172,9 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       outline: 1px solid #fff;
       outline-offset: 1px;
     }
+    .role-chip[data-linked='true'] {
+      box-shadow: 0 0 0 1px #fff, 0 0 10px var(--gm-accent, #7c3aed);
+    }
     .scale-label {
       min-width: 3.5rem;
       color: var(--gm-muted, rgba(242, 238, 252, 0.55));
@@ -190,6 +200,27 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     this.monochrome = false;
     this.activeSchemeOnly = false;
     this._dragRole = null;
+    this._linkRole = null;
+    this._hoverLink = null;
+    this._onRoleHover = this._onRoleHover.bind(this);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._hoverLink = new HoverLinkOverlay({
+      kind: 'color-role',
+      findControl: (id) => this.renderRoot.querySelector(`.role-chip[data-role="${id}"]`),
+      findPreview: (id) => previewElForRole(this, id),
+      isPaused: () => !!this._dragRole,
+    });
+    window.addEventListener(HOVER_LINK_EVENT, this._onRoleHover);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener(HOVER_LINK_EVENT, this._onRoleHover);
+    this._hoverLink?.destroy();
+    this._hoverLink = null;
   }
 
   updated() {
@@ -308,10 +339,13 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
         class="role-chip"
         data-role=${role.id}
         data-dragging=${this._dragRole === role.id}
+        data-linked=${this._linkRole === role.id}
         draggable="true"
         style="color:${chipInk(hex)}"
         title=${`Move ${role.label}`}
         aria-label=${`Move ${role.label}`}
+        @pointerenter=${() => this._hoverChip(role.id, true)}
+        @pointerleave=${() => this._hoverChip(role.id, false)}
         @pointerdown=${(event) => this._onChipPointerDown(event, role.id)}
         @pointerup=${this._onChipPointerUp}
         @pointercancel=${this._onChipPointerUp}
@@ -322,10 +356,31 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     `;
   }
 
+  _hoverChip(roleId, on) {
+    if (this._dragRole) return;
+    if (on) {
+      this._linkRole = roleId;
+      emitHoverLink({ kind: 'color-role', id: roleId, source: 'control' });
+      return;
+    }
+    if (this._linkRole === roleId) {
+      this._linkRole = null;
+      emitHoverLink({ kind: 'color-role', id: null, source: 'control' });
+    }
+  }
+
+  _onRoleHover(event) {
+    if (event.detail?.kind !== 'color-role') return;
+    if (event.detail?.source !== 'preview') return;
+    this._linkRole = event.detail.id || null;
+  }
+
   _onChipPointerDown(event, roleId) {
     if (event.button != null && event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     this._dragRole = roleId;
+    this._linkRole = null;
+    emitHoverLink({ kind: 'color-role', id: null, source: 'control' });
   }
 
   _onChipPointerUp(event) {

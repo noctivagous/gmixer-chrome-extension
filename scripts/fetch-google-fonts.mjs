@@ -1,6 +1,7 @@
 /**
  * Download OFL Google Fonts used by the default aesthetic theme packs.
- * Writes woff2 files to extension/fonts/google/ (latin subset; variable when available).
+ * Writes woff2 files to extension/fonts/google/ (latin subset; variable when available)
+ * and regenerates src/config/fonts.js from the filesystem.
  *
  * Usage: node scripts/fetch-google-fonts.mjs
  */
@@ -8,19 +9,68 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generateFontsCatalog } from './generate-fonts-catalog.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'extension/fonts/google');
 
 const FAMILIES = [
-  { id: 'playfair-display', cssFamily: 'Playfair Display', query: 'Playfair+Display:wght@400..700', weightRange: '400 700' },
-  { id: 'source-sans-3', cssFamily: 'Source Sans 3', query: 'Source+Sans+3:wght@400..700', weightRange: '400 700' },
-  { id: 'lora', cssFamily: 'Lora', query: 'Lora:wght@400..600', weightRange: '400 600' },
-  { id: 'cormorant-garamond', cssFamily: 'Cormorant Garamond', query: 'Cormorant+Garamond:wght@600', weightRange: '600' },
-  { id: 'raleway', cssFamily: 'Raleway', query: 'Raleway:wght@400..600', weightRange: '400 600' },
-  { id: 'space-grotesk', cssFamily: 'Space Grotesk', query: 'Space+Grotesk:wght@400..700', weightRange: '400 700' },
-  { id: 'dm-sans', cssFamily: 'DM Sans', query: 'DM+Sans:wght@400..700', weightRange: '400 700' },
-  { id: 'outfit', cssFamily: 'Outfit', query: 'Outfit:wght@400..600', weightRange: '400 600' },
+  {
+    id: 'playfair-display',
+    cssFamily: 'Playfair Display',
+    query: 'Playfair+Display:wght@400..700',
+    weightRange: '400 700',
+    category: 'serif',
+  },
+  {
+    id: 'source-sans-3',
+    cssFamily: 'Source Sans 3',
+    query: 'Source+Sans+3:wght@400..700',
+    weightRange: '400 700',
+    category: 'technical',
+  },
+  {
+    id: 'lora',
+    cssFamily: 'Lora',
+    query: 'Lora:wght@400..600',
+    weightRange: '400 600',
+    category: 'serif',
+  },
+  {
+    id: 'cormorant-garamond',
+    cssFamily: 'Cormorant Garamond',
+    query: 'Cormorant+Garamond:wght@600',
+    weightRange: '600',
+    category: 'serif',
+  },
+  {
+    id: 'raleway',
+    cssFamily: 'Raleway',
+    query: 'Raleway:wght@400..600',
+    weightRange: '400 600',
+    category: 'technical',
+  },
+  {
+    id: 'space-grotesk',
+    cssFamily: 'Space Grotesk',
+    query: 'Space+Grotesk:wght@400..700',
+    weightRange: '400 700',
+    category: 'technical',
+  },
+  {
+    id: 'dm-sans',
+    cssFamily: 'DM Sans',
+    query: 'DM+Sans:wght@400..700',
+    weightRange: '400 700',
+    category: 'technical',
+  },
+  {
+    id: 'outfit',
+    cssFamily: 'Outfit',
+    query: 'Outfit:wght@400..600',
+    weightRange: '400 600',
+    category: 'technical',
+  },
 ];
 
 const UA =
@@ -69,9 +119,11 @@ for (const fam of FAMILIES) {
     family: `"${fam.cssFamily}"`,
     file: `google/${file}`,
     weightRange: fam.weightRange,
+    category: fam.category,
     variable: pick.isVar,
   });
 }
 
 fs.writeFileSync(path.join(OUT, 'catalog.json'), JSON.stringify(catalog, null, 2));
 console.log(`Wrote ${catalog.length} fonts → ${OUT}`);
+generateFontsCatalog();

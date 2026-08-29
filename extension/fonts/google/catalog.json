@@ -4,6 +4,8 @@
     "label": "Playfair Display",
     "family": "\"Playfair Display\"",
     "file": "google/playfair-display.woff2",
+    "weightRange": "400 700",
+    "category": "serif",
     "variable": true
   },
   {
@@ -11,6 +13,8 @@
     "label": "Source Sans 3",
     "family": "\"Source Sans 3\"",
     "file": "google/source-sans-3.woff2",
+    "weightRange": "400 700",
+    "category": "technical",
     "variable": true
   },
   {
@@ -18,6 +22,8 @@
     "label": "Lora",
     "family": "\"Lora\"",
     "file": "google/lora.woff2",
+    "weightRange": "400 600",
+    "category": "serif",
     "variable": true
   },
   {
@@ -25,6 +31,8 @@
     "label": "Cormorant Garamond",
     "family": "\"Cormorant Garamond\"",
     "file": "google/cormorant-garamond.woff2",
+    "weightRange": "600",
+    "category": "serif",
     "variable": false
   },
   {
@@ -32,6 +40,8 @@
     "label": "Raleway",
     "family": "\"Raleway\"",
     "file": "google/raleway.woff2",
+    "weightRange": "400 600",
+    "category": "technical",
     "variable": true
   },
   {
@@ -39,6 +49,8 @@
     "label": "Space Grotesk",
     "family": "\"Space Grotesk\"",
     "file": "google/space-grotesk.woff2",
+    "weightRange": "400 700",
+    "category": "technical",
     "variable": true
   },
   {
@@ -46,6 +58,8 @@
     "label": "DM Sans",
     "family": "\"DM Sans\"",
     "file": "google/dm-sans.woff2",
+    "weightRange": "400 700",
+    "category": "technical",
     "variable": true
   },
   {
@@ -53,6 +67,8 @@
     "label": "Outfit",
     "family": "\"Outfit\"",
     "file": "google/outfit.woff2",
+    "weightRange": "400 600",
+    "category": "technical",
     "variable": true
   }
 ]

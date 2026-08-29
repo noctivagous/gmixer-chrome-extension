@@ -10,24 +10,32 @@
  * (per site FAQ). Do not sell the fonts themselves as a standalone product.
  *
  * Usage: node scripts/fetch-wiegel-fonts.mjs
- * Categories: keep in sync with scripts/reclassify-fonts.mjs
- *        (or run npm run fonts:reclassify after moving files by hand).
- * Then:  regenerate src/config/fonts.js from .tmp-fonts/catalog.json
- *        (or re-run the catalog writer step in this script's finish path).
+ * After install, regenerates src/config/fonts.js from extension/fonts/
+ * (categories + faces = filesystem). Retired ids in font-excludes.mjs
+ * are never re-downloaded.
  */
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, copyFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  existsSync,
+  copyFileSync,
+} from 'node:fs';
 import { join, basename, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EXCLUDED_FONT_IDS } from './font-excludes.mjs';
+import { generateFontsCatalog } from './generate-fonts-catalog.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const TMP = join(ROOT, '.tmp-fonts');
 const OUT = join(ROOT, 'extension', 'fonts');
 const BASE = 'http://www.peter-wiegel.de/Fonts';
 
-// Categories maintained by scripts/reclassify-fonts.mjs (DaFont + Wiegel cues).
 /** @type {{ zip: string, category: 'script'|'blackletter'|'serif'|'technical'|'stencil'|'matrix'|'typewriter'|'display', label: string, id: string }[]} */
-const FONTS = [
+const FONTS_ALL = [
   { zip: 'EuroScript.zip', category: 'script', id: 'euro-script', label: 'Euro Script' },
   { zip: 'Goldmarie.zip', category: 'script', id: 'goldmarie', label: 'Goldmarie' },
   { zip: 'DiscipuliBritannicaTT.zip', category: 'script', id: 'discipuli-britannica', label: 'Discipuli Britannica' },
@@ -85,8 +93,19 @@ const FONTS = [
   { zip: 'Engravers.zip', category: 'display', id: 'engravers', label: 'Engravers' },
 ];
 
+const FONTS = FONTS_ALL.filter((f) => !EXCLUDED_FONT_IDS.has(f.id));
+
 function ensureDirs() {
-  for (const cat of ["script","blackletter","serif","technical","stencil","matrix","typewriter","display"]) {
+  for (const cat of [
+    'script',
+    'blackletter',
+    'serif',
+    'technical',
+    'stencil',
+    'matrix',
+    'typewriter',
+    'display',
+  ]) {
     mkdirSync(join(OUT, cat), { recursive: true });
   }
   mkdirSync(TMP, { recursive: true });
@@ -99,7 +118,10 @@ async function download(zipName) {
     return { ok: true, cached: true, dest };
   }
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'gMixer-font-fetcher/0.1 (+local-dev; Peter Wiegel freeware fonts)' },
+    headers: {
+      'User-Agent':
+        'gMixer-font-fetcher/0.1 (+local-dev; Peter Wiegel freeware fonts)',
+    },
     redirect: 'follow',
   });
   if (!res.ok) return { ok: false, status: res.status, url };
@@ -135,8 +157,9 @@ function extractAndInstall(zipPath, category, id) {
   if (!fontFiles.length) return { ok: false, error: 'no font files in zip' };
 
   const preferred =
-    fontFiles.find((f) => !/bold|italic|oblique|black|light|thin|condensed/i.test(basename(f))) ??
-    fontFiles[0];
+    fontFiles.find(
+      (f) => !/bold|italic|oblique|black|light|thin|condensed/i.test(basename(f))
+    ) ?? fontFiles[0];
 
   const ext = extname(preferred).toLowerCase();
   const outName = `${id}${ext}`;
@@ -144,9 +167,15 @@ function extractAndInstall(zipPath, category, id) {
 
   for (const name of readdirSync(extractDir, { recursive: true })) {
     const full = join(extractDir, String(name));
-    if (/\.(txt|pdf|html|md|rtf)$/i.test(String(name)) && /licen|liesmich|readme|faq|unz|gpl|ofl/i.test(String(name))) {
+    if (
+      /\.(txt|pdf|html|md|rtf)$/i.test(String(name)) &&
+      /licen|liesmich|readme|faq|unz|gpl|ofl/i.test(String(name))
+    ) {
       try {
-        copyFileSync(full, join(OUT, category, `${id}-LICENSE${extname(String(name))}`));
+        copyFileSync(
+          full,
+          join(OUT, category, `${id}-LICENSE${extname(String(name))}`)
+        );
       } catch {
         /* ignore */
       }
@@ -156,106 +185,20 @@ function extractAndInstall(zipPath, category, id) {
   return {
     ok: true,
     file: `${category}/${outName}`,
-    familyGuess: basename(preferred, extname(preferred)).replace(/[_-]+/g, ' ').trim(),
+    familyGuess: basename(preferred, extname(preferred))
+      .replace(/[_-]+/g, ' ')
+      .trim(),
     allFaces: fontFiles.map((f) => basename(f)),
   };
 }
 
-function writeFontsJs(catalog) {
-  const fonts = [...catalog].sort((a, b) => {
-    const cat = a.category.localeCompare(b.category);
-    return cat !== 0 ? cat : a.label.localeCompare(b.label);
-  });
-  const entries = fonts
-    .map(
-      (f) =>
-        `  { id: ${JSON.stringify(f.id)}, label: ${JSON.stringify(f.label)}, category: ${JSON.stringify(f.category)}, family: ${JSON.stringify(`"${f.label}"`)}, file: ${JSON.stringify(f.file)} },`
-    )
-    .join('\n');
-
-  const src = `// Bundled font catalog. Font files live in extension/fonts/<category>/
-// and were sourced from https://www.peter-wiegel.de/ (freeware; unrestricted
-// commercial use for fonts Peter Wiegel authored — per that site's FAQ).
-// License notes: do not sell the fonts themselves as a standalone paid
-// product; if you modify a font, rename it and keep it freely licensed.
-// Attribution: Settings > About / extension/fonts/CREDITS.md
-//
-// Categories refined from DaFont theme paths + Peter Wiegel page cues.
-// usage / longForm / pairGroup come from font-heuristics.js (role policy).
-// Re-fetch / refresh with: node scripts/fetch-wiegel-fonts.mjs
-// Reclassify in place with: node scripts/reclassify-fonts.mjs
-
-import {
-  enrichFontEntry,
-  isFontSuitableForTarget,
-} from './font-heuristics.js';
-
-export const FONT_CATEGORIES = [
-  { id: 'script', label: 'Calligraphy / Script' },
-  { id: 'blackletter', label: 'Blackletter / Fraktur' },
-  { id: 'serif', label: 'Serif' },
-  { id: 'technical', label: 'Sans / Technical' },
-  { id: 'stencil', label: 'Stencil / Industrial' },
-  { id: 'matrix', label: 'Pixel / LED / Matrix' },
-  { id: 'typewriter', label: 'Typewriter' },
-  { id: 'display', label: 'Display / Decorative' },
-  { id: 'system', label: 'System (built-in, no download)' },
-];
-
-/**
- * @typedef {object} FontEntry
- * @property {string} id
- * @property {string} label
- * @property {string} category  one of FONT_CATEGORIES[].id
- * @property {string} family    CSS font-family value once loaded
- * @property {string|null} file relative path under extension/fonts/, null for system fonts
- * @property {'display'|'text'|'both'} usage
- * @property {boolean} longForm
- * @property {boolean} textSafe
- * @property {string} [pairGroup]
- */
-
-/** @type {Omit<FontEntry, 'usage'|'longForm'|'textSafe'|'pairGroup'>[]} */
-const FONTS_RAW = [
-  // System fallbacks — always available.
-  { id: 'system-display', label: 'System Display', category: 'system', family: 'system-ui, sans-serif', file: null },
-  { id: 'system-body', label: 'System Body', category: 'system', family: 'system-ui, sans-serif', file: null },
-  { id: 'system-mono', label: 'System Mono', category: 'system', family: 'ui-monospace, monospace', file: null },
-
-  // Peter Wiegel freeware batch (${fonts.length} fonts)
-${entries}
-];
-
-/** @type {FontEntry[]} */
-export const FONTS = FONTS_RAW.map(enrichFontEntry);
-
-export function getFontsByCategory(categoryId) {
-  return FONTS.filter((font) => font.category === categoryId);
-}
-
-export function getFontById(id) {
-  return FONTS.find((font) => font.id === id) ?? null;
-}
-
-/** Fonts that need an @font-face rule (have a bundled file). */
-export function getBundledFonts() {
-  return FONTS.filter((font) => !!font.file);
-}
-
-/**
- * Fonts allowed for a typography target under the role policy.
- * @param {'headers'|'paragraph'|'captions'} target
- * @param {{ showAll?: boolean }} [opts]
- */
-export function getFontsForTarget(target, opts = {}) {
-  return FONTS.filter((font) => isFontSuitableForTarget(font, target, opts));
-}
-`;
-  writeFileSync(join(ROOT, 'src', 'config', 'fonts.js'), src);
-}
-
 async function main() {
   ensureDirs();
+  const skipped = FONTS_ALL.length - FONTS.length;
+  if (skipped) {
+    console.log(`Skipping ${skipped} retired font(s) (see scripts/font-excludes.mjs)`);
+  }
+
   const catalog = [];
   const failed = [];
 
@@ -286,9 +229,8 @@ async function main() {
   }
 
   writeFileSync(join(TMP, 'catalog.json'), JSON.stringify({ catalog, failed }, null, 2));
-  writeFontsJs(catalog);
+  generateFontsCatalog();
   console.log(`\nInstalled ${catalog.length} fonts; ${failed.length} failed.`);
-  console.log('Updated src/config/fonts.js');
 }
 
 main().catch((err) => {

@@ -53,15 +53,9 @@ export const FONT_HEURISTIC_OVERRIDES = {
   rundkursiv: { usage: 'both', longForm: true },
 
   // Specialty technical — OK for UI chrome / captions, not long paragraphs.
-  eyechart: { usage: 'both', longForm: false },
-  googee: { usage: 'both', longForm: false },
   'gst-aero': { usage: 'both', longForm: false },
   'kk-bahn': { usage: 'both', longForm: false },
-  'elb-tunnel': { usage: 'both', longForm: false },
   'stefans-uhr': { usage: 'both', longForm: false },
-
-  // Ornament / dingbat — never for reading text.
-  youbilee: { usage: 'display', longForm: false, textSafe: false },
 
   // DIN family pack.
   'alte-din-1451': { pairGroup: 'din' },

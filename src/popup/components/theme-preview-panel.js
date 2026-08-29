@@ -16,6 +16,11 @@ import {
   resolvePreviewTarget,
   samePreviewTarget,
 } from './preview-inspect.js';
+import {
+  HOVER_LINK_EVENT,
+  chipRoleForPreview,
+  emitHoverLink,
+} from '../../lib/hover-link.js';
 import '../../settings/components/font-picker.js';
 
 function paletteForPack(pack, mode = 'dark') {
@@ -77,6 +82,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
     _tooltipY: { state: true },
     _pinX: { state: true },
     _pinY: { state: true },
+    /** Role highlighted from a swatch-chip hover. */
+    _linkedRole: { state: true },
+    /** Font slot highlighted from a typography control hover. */
+    _linkedFontSlot: { state: true },
   };
 
   static styles = css`
@@ -459,17 +468,24 @@ export class ThemePreviewPanel extends StoreBoundElement {
     this._tooltipY = 0;
     this._pinX = 0;
     this._pinY = 0;
+    this._linkedRole = null;
+    this._linkedFontSlot = null;
     this._onDocKeyDown = this._onDocKeyDown.bind(this);
+    this._onHoverLink = this._onHoverLink.bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener('keydown', this._onDocKeyDown);
+    window.addEventListener(HOVER_LINK_EVENT, this._onHoverLink);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this._onDocKeyDown);
+    window.removeEventListener(HOVER_LINK_EVENT, this._onHoverLink);
+    emitHoverLink({ kind: 'color-role', id: null, source: 'preview' });
+    emitHoverLink({ kind: 'font-slot', id: null, source: 'preview' });
   }
 
   _onDocKeyDown(event) {
@@ -515,10 +531,32 @@ export class ThemePreviewPanel extends StoreBoundElement {
     this._tooltipX = point.x + 12;
     this._tooltipY = point.y + 14;
     this._hoverTarget = this._targetFromEvent(event);
+    emitHoverLink({
+      kind: 'color-role',
+      id: chipRoleForPreview(this._hoverTarget?.roleId),
+      source: 'preview',
+    });
+    emitHoverLink({
+      kind: 'font-slot',
+      id: this._hoverTarget?.fontSlot || null,
+      source: 'preview',
+    });
   }
 
   _onPreviewPointerLeave() {
     if (!this._pinnedTarget) this._hoverTarget = null;
+    emitHoverLink({ kind: 'color-role', id: null, source: 'preview' });
+    emitHoverLink({ kind: 'font-slot', id: null, source: 'preview' });
+  }
+
+  _onHoverLink(event) {
+    if (event.detail?.source !== 'control') return;
+    if (event.detail?.kind === 'color-role') {
+      this._linkedRole = event.detail.id || null;
+    }
+    if (event.detail?.kind === 'font-slot') {
+      this._linkedFontSlot = event.detail.id || null;
+    }
   }
 
   /**
@@ -611,6 +649,8 @@ export class ThemePreviewPanel extends StoreBoundElement {
     };
     if (samePreviewTarget(this._pinnedTarget, asTarget)) return 'is-pinned';
     if (!this._pinnedTarget && samePreviewTarget(this._hoverTarget, asTarget)) return 'is-hovered';
+    if (this._linkedRole && leaf.roleId === this._linkedRole) return 'is-hovered';
+    if (this._linkedFontSlot && leaf.fontSlot === this._linkedFontSlot) return 'is-hovered';
     return '';
   }
 
