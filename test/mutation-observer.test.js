@@ -165,6 +165,50 @@ describe('mutation-observer', () => {
     assert.equal(navigationCount, 0);
     assert.equal(subtreeCount, 1);
   });
+
+  it('forwards aria-expanded changes on a control and its parent', async () => {
+    let callback;
+    globalThis.Node = { ELEMENT_NODE: 1 };
+    globalThis.document = { documentElement: {} };
+    globalThis.MutationObserver = class {
+      constructor(next) {
+        callback = next;
+      }
+      observe() {}
+      disconnect() {}
+    };
+
+    /** @type {Element[]} */
+    let seen = [];
+    startMutationObserver({
+      onSubtree(roots) {
+        seen = roots;
+      },
+      onCascadeThreat() {},
+    });
+
+    const host = {
+      nodeType: 1,
+      id: '',
+      tagName: 'DIV',
+      classList: { contains: () => false },
+      closest: () => null,
+    };
+    const button = {
+      nodeType: 1,
+      id: '',
+      tagName: 'BUTTON',
+      parentElement: host,
+      classList: { contains: () => false },
+      closest: () => null,
+    };
+
+    callback([{ type: 'attributes', target: button, addedNodes: [] }]);
+    await Promise.resolve();
+    assert.equal(seen.length, 2);
+    assert.ok(seen.includes(button));
+    assert.ok(seen.includes(host));
+  });
 });
 
 describe('isDocumentNavigation', () => {

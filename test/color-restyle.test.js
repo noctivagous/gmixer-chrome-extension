@@ -334,6 +334,7 @@ describe('buildCss page paint', () => {
     assert.match(css, /\[data-gmixer-role="article"\]/);
     assert.match(css, /\[data-gmixer-role="main"\]/);
     assert.match(css, /\[data-gmixer-role="surface"\]/);
+    assert.match(css, /\[data-gmixer-role="ad"\]/);
     assert.match(css, /--gmixer-surface-0:/);
     assert.match(css, /--gmixer-surface-1:/);
     assert.match(css, /--gmixer-surface-2:/);
@@ -451,10 +452,18 @@ describe('buildCss page paint', () => {
 
   it('keeps header/nav menu controls flush with chrome instead of elevated GUI blocks', () => {
     const css = buildCss(withTonePaint(createDefaultState().global), null);
-    assert.match(css, /Header\/nav menus share one chrome fill/);
+    assert.match(css, /Header\/nav in-bar items share one chrome fill/);
     assert.match(css, /\[data-gmixer-role="header"\],\s*\[data-gmixer-role="navigation"\]/);
     assert.match(css, /ul,\s*ol,\s*li,\s*div,\s*menu,\s*button/);
     assert.match(css, /background-color: transparent !important;/);
+    assert.match(
+      css,
+      /:not\(\[role="menu"\]\):not\(\[role="listbox"\]\):not\(\[role="dialog"\]\):not\(\[popover\]\):not\(\[data-gmixer-role="surface"\]\)/
+    );
+    assert.match(
+      css,
+      /\[role="menu"\],\s*\[role="listbox"\],\s*\[role="dialog"\],\s*\[popover\],\s*\[data-gmixer-role="surface"\]\s*\) \{\s*background-color: var\(--gmixer-surface-gui\)/
+    );
   });
 
   it('clears header/nav/footer CSS gradients so brand mastheads follow Tone', () => {

@@ -10,6 +10,7 @@
 // not hostname.
 
 import { isDocumentNavigation } from './adaptive-timing.js';
+import { collectOpenShadowRoots } from './open-trees.js';
 
 /**
  * @typedef {object} MutationHandlers
@@ -84,9 +85,28 @@ export function startMutationObserver(handlers) {
     queueMicrotask(flush);
   };
 
+  const observedShadows = new Set();
+  /** @type {(root: ShadowRoot|null|undefined) => void} */
+  let observeShadow = () => {};
+
+  const observeOpts = {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['aria-expanded', 'hidden', 'open', 'popover'],
+  };
+
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
+      if (mutation.type === 'attributes') {
+        const target = mutation.target;
+        if (!target || target.nodeType !== Node.ELEMENT_NODE || isGmixerNode(target)) continue;
+        pendingRoots.add(/** @type {Element} */ (target));
+        if (target.parentElement) pendingRoots.add(target.parentElement);
+        schedule();
+        continue;
+      }
+      for (const node of mutation.addedNodes || []) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
         // injectStyle() / tonal overlays append their own nodes. Ignore
         // gMixer-owned DOM or this observer schedules itself forever.
@@ -100,11 +120,43 @@ export function startMutationObserver(handlers) {
         }
 
         pendingRoots.add(/** @type {Element} */ (node));
+        if (node.shadowRoot) observeShadow(node.shadowRoot);
         schedule();
       }
     }
   });
 
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  return () => observer.disconnect();
+  observeShadow = (root) => {
+    if (!root || observedShadows.has(root)) return;
+    observedShadows.add(root);
+    observer.observe(root, observeOpts);
+  };
+
+  observer.observe(document.documentElement, observeOpts);
+  if (document.documentElement) {
+    for (const sr of collectOpenShadowRoots(document.documentElement)) {
+      observeShadow(sr);
+    }
+  }
+
+  // Hosts often exist in light DOM before they attach an open shadow
+  // (custom element upgrade). childList does not see attachShadow.
+  const elementProto = globalThis.Element?.prototype;
+  const originalAttach = elementProto?.attachShadow;
+  if (typeof originalAttach === 'function') {
+    elementProto.attachShadow = function attachShadowPatched(init) {
+      const sr = originalAttach.call(this, init);
+      observeShadow(sr);
+      if (!isGmixerNode(this)) {
+        pendingRoots.add(this);
+        schedule();
+      }
+      return sr;
+    };
+  }
+
+  return () => {
+    observer.disconnect();
+    if (elementProto && originalAttach) elementProto.attachShadow = originalAttach;
+  };
 }

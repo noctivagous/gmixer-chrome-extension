@@ -11,6 +11,7 @@ import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
+import { collectOpenShadowRoots } from './open-trees.js';
 
 export { PALETTE_FILTER_PRESETS, resolveImageFilterPreset } from '../config/image-filter-presets.js';
 
@@ -633,8 +634,9 @@ function roleCss(
       color: var(--gmixer-text) !important;
     }
 
-    /* Header/nav menus share one chrome fill. Do not elevate buttons, fields,
-       or promoted slabs into spaced darker blocks (Opera GX-style mastheads). */
+    /* Header/nav in-bar items share one chrome fill. Do not elevate buttons,
+       fields, or inline slabs into spaced darker blocks (Opera GX mastheads).
+       Overlay flyouts are excluded — they need a solid sheet. */
     body :is(
       header,
       [role="banner"],
@@ -660,10 +662,34 @@ function roleCss(
       [role="textbox"],
       [role="searchbox"],
       [role="combobox"],
-      [role="menuitem"],
+      [role="menuitem"]
+    ):not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not([data-gmixer-role="surface"]) {
+      background-color: transparent !important;
+    }
+
+    /* Dropdown / flyout / popover panels nested in header/nav. Same
+       specificity as the transparent flush so this later rule wins.
+       No host-specific class names. */
+    body :is(
+      header,
+      [role="banner"],
+      nav,
+      [role="navigation"],
+      .masthead,
+      .navbar,
+      #header,
+      #masthead,
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    ) :is(
+      [role="menu"],
+      [role="listbox"],
+      [role="dialog"],
+      [popover],
       [data-gmixer-role="surface"]
     ) {
-      background-color: transparent !important;
+      background-color: var(--gmixer-surface-gui) !important;
+      color: var(--gmixer-text) !important;
     }
 
     body :is(
@@ -775,6 +801,25 @@ function roleCss(
     body dialog, body [role="dialog"], body [role="menu"],
     body [role="listbox"], body [role="alert"]`)} {
       background-color: var(--gmixer-surface-1) !important;
+      color: var(--gmixer-text) !important;
+    }
+
+    /* Open shadow trees have no body ancestor, so the rules above miss
+       stamped slabs (ad placements, widget chrome). Same role stamps, no
+       host-specific selectors. */
+    ${maybeOpaque(`[data-gmixer-role="card"],
+    [data-gmixer-role="article"],
+    [data-gmixer-role="article-body"],
+    [data-gmixer-role="surface"],
+    [data-gmixer-role="sidebar"],
+    [data-gmixer-role="hero"],
+    [data-gmixer-role="ad"]`)} {
+      background-color: var(--gmixer-surface-1) !important;
+      color: var(--gmixer-text) !important;
+    }
+
+    ${maybeOpaque(`[data-gmixer-role="main"]`)} {
+      background-color: var(--gmixer-bg-secondary) !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -1094,6 +1139,9 @@ export function buildCss(resolved, pageSample = null) {
  * back to `documentElement` (<html>) in that case; content-end's re-append
  * (see content-end.js) moves it into the real <head> once available.
  */
+/** Shared constructed sheet adopted into open shadow roots. */
+let adoptedSheet = null;
+
 export function injectStyle(css) {
   let styleEl = document.getElementById(STYLE_ELEMENT_ID);
   if (!styleEl) {
@@ -1106,8 +1154,56 @@ export function injectStyle(css) {
   // Re-appending moves it to the end, keeping equal-specificity precedence
   // over the page's own stylesheets even if they load after us.
   parent.appendChild(styleEl);
+  adoptThemeSheet(css);
+}
+
+/**
+ * Attach the current theme sheet to any open shadow roots discovered after
+ * the last inject (lazy widgets / ad slots). Does not rebuild CSS.
+ */
+export function syncAdoptedTheme() {
+  if (!adoptedSheet) return;
+  adoptIntoOpenShadows();
 }
 
 export function removeStyle() {
   document.getElementById(STYLE_ELEMENT_ID)?.remove();
+  if (adoptedSheet && typeof document !== 'undefined') {
+    adoptIntoOpenShadows({ remove: true });
+  }
+  adoptedSheet = null;
+}
+
+/**
+ * @param {string} css
+ */
+function adoptThemeSheet(css) {
+  if (typeof CSSStyleSheet !== 'function') return;
+  try {
+    if (!adoptedSheet) adoptedSheet = new CSSStyleSheet();
+    adoptedSheet.replaceSync(css);
+  } catch {
+    adoptedSheet = null;
+    return;
+  }
+  adoptIntoOpenShadows();
+}
+
+/**
+ * @param {{ remove?: boolean }} [options]
+ */
+function adoptIntoOpenShadows(options = {}) {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  const sheet = adoptedSheet;
+  if (!sheet && !options.remove) return;
+  for (const sr of collectOpenShadowRoots(document.documentElement)) {
+    const current = [...(sr.adoptedStyleSheets || [])];
+    const without = current.filter((item) => item !== sheet);
+    if (options.remove) {
+      if (without.length !== current.length) sr.adoptedStyleSheets = without;
+      continue;
+    }
+    // Always last so we beat the component's own adopted sheets.
+    sr.adoptedStyleSheets = [...without, sheet];
+  }
 }

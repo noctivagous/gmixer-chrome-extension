@@ -16,6 +16,7 @@ import {
   removeBackgroundImageOverlays,
 } from './background-image-tagger.js';
 import { removeStyle } from './style-injector.js';
+import { collectOpenShadowRoots } from './open-trees.js';
 
 /**
  * @typedef {object} AdaptivePassResult
@@ -44,6 +45,9 @@ export function runAdaptivePass(resolved) {
 
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements();
+    for (const shadow of collectOpenShadowRoots(document.documentElement)) {
+      tagBackgroundImageElements(shadow);
+    }
   }
 
   return { sample, classification };
@@ -62,6 +66,9 @@ export function runAdaptiveSubtreePass(root, resolved) {
 
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements(root);
+    for (const shadow of collectOpenShadowRoots(root)) {
+      tagBackgroundImageElements(shadow);
+    }
   }
 
   return classification;

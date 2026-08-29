@@ -9,6 +9,7 @@
 // hostname when a generic rule can cover the same layout pattern.
 //
 import { MAX_CLASSIFIER_SCAN } from './scan-limits.js';
+import { collectOpenShadowRoots, isShadowRoot } from './open-trees.js';
 
 export const ROLE_ATTR = 'data-gmixer-role';
 export const MEDIA_ATTR = 'data-gmixer-media';
@@ -123,6 +124,7 @@ const SURFACE_SKIP_TAGS = new Set([
 ]);
 
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
+const OVERLAY_PANEL_TAGS = new Set(['DIV', 'SECTION', 'UL', 'OL', 'NAV', 'ASIDE', 'DIALOG', 'MENU']);
 const TOKEN_RE = /[\s_-]+/;
 const SURFACE_PROMOTE_MAX_DEPTH = 3;
 /** Large page canvases hide slabs far below depth 3. Size heuristic — no host checks. */
@@ -228,15 +230,44 @@ function result(role, confidence, reasons) {
  * @param {Element} el
  * @returns {{ role?: string, media?: string, confidence: number, reasons: string[] }|null}
  */
+/**
+ * Flyout / dropdown / popover hosts. Absolute/fixed + minimum box, not the
+ * in-bar chips the header transparent rule is meant to keep flush.
+ * @param {Element} el
+ */
+export function isOverlayPanel(el) {
+  if (!el || !OVERLAY_PANEL_TAGS.has(el.tagName)) return false;
+  if (typeof getComputedStyle !== 'function') return false;
+  const style = getComputedStyle(el);
+  const pos = style.position;
+  if (pos !== 'absolute' && pos !== 'fixed') return false;
+  if (typeof el.getBoundingClientRect !== 'function') return false;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 140 || rect.height < 48) return false;
+  const vw = typeof window !== 'undefined' ? window.innerWidth || 0 : 0;
+  const vh = typeof window !== 'undefined' ? window.innerHeight || 0 : 0;
+  if (vw > 0 && vh > 0 && rect.width >= vw * 0.95 && rect.height >= vh * 0.95) return false;
+  return true;
+}
+
 export function classifyElement(el) {
   if (!el || isOwnedByGmixer(el)) return null;
   const key = cacheKey(el);
   const cached = classificationCache.get(el);
-  if (cached?.key === key) return cached.value;
+  if (cached?.key === key) {
+    if (cached.value?.media || cached.value?.role === 'surface') return cached.value;
+    if (!OVERLAY_PANEL_TAGS.has(el.tagName) || !isOverlayPanel(el)) return cached.value;
+  }
 
   const tag = el.tagName;
   const ariaRole = (el.getAttribute?.('role') || '').toLowerCase();
   const tokens = tokensFor(el);
+
+  if (isOverlayPanel(el)) {
+    const value = result('surface', 0.88, ['positioned overlay panel']);
+    classificationCache.set(el, { key, value });
+    return value;
+  }
 
   for (const rule of STRUCTURAL_RULES) {
     // Text / heading hosts: never promote to article/card/main/etc from naming.
@@ -663,11 +694,13 @@ function isLargePaintedSheet(el) {
   if (typeof el.getBoundingClientRect !== 'function') return false;
   const rect = el.getBoundingClientRect();
   const vw = typeof window !== 'undefined' ? window.innerWidth || 0 : 0;
-  // Inbox/list rows are wide and short (~40px). Size-only — no host checks.
+  const inShadow = isShadowRoot(el.getRootNode?.());
+  const minBarHeight = inShadow ? 24 : 32;
+  // Inbox/list rows and shadow ad bars are wide and short. Size-only.
   if (
     vw > 0 &&
     rect.width >= vw * 0.6 &&
-    rect.height >= 32 &&
+    rect.height >= minBarHeight &&
     rect.height <= 120 &&
     rect.width * rect.height >= 20000
   ) {
@@ -722,8 +755,8 @@ export function seedPageSheets(root) {
   const start =
     root === document.body || root === document.documentElement
       ? document.body
-      : root.nodeType === 1
-        ? /** @type {Element} */ (root)
+      : root.nodeType === 1 || isShadowRoot(root)
+        ? root
         : null;
   if (!start || typeof start.children === 'undefined') return stamped;
 
@@ -731,7 +764,8 @@ export function seedPageSheets(root) {
    * @param {Element} el
    */
   function consider(el) {
-    if (!el || el === document.body || el === document.documentElement) return;
+    if (!el || el.nodeType !== 1) return;
+    if (el === document.body || el === document.documentElement) return;
     if (SHEET_SKIP_TAGS.has(el.tagName) || isOwnedByGmixer(el)) return;
     if (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR)) return;
     if (!isOpaqueBackground(el) || !isLargePaintedSheet(el)) return;
@@ -812,11 +846,7 @@ export function assignToneSteps(root = document.body, steps = SURFACE_LADDER_STE
  *   attributes so we don't clear/restamp and re-run getComputedStyle on them.
  * @returns {{ stamped: number, scanned: number, surfaces: number, toneSteps: number }}
  */
-export function classifySubtree(root = document.body, options = {}) {
-  if (!root || typeof root.querySelectorAll !== 'function') {
-    return { stamped: 0, scanned: 0, surfaces: 0, toneSteps: 0 };
-  }
-
+function classifyOneTree(root, options = {}) {
   const skipClassified = options.skipClassified === true;
   let stamped = 0;
   let scanned = 0;
@@ -827,7 +857,10 @@ export function classifySubtree(root = document.body, options = {}) {
     if (isOwnedByGmixer(el)) continue;
     scanned += 1;
     if (skipClassified && (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR))) {
-      continue;
+      const role = el.getAttribute(ROLE_ATTR);
+      if (el.hasAttribute(MEDIA_ATTR) || role === 'surface' || !isOverlayPanel(el)) {
+        continue;
+      }
     }
     pending.push({ el, classification: classifyElement(el) });
   }
@@ -841,9 +874,9 @@ export function classifySubtree(root = document.body, options = {}) {
 
   const sheets = seedPageSheets(root);
   let surfaces = promotePaintedSurfaces(root);
-  // SPA widgets (X.com trending/follow) often land under an already-classified
-  // sidebar after the first pass. Re-promote that small host so new opaque
-  // cards get stamped without re-walking the main feed.
+  // SPA widgets often land under an already-classified sidebar after the
+  // first pass. Re-promote that small host so new opaque cards get stamped
+  // without re-walking the main feed.
   if (root.nodeType === 1) {
     const host = /** @type {Element} */ (root).closest?.(`[${ROLE_ATTR}]`);
     if (host && host.getAttribute(ROLE_ATTR) === 'sidebar') {
@@ -858,6 +891,33 @@ export function classifySubtree(root = document.body, options = {}) {
     surfaces: surfaces + sheets,
     toneSteps,
   };
+}
+
+export function classifySubtree(root = document.body, options = {}) {
+  if (!root || typeof root.querySelectorAll !== 'function') {
+    return { stamped: 0, scanned: 0, surfaces: 0, toneSteps: 0 };
+  }
+
+  /** @type {(ParentNode|Element|ShadowRoot)[]} */
+  const trees = [root];
+  const rootNode = typeof root.getRootNode === 'function' ? root.getRootNode() : null;
+  // A mutation inside an open shadow is often a tiny child. Re-seed the
+  // whole shadow so the painted wrapper can stamp after it gets size.
+  if (isShadowRoot(rootNode) && rootNode !== root) trees.push(rootNode);
+  for (const shadow of collectOpenShadowRoots(root)) trees.push(shadow);
+
+  const seen = new Set();
+  const totals = { stamped: 0, scanned: 0, surfaces: 0, toneSteps: 0 };
+  for (const tree of trees) {
+    if (!tree || seen.has(tree)) continue;
+    seen.add(tree);
+    const sub = classifyOneTree(tree, options);
+    totals.stamped += sub.stamped;
+    totals.scanned += sub.scanned;
+    totals.surfaces += sub.surfaces;
+    totals.toneSteps += sub.toneSteps;
+  }
+  return totals;
 }
 
 /** Full-document adaptive classification entry point. */

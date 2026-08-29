@@ -18,3 +18,6 @@ export const MAX_MEDIA_EFFECT_SCAN = 3000;
 
 /** Skip wrapping chrome icons / avatars; layout reads on tiny images still jank. */
 export const MIN_MEDIA_EFFECT_PX = 72;
+
+/** Open shadow roots to classify/theme. Widget-heavy pages nest many. */
+export const MAX_OPEN_SHADOW_ROOTS = 48;

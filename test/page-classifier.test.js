@@ -111,6 +111,34 @@ describe('page-classifier', () => {
     assert.ok(skipped.scanned >= 2);
   });
 
+  it('classifies positioned overlay panels as surface instead of navigation', () => {
+    const panel = el('div', { class: 'menu__panel' });
+    panel.getBoundingClientRect = () => ({
+      width: 480,
+      height: 220,
+      top: 80,
+      left: 40,
+      right: 520,
+      bottom: 300,
+    });
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      backgroundColor: 'rgb(255, 255, 255)',
+      backgroundImage: 'none',
+    });
+    try {
+      const classified = classifyElement(panel);
+      assert.equal(classified?.role, 'surface');
+      assert.match(classified?.reasons.join(' ') || '', /overlay/);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
   it('classifies data-testid sidebarColumn as sidebar', () => {
     const col = el('div', { 'data-testid': 'sidebarColumn' });
     assert.equal(classifyElement(col)?.role, 'sidebar');
@@ -635,6 +663,69 @@ describe('page-classifier', () => {
     } finally {
       globalThis.getComputedStyle = previousCs;
       globalThis.window = previousWin;
+    }
+  });
+
+  it('stamps large opaque slabs inside open shadow trees', () => {
+    const inner = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'slot-inner' }),
+      getBoundingClientRect: () => ({
+        width: 1200,
+        height: 56,
+        top: 0,
+        left: 0,
+        right: 1200,
+        bottom: 56,
+      }),
+      _bg: 'rgb(255, 255, 255)',
+      closest: () => null,
+      querySelectorAll: () => [],
+    };
+    const shadow = {
+      nodeType: 11,
+      host: {},
+      children: [inner],
+      querySelectorAll: (selector) => {
+        if (selector === '*') return [inner];
+        if (selector === `[${ROLE_ATTR}]`) {
+          return inner.hasAttribute(ROLE_ATTR) ? [inner] : [];
+        }
+        return [];
+      },
+    };
+    inner.parentNode = shadow;
+    const host = {
+      tagName: 'X-SLOT',
+      nodeType: 1,
+      shadowRoot: shadow,
+      children: [],
+      ...mockAttrs({}),
+      closest: () => null,
+      querySelectorAll: () => [],
+    };
+    shadow.host = host;
+
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    const previousDoc = globalThis.document;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.document = { body: host, documentElement: host };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      const result = classifySubtree(host);
+      assert.equal(inner.getAttribute(ROLE_ATTR), 'surface');
+      assert.ok(result.surfaces >= 1);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+      globalThis.document = previousDoc;
     }
   });
 });

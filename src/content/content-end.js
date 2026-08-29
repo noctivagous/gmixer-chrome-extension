@@ -13,7 +13,7 @@
 // Performance: keep this host-agnostic. Prefer URL-shape, size, and tag
 // heuristics over `hostname === …` special cases.
 import { store } from '../state/store.js';
-import { buildCss, injectStyle, removeStyle } from './style-injector.js';
+import { buildCss, injectStyle, removeStyle, syncAdoptedTheme } from './style-injector.js';
 import { startMutationObserver } from './mutation-observer.js';
 import { cssCacheScope, writeCssCache, clearCssCache } from './css-cache.js';
 import { NavigationController } from './navigation-controller.js';
@@ -23,6 +23,7 @@ import {
   runAdaptiveSubtreePass,
   clearAdaptivePass,
 } from './adaptive-pass.js';
+import { collectOpenShadowRoots } from './open-trees.js';
 import { waitForPageSettle } from './page-settle.js';
 import { syncLinkShimmer, rescanLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
 import { syncPanScan } from './pan-scan.js';
@@ -38,52 +39,76 @@ async function main() {
   await store.ready;
   const hostname = location.hostname;
   const getScope = () => cssCacheScope(location);
+  // Subframes (ad/widget iframes) get CSS + classification only. Settings,
+  // navigation patching, and media-effect wrapping stay on the top document.
+  const isTopFrame = window === window.top;
 
   let sample = null;
   let lastLayoutKey = '';
   let layoutTimer = 0;
 
-  const nav = new NavigationController(() => store.getResolvedStateForHost(hostname));
+  const nav = isTopFrame
+    ? new NavigationController(() => store.getResolvedStateForHost(hostname))
+    : null;
 
   const reapply = () => {
     const resolved = store.getResolvedStateForHost(hostname);
     if (resolved.enabled === false) {
-      syncPanScan(resolved);
-      syncRotatingCube(resolved);
+      if (isTopFrame) {
+        syncPanScan(resolved);
+        syncRotatingCube(resolved);
+        stopLinkShimmer();
+        nav?.sync();
+      }
       removeStyle();
       clearCssCache(hostname);
       clearAdaptivePass();
-      stopLinkShimmer();
-      nav.sync();
       return;
     }
 
     const adaptive = runAdaptivePass(resolved);
     sample = adaptive.sample;
-    syncPanScan(resolved);
-    syncRotatingCube(resolved);
+    if (isTopFrame) {
+      syncPanScan(resolved);
+      syncRotatingCube(resolved);
+    }
     const css = buildCss(resolved, sample);
     injectStyle(css);
     writeCssCache(hostname, getScope(), resolved, css);
-    nav.sync();
-    syncLinkShimmer(resolved);
-    lastLayoutKey = layoutKey();
+    if (isTopFrame) {
+      nav?.sync();
+      syncLinkShimmer(resolved);
+      lastLayoutKey = layoutKey();
+    }
+  };
+
+  const rescanOpenShadows = () => {
+    const resolved = store.getResolvedStateForHost(hostname);
+    if (resolved.enabled === false) return;
+    for (const shadow of collectOpenShadowRoots(document.documentElement)) {
+      runAdaptiveSubtreePass(shadow, resolved);
+    }
+    syncAdoptedTheme();
   };
 
   // Let the first paint settle before sampling the site's own colors.
   await waitForPageSettle();
   reapply();
+  // Open shadows / ad slots often attach or gain size after the first pass.
+  window.setTimeout(rescanOpenShadows, 500);
 
-  const scheduleSpaResample = watchLayoutAndSpa(reapply, {
-    getLastKey: () => lastLayoutKey,
-    setLastKey: (key) => {
-      lastLayoutKey = key;
-    },
-    getTimer: () => layoutTimer,
-    setTimer: (id) => {
-      layoutTimer = id;
-    },
-  });
+  const scheduleSpaResample = isTopFrame
+    ? watchLayoutAndSpa(reapply, {
+        getLastKey: () => lastLayoutKey,
+        setLastKey: (key) => {
+          lastLayoutKey = key;
+        },
+        getTimer: () => layoutTimer,
+        setTimer: (id) => {
+          layoutTimer = id;
+        },
+      })
+    : () => {};
 
   let mutationTimer = 0;
   /** @type {Element[]} */
@@ -95,23 +120,26 @@ async function main() {
     queuedRoots = [];
     const resolved = store.getResolvedStateForHost(hostname);
     if (resolved.enabled === false) {
-      syncPanScan(resolved);
-      syncRotatingCube(resolved);
+      if (isTopFrame) {
+        syncPanScan(resolved);
+        syncRotatingCube(resolved);
+        stopLinkShimmer();
+      }
       removeStyle();
       clearAdaptivePass();
-      stopLinkShimmer();
       return;
     }
     for (const root of roots) {
       runAdaptiveSubtreePass(root, resolved);
     }
-    syncPanScan(resolved);
-    syncRotatingCube(resolved);
-    // CSS is generated from resolved + identity sample, not from stamps.
-    // Rebuilding/re-appending the stylesheet on every mutation batch forces
-    // style recalc; cascade-order threats reassert via onCascadeThreat.
-    syncLinkShimmer(resolved);
-    rescanLinkShimmer();
+    if (isTopFrame) {
+      syncPanScan(resolved);
+      syncRotatingCube(resolved);
+      syncLinkShimmer(resolved);
+      rescanLinkShimmer();
+    }
+    // Open shadows created after the last inject need the shared sheet.
+    syncAdoptedTheme();
   };
 
   const stopObserving = startMutationObserver({
@@ -139,13 +167,13 @@ async function main() {
   });
 
   const unsubscribe = store.subscribe(reapply);
-  initSettingsHost();
+  if (isTopFrame) initSettingsHost();
 
   const teardown = () => {
     unsubscribe();
     stopObserving();
     if (mutationTimer) window.clearTimeout(mutationTimer);
-    nav.destroy();
+    nav?.destroy();
   };
   window.addEventListener('pagehide', teardown, { once: true });
 
