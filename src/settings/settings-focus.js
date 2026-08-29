@@ -2,7 +2,8 @@
 // See product description.txt lines 6–12 and BRANDED_SITE_THEMING_AUDIT.md.
 //
 // Tone (Light | Gray | Dark) and Color Scheme are separate layers. Tone-only
-// focus opens Tone and paints its full Light|Gray|Dark surface direction.
+// focus opens Tone, turns Color Scheme Off, and paints the install / walkthrough
+// slide 0 baseline (neutral monochrome Light|Gray|Dark) — see buildCss.
 
 /** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
 
@@ -79,7 +80,10 @@ export function patchForSettingsFocus(focus) {
   if (focus === 'tone') {
     return {
       ui,
-      sections: { tone: true },
+      // Match walkthrough slide 0 / install: Tone On, Color Scheme Off.
+      // Paint also forces a neutral monochrome baseline while focus is tone
+      // (see buildCss) so leftover chromatic base/overrides cannot tint the page.
+      sections: { tone: true, color: false },
       color: { scheme: 'monochrome', identityMode: 'restyle', intensity: 100 },
     };
   }

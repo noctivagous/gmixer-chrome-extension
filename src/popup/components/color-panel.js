@@ -15,14 +15,17 @@ const IDENTITY_MODES = [
 ];
 
 const ROLES = [
-  { id: 'background', label: 'BG:Primary' },
-  { id: 'backgroundSecondary', label: 'BG:Secondary' },
+  { id: 'background', label: 'BG:Primary · root' },
+  { id: 'backgroundSecondary', label: 'BG:Secondary · sheet' },
   { id: 'surfaceGui', label: 'Surface: GUI' },
   { id: 'surfaceContainers', label: 'Surface: Containers' },
   { id: 'text', label: 'Text' },
   { id: 'muted', label: 'Muted' },
   { id: 'accent', label: 'Accent' },
   { id: 'link', label: 'Link' },
+  { id: 'linkHover', label: 'Link hover' },
+  { id: 'navLink', label: 'Nav link' },
+  { id: 'navLinkHover', label: 'Nav hover' },
   { id: 'border', label: 'Border' },
   { id: 'focus', label: 'Focus' },
 ];
@@ -580,8 +583,9 @@ export class ColorPanel extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
+    const newHex = hslToHex({ h: hsl.h, s: 0, l: Number(value) });
     this.updateGlobal({
-      color: { baseColor: hslToHex({ h: hsl.h, s: 0, l: Number(value) }) },
+      color: { baseColor: newHex, schemeBaseColor: newHex },
     });
   }
 
@@ -589,7 +593,9 @@ export class ColorPanel extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
-    this.updateGlobal({ color: { baseColor: hslToHex({ ...hsl, [key]: Number(value) }) } });
+    const newHex = hslToHex({ ...hsl, [key]: Number(value) });
+    // Match the wheel: keep scheme-base anchored to the live working color.
+    this.updateGlobal({ color: { baseColor: newHex, schemeBaseColor: newHex } });
   }
 
   _renderVerticalHslSlider(shortLabel, label, value, min, max, key, baseColor, scheme) {

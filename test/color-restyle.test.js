@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   buildPalette,
   contrastRatio,
+  deriveGlowColor,
   deriveSurface,
   deriveSurfaceLadder,
   hexToHsl,
+  resolveGlowColor,
 } from '../src/lib/color-theory.js';
 import {
   blendWithPageSample,
@@ -34,6 +36,9 @@ describe('color-theory', () => {
     assert.match(palette.text, /^#[0-9a-f]{6}$/i);
     assert.match(palette.accent, /^#[0-9a-f]{6}$/i);
     assert.notEqual(palette.accent, palette.link);
+    assert.notEqual(palette.navLink, palette.link);
+    assert.notEqual(deriveGlowColor(palette.link), palette.link);
+    assert.notEqual(resolveGlowColor(palette.link, palette.link), palette.link);
     // Surface sits above background for dark themes.
     assert.ok(hexToHsl(palette.surface).l > hexToHsl(palette.background).l);
   });
@@ -60,7 +65,22 @@ describe('color-theory', () => {
     const palette = buildPalette('#8a8a8a', 'monochrome', 'dark');
     assert.equal(hexToHsl(palette.accent).s, 0);
     assert.equal(hexToHsl(palette.link).s, 0);
+    assert.equal(hexToHsl(palette.navLink).s, 0);
     assert.equal(hexToHsl(palette.focus).s, 0);
+    assert.notEqual(palette.navLink, palette.link);
+  });
+
+  it('keeps picker saturation on chromatic page backgrounds', () => {
+    const lime = '#00ff00';
+    const dark = buildPalette(lime, 'analog', 'dark');
+    const gray = buildPalette(lime, 'analog', 'gray');
+    const light = buildPalette(lime, 'analog', 'light');
+    assert.ok(hexToHsl(dark.background).s >= 90, 'dark bg keeps lime saturation');
+    assert.ok(hexToHsl(gray.background).s >= 90, 'gray bg keeps lime saturation');
+    assert.ok(hexToHsl(light.background).s >= 90, 'light bg keeps lime saturation');
+    assert.ok(hexToHsl(light.background).l > hexToHsl(gray.background).l);
+    assert.ok(hexToHsl(gray.background).l > hexToHsl(dark.background).l);
+    assert.ok(hexToHsl(gray.background).l >= 40, 'gray mode can sit near the picked lightness');
   });
 
   it('uses the monochrome base value to adjust theme surfaces', () => {
@@ -86,10 +106,20 @@ describe('color-theory', () => {
     const triadic = buildPalette('#7c3aed', 'triadic');
     const tetradic = buildPalette('#7c3aed', 'tetradic');
 
-    assert.equal(Math.round((hexToHsl(triadic.accent).h - baseHue + 360) % 360), 120);
-    assert.equal(Math.round((hexToHsl(triadic.link).h - baseHue + 360) % 360), 240);
-    assert.equal(Math.round((hexToHsl(tetradic.accent).h - baseHue + 360) % 360), 90);
-    assert.equal(Math.round((hexToHsl(tetradic.link).h - baseHue + 360) % 360), 180);
+    const hueDelta = (hex, expected) =>
+      Math.abs(((hexToHsl(hex).h - baseHue + 360) % 360) - expected);
+    // Triadic: base + 120° accent + 240° on link/nav/focus chrome.
+    assert.ok(hueDelta(triadic.accent, 120) <= 2);
+    assert.ok(hueDelta(triadic.link, 240) <= 2);
+    assert.ok(hueDelta(triadic.navLink, 240) <= 2);
+    assert.ok(hueDelta(triadic.focus, 240) <= 2);
+    assert.ok(hueDelta(triadic.border, 120) <= 2);
+    // Tetradic: park the 4th stop (270°) on nav; link/focus share 180°.
+    assert.ok(hueDelta(tetradic.accent, 90) <= 2);
+    assert.ok(hueDelta(tetradic.link, 180) <= 2);
+    assert.ok(hueDelta(tetradic.navLink, 270) <= 2);
+    assert.ok(hueDelta(tetradic.focus, 180) <= 2);
+    assert.ok(hueDelta(tetradic.border, 90) <= 2);
   });
 
   it('generates semantic roles from one base color and scheme choice', () => {
@@ -112,6 +142,9 @@ describe('color-theory', () => {
         'muted',
         'accent',
         'link',
+        'linkHover',
+        'navLink',
+        'navLinkHover',
         'border',
         'focus',
       ]) {
@@ -135,6 +168,7 @@ describe('color-theory', () => {
         assert.ok(contrastRatio(palette.muted, palette.background) >= 4.5);
         assert.ok(contrastRatio(palette.accent, palette.background) >= 4.5);
         assert.ok(contrastRatio(palette.link, palette.background) >= 4.5);
+        assert.ok(contrastRatio(palette.navLink, palette.background) >= 4.5);
         assert.ok(contrastRatio(palette.border, palette.background) >= 3);
         assert.ok(contrastRatio(palette.focus, palette.surfaceGui) >= 3);
       }
@@ -176,6 +210,9 @@ describe('color-theory', () => {
         muted: '',
         accent: '',
         link: '',
+        linkHover: '',
+        navLink: '',
+        navLinkHover: '',
         border: '',
         focus: '',
       }
@@ -327,6 +364,10 @@ describe('buildCss page paint', () => {
     assert.match(css, /--gmixer-bg-secondary:/);
     assert.match(css, /--gmixer-surface-gui:/);
     assert.match(css, /--gmixer-surface-containers:/);
+    assert.match(
+      css,
+      /body \.card\[data-gmixer-native-l\],[\s\S]*background-color: var\(--gmixer-surface-containers\)/
+    );
     assert.doesNotMatch(css, /\.gmixer-tonal-overlay/);
     assert.doesNotMatch(css, /mix-blend-mode: multiply/);
     assert.doesNotMatch(css, /span, div/);
@@ -422,8 +463,61 @@ describe('buildCss page paint', () => {
     global.ui.settingsFocus = 'tone';
     global.themeMode = 'dark';
     global.color.intensity = 10;
-    const theme = buildPalette(global.color.baseColor, global.color.scheme, 'dark');
+    const theme = buildPalette('#8a8a8a', 'monochrome', 'dark');
     assertPureToneCss(buildCss(global, pageWithBrandIdentity()), theme);
+  });
+
+  it('Only: Tone ignores chromatic Color Scheme and role overrides', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.ui.settingsFocus = 'tone';
+    global.themeMode = 'dark';
+    global.sections.color = true;
+    global.color.baseColor = '#7c3aed';
+    global.color.scheme = 'triadic';
+    global.color.overrides = {
+      ...global.color.overrides,
+      background: '#ff0000',
+      backgroundSecondary: '#00ff00',
+      accent: '#0000ff',
+    };
+    const expected = buildPalette('#8a8a8a', 'monochrome', 'dark');
+    const css = buildCss(global, null);
+    assert.match(css, new RegExp(`--gmixer-bg-primary: ${expected.background}`));
+    assert.match(css, new RegExp(`--gmixer-bg-secondary: ${expected.backgroundSecondary}`));
+    assert.match(css, new RegExp(`--gmixer-accent: ${expected.accent}`));
+    assert.doesNotMatch(css, /--gmixer-bg-primary: #ff0000/);
+    assert.doesNotMatch(css, /--gmixer-bg-secondary: #00ff00/);
+  });
+
+  it('cascades Auto Secondary/surfaces from a Primary override', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.ui.settingsFocus = 'theme';
+    global.color.overrides = {
+      ...global.color.overrides,
+      background: '#112233',
+    };
+    const isDark = hexToHsl('#112233').l < 50;
+    const expectedSecondary = deriveSurface('#112233', isDark);
+    const expectedGui = deriveSurface(expectedSecondary, isDark);
+    const expectedContainers = deriveSurface(expectedGui, isDark);
+    const css = buildCss(global, null);
+    assert.match(css, /--gmixer-bg-primary: #112233/);
+    assert.match(css, new RegExp(`--gmixer-bg-secondary: ${expectedSecondary}`));
+    assert.match(css, new RegExp(`--gmixer-surface-gui: ${expectedGui}`));
+    assert.match(css, new RegExp(`--gmixer-surface-containers: ${expectedContainers}`));
+  });
+
+  it('keeps an explicit Secondary override when Primary is also overridden', () => {
+    const global = withTonePaint(createDefaultState().global);
+    global.ui.settingsFocus = 'theme';
+    global.color.overrides = {
+      ...global.color.overrides,
+      background: '#112233',
+      backgroundSecondary: '#abcdef',
+    };
+    const css = buildCss(global, null);
+    assert.match(css, /--gmixer-bg-primary: #112233/);
+    assert.match(css, /--gmixer-bg-secondary: #abcdef/);
   });
 
   it('applies Tone structural chrome under Theme Color with Fully restyle', () => {
@@ -464,6 +558,12 @@ describe('buildCss page paint', () => {
       css,
       /\[role="menu"\],\s*\[role="listbox"\],\s*\[role="dialog"\],\s*\[popover\],\s*\[data-gmixer-role="surface"\]\s*\) \{\s*background-color: var\(--gmixer-surface-gui\)/
     );
+    assert.match(css, /\[popover\]:popover-open/);
+    assert.match(css, /:not\(#gmixer-settings\):not\(#gmixer-walkthrough-host\)/);
+    assert.doesNotMatch(
+      css,
+      /:is\(li, div\):is\(:hover, :focus-within\) > :is\(ul, ol, div, menu, section\)/
+    );
   });
 
   it('clears header/nav/footer CSS gradients so brand mastheads follow Tone', () => {
@@ -492,7 +592,14 @@ describe('buildCss page paint', () => {
     assert.match(css, /p, li, td, th, blockquote[\s\S]*color: var\(--gmixer-text\) !important/);
     assert.match(css, /h1, h2, h3, h4, h5, h6[\s\S]*color: var\(--gmixer-accent\) !important/);
     assert.match(css, /a, a:link, a:visited[\s\S]*color: var\(--gmixer-link\) !important/);
+    assert.match(css, /a:hover, a:focus-visible[\s\S]*color: var\(--gmixer-link-hover\) !important/);
     assert.match(css, /h1 a, h1 a:link, h1 a:visited[\s\S]*color: var\(--gmixer-accent\) !important/);
+    assert.match(css, /header a[\s\S]*color: var\(--gmixer-nav-link\) !important/);
+    assert.match(css, /footer a/);
+    assert.match(
+      css,
+      /header a:hover[\s\S]*color: var\(--gmixer-nav-link-hover\) !important/
+    );
   });
 
   it('makes nested ink inside links and headings inherit so span headlines restyle', () => {

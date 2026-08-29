@@ -26,6 +26,9 @@ export function createDefaultState() {
       themeMode: /** @type {ThemeMode} */ ('dark'),
       color: {
         baseColor: '#8a8a8a',
+        // Anchor for scheme scales / HSL track gradients. Wheel and HSL sliders
+        // keep this aligned with baseColor; tint swatches may diverge.
+        schemeBaseColor: '#8a8a8a',
         scheme: /** @type {ColorScheme} */ ('monochrome'),
         // 0 = stay close to sampled page colors; 100 = full theme paint.
         // Tone-aligned default: full Light|Gray|Dark unless the user lowers it.
@@ -51,6 +54,9 @@ export function createDefaultState() {
           muted: '',
           accent: '',
           link: '',
+          linkHover: '',
+          navLink: '',
+          navLinkHover: '',
           border: '',
           focus: '',
         },
@@ -110,7 +116,8 @@ export function createDefaultState() {
         categories: {
           images: { effect: 'none' },
           videos: { effect: 'none' },
-          navigation: { effect: 'none' },
+          hyperlinks: { effect: 'none', glow: { animated: true, color: '' } },
+          navigation: { effect: 'none', glow: { animated: true, color: '' } },
           articles: { effect: 'none' },
         },
         glow: { animated: true, color: '' },

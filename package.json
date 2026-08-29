@@ -15,7 +15,8 @@
     "fonts:google": "node scripts/fetch-google-fonts.mjs",
     "fonts:reclassify": "node scripts/reclassify-fonts.mjs",
     "lint": "eslint src test build.js scripts",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@webcomponents/custom-elements": "^1.6.0",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "esbuild": "^0.24.0",
     "eslint": "^10.9.1",
     "globals": "^17.11.0"

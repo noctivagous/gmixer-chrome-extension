@@ -12,6 +12,8 @@ extension/background.js.map
 .tmp-fonts/
 .tmp-fonts-*.json
 tmp/
+test-results/
+playwright-report/
 
 *.log
 .DS_Store

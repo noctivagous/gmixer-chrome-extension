@@ -10,7 +10,7 @@
 // not hostname.
 
 import { isDocumentNavigation } from './adaptive-timing.js';
-import { collectOpenShadowRoots } from './open-trees.js';
+import { collectOpenShadowRoots, isGmixerUiElement } from './open-trees.js';
 
 /**
  * @typedef {object} MutationHandlers
@@ -36,29 +36,40 @@ export function startMutationObserver(handlers) {
   const onNavigation = typeof handlers === 'function' ? () => {} : handlers.onNavigation ?? (() => {});
 
   let pending = false;
+  let stopped = false;
   let lastUrl = globalThis.location?.href ?? '';
   /** @type {Set<Element>} */
   let pendingRoots = new Set();
   let cascadeThreat = false;
+  /** @type {() => void} */
+  let rediscoverOpenShadows = () => {};
 
   const isGmixerNode = (node) =>
     node.nodeType === Node.ELEMENT_NODE &&
-    (node.id === 'gmixer-style' ||
-      node.id === 'gmixer-settings' ||
+    (isGmixerUiElement(node) ||
+      node.id === 'gmixer-style' ||
+      node.id === 'gmixer-settings-host-style' ||
+      node.id === 'gmixer-font-faces' ||
       node.id === 'gmixer-hover-outline' ||
       node.classList?.contains('gmixer-tonal-overlay') ||
       node.classList?.contains('gmixer-link-shimmer-overlay') ||
+      node.classList?.contains('gmixer-bgimg-overlay') ||
+      node.classList?.contains('gmixer-ui-frame') ||
       node.hasAttribute?.('data-gmixer-pan-scan-frame') ||
       node.hasAttribute?.('data-gmixer-pan-scan-rest') ||
       node.hasAttribute?.('data-gmixer-rotating-cube-scene') ||
       node.hasAttribute?.('data-gmixer-rotating-cube') ||
       node.hasAttribute?.('data-gmixer-rotating-cube-face') ||
-      node.closest?.('#gmixer-settings') ||
       node.closest?.('[data-gmixer-pan-scan-frame]') ||
       node.closest?.('[data-gmixer-rotating-cube-scene]'));
 
   const flush = () => {
+    if (stopped) return;
     pending = false;
+    // Page-world attachShadow calls are invisible to an isolated-world
+    // prototype patch. Bounded rediscovery catches newly open trees whenever
+    // the page is already producing mutation work.
+    rediscoverOpenShadows();
     const previousUrl = lastUrl;
     const currentUrl = globalThis.location?.href ?? '';
     const urlChanged = currentUrl !== previousUrl;
@@ -80,23 +91,33 @@ export function startMutationObserver(handlers) {
   };
 
   const schedule = () => {
-    if (pending) return;
+    if (stopped || pending) return;
     pending = true;
     queueMicrotask(flush);
   };
 
   const observedShadows = new Set();
-  /** @type {(root: ShadowRoot|null|undefined) => void} */
-  let observeShadow = () => {};
+  /** @type {(root: ShadowRoot|null|undefined) => boolean} */
+  let observeShadow = () => false;
 
   const observeOpts = {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['aria-expanded', 'hidden', 'open', 'popover'],
+    attributeFilter: [
+      'aria-expanded',
+      'aria-hidden',
+      'aria-controls',
+      'data-state',
+      'data-open',
+      'hidden',
+      'open',
+      'popover',
+    ],
   };
 
   const observer = new MutationObserver((mutations) => {
+    if (stopped) return;
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {
         const target = mutation.target;
@@ -127,36 +148,31 @@ export function startMutationObserver(handlers) {
   });
 
   observeShadow = (root) => {
-    if (!root || observedShadows.has(root)) return;
+    if (!root || observedShadows.has(root)) return false;
     observedShadows.add(root);
     observer.observe(root, observeOpts);
+    return true;
+  };
+
+  rediscoverOpenShadows = () => {
+    if (!document.documentElement) return;
+    for (const sr of collectOpenShadowRoots(document.documentElement)) {
+      if (observeShadow(sr) && sr.host && !isGmixerNode(sr.host)) {
+        pendingRoots.add(sr.host);
+      }
+    }
   };
 
   observer.observe(document.documentElement, observeOpts);
-  if (document.documentElement) {
-    for (const sr of collectOpenShadowRoots(document.documentElement)) {
-      observeShadow(sr);
-    }
-  }
-
-  // Hosts often exist in light DOM before they attach an open shadow
-  // (custom element upgrade). childList does not see attachShadow.
-  const elementProto = globalThis.Element?.prototype;
-  const originalAttach = elementProto?.attachShadow;
-  if (typeof originalAttach === 'function') {
-    elementProto.attachShadow = function attachShadowPatched(init) {
-      const sr = originalAttach.call(this, init);
-      observeShadow(sr);
-      if (!isGmixerNode(this)) {
-        pendingRoots.add(this);
-        schedule();
-      }
-      return sr;
-    };
-  }
+  rediscoverOpenShadows();
+  // Initial classification is owned by content-end's full adaptive pass.
+  pendingRoots = new Set();
 
   return () => {
+    stopped = true;
+    pending = false;
+    pendingRoots.clear();
+    cascadeThreat = false;
     observer.disconnect();
-    if (elementProto && originalAttach) elementProto.attachShadow = originalAttach;
   };
 }

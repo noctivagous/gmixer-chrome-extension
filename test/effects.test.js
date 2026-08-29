@@ -19,8 +19,27 @@ describe('effects catalog', () => {
     assert.equal(normalized.categories.images.effect, 'none');
     assert.equal(normalized.categories.videos.effect, 'glow');
     assert.equal(normalized.categories.navigation.effect, 'none');
+    assert.equal(normalized.categories.hyperlinks.effect, 'none');
     assert.equal(normalized.glow.animated, false);
     assert.equal(normalized.glow.color, '#ff00aa');
+  });
+
+  it('defaults missing hyperlinks category to none', () => {
+    const normalized = normalizeEffects({
+      categories: { navigation: { effect: 'glow' } },
+    });
+    assert.equal(normalized.categories.hyperlinks.effect, 'none');
+    assert.equal(normalized.categories.navigation.effect, 'glow');
+  });
+
+  it('copies shared glow onto navigation when category glow is absent', () => {
+    const normalized = normalizeEffects({
+      categories: { navigation: { effect: 'glow' } },
+      glow: { animated: false, color: '#112233' },
+    });
+    assert.equal(normalized.categories.navigation.glow.color, '#112233');
+    assert.equal(normalized.categories.navigation.glow.animated, false);
+    assert.equal(normalized.categories.hyperlinks.glow.color, '');
   });
 });
 
@@ -38,6 +57,25 @@ describe('effectsRules category paint', () => {
     });
     return global;
   }
+
+  it('outsets opaque logo glow and skips the box on transparent logos', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'glow' } },
+        glow: { animated: true, color: '#00ff00' },
+      }),
+      null
+    );
+    assert.match(css, /gmixer-glow-logo-box-pulse/);
+    assert.match(css, /0 0 4px 3px/);
+    assert.match(css, /\[data-gmixer-media="logo"\]:not\(\[data-gmixer-alpha\]\)/);
+    assert.match(css, /gmixer-glow-logo-drop-pulse/);
+    assert.match(css, /\[data-gmixer-media="logo"\]\[data-gmixer-alpha\]/);
+    assert.match(
+      css,
+      /img:not\(\[data-gmixer-media="logo"\]\), picture img:not\(\[data-gmixer-media="logo"\]\)/
+    );
+  });
 
   it('emits pan-scan keyframes for images', () => {
     const css = buildCss(
@@ -120,7 +158,7 @@ describe('effectsRules category paint', () => {
     );
   });
 
-  it('emits navigation glow on nav/header selectors, not bare a', () => {
+  it('emits navigation glow on nav/header/footer selectors, not bare a', () => {
     const css = buildCss(
       withEffects({
         categories: { navigation: { effect: 'glow' } },
@@ -129,9 +167,44 @@ describe('effectsRules category paint', () => {
       null
     );
     assert.match(css, /nav a/);
+    assert.match(css, /footer a/);
     assert.match(css, /\[role="navigation"\] a/);
+    assert.match(css, /\[role="contentinfo"\] a/);
     assert.match(css, /button, \[role="button"\]/);
-    assert.doesNotMatch(css, /(?:^|\n)\s*a, button, \[role="button"\]/);
+    assert.match(css, /gmixer-glow-pulse-nav/);
+    assert.doesNotMatch(css, /gmixer-glow-pulse-link/);
+    assert.doesNotMatch(css, /(?:^|\n)\s*a, button, \[role="button"\] \{ animation/);
+  });
+
+  it('emits body-link glow on a and cancels it on chrome and heading links', () => {
+    const css = buildCss(
+      withEffects({
+        categories: {
+          hyperlinks: { effect: 'glow', glow: { animated: true, color: '#ff00aa' } },
+        },
+      }),
+      null
+    );
+    assert.match(css, /gmixer-glow-pulse-link/);
+    assert.match(css, /:has\(> a\)/);
+    assert.match(css, /overflow: visible !important/);
+    assert.match(css, /#ff00aa/);
+    assert.match(css, /footer a,[\s\S]*h1 a[\s\S]*text-shadow: none/);
+    assert.doesNotMatch(css, /gmixer-glow-pulse-nav/);
+  });
+
+  it('keeps independent glow colors for body vs navigation links', () => {
+    const css = buildCss(
+      withEffects({
+        categories: {
+          hyperlinks: { effect: 'glow', glow: { animated: false, color: '#ff0000' } },
+          navigation: { effect: 'glow', glow: { animated: false, color: '#00ff00' } },
+        },
+      }),
+      null
+    );
+    assert.match(css, /a \{ text-shadow: 0 0 8px #ff0000; \}/);
+    assert.match(css, /nav a[\s\S]*text-shadow: 0 0 8px #00ff00/);
   });
 
   it('omits effects CSS when the Effects section is off', () => {

@@ -2,7 +2,12 @@
 // Receives dependencies so it stays free of circular imports and can be
 // unit-tested without a live extension context.
 
-import { ROLE_ATTR, MEDIA_ATTR } from '../content/page-classifier.js';
+import {
+  ROLE_ATTR,
+  MEDIA_ATTR,
+  getAnalysisDiagnostics,
+} from '../content/page-classifier.js';
+import { getOpenTreeDiagnostics } from '../content/open-trees.js';
 import { STYLE_ELEMENT_ID } from '../content/style-injector.js';
 import { patchForSettingsFocus } from '../settings/settings-focus.js';
 
@@ -238,6 +243,10 @@ export function createDebugApi(deps) {
         pageSample: samplePageRoles(),
         roles: countByAttr(ROLE_ATTR),
         media: countByAttr(MEDIA_ATTR),
+        analysis: {
+          ...getAnalysisDiagnostics(),
+          ...getOpenTreeDiagnostics(),
+        },
         injectedCssLength: css.length,
         injectedCssHasBgPrimary: css.includes('--gmixer-bg-primary'),
         injectedCssHasSurfaceGui: css.includes('--gmixer-surface-gui'),

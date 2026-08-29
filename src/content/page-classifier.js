@@ -9,12 +9,15 @@
 // hostname when a generic rule can cover the same layout pattern.
 //
 import { MAX_CLASSIFIER_SCAN } from './scan-limits.js';
-import { collectOpenShadowRoots, isShadowRoot } from './open-trees.js';
+import { collectOpenShadowRoots, isGmixerUiElement, isShadowRoot } from './open-trees.js';
 
 export const ROLE_ATTR = 'data-gmixer-role';
 export const MEDIA_ATTR = 'data-gmixer-media';
+/** Logo image with sampled (or inferred) alpha; skip box glow. */
+export const LOGO_ALPHA_ATTR = 'data-gmixer-alpha';
 export const CONFIDENCE_ATTR = 'data-gmixer-confidence';
 export const REASONS_ATTR = 'data-gmixer-reasons';
+export const OVERLAY_ATTR = 'data-gmixer-overlay';
 /** Native relative luminance 0..1 captured while site styles are visible. */
 export const NATIVE_L_ATTR = 'data-gmixer-native-l';
 /** Ranked tone step 0..N-1 (0 = originally darkest among ranked surfaces). */
@@ -29,14 +32,23 @@ const TONE_RANK_ROLES = new Set([
   'article',
   'article-body',
   'card',
-  'header',
-  'navigation',
   'sidebar',
   'hero',
   'main',
 ]);
+const CHROME_TONE_RANK_ROLES = new Set(['header', 'navigation']);
 const MAX_SCAN = MAX_CLASSIFIER_SCAN;
 const classificationCache = new WeakMap();
+const analysisDiagnostics = {
+  scanCapHits: 0,
+  flyoutRejectedHidden: 0,
+  flyoutRejectedGeometry: 0,
+  flyoutRejectedMediaChrome: 0,
+};
+
+export function getAnalysisDiagnostics() {
+  return { ...analysisDiagnostics };
+}
 
 const STRUCTURAL_RULES = [
   { role: 'main', tags: ['MAIN'], aria: ['main'], tokens: ['main', 'content'] },
@@ -124,6 +136,7 @@ const SURFACE_SKIP_TAGS = new Set([
 ]);
 
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
+const MEDIA_CHROME_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS']);
 const OVERLAY_PANEL_TAGS = new Set(['DIV', 'SECTION', 'UL', 'OL', 'NAV', 'ASIDE', 'DIALOG', 'MENU']);
 const TOKEN_RE = /[\s_-]+/;
 const SURFACE_PROMOTE_MAX_DEPTH = 3;
@@ -175,8 +188,7 @@ const SURFACE_PROMOTE_BUDGET = 5000;
 
 function isOwnedByGmixer(el) {
   return !!(
-    el.closest?.('#gmixer-settings') ||
-    el.id === 'gmixer-settings' ||
+    isGmixerUiElement(el) ||
     el.id === 'gmixer-style' ||
     el.id === 'gmixer-hover-outline' ||
     el.classList?.contains('gmixer-tonal-overlay')
@@ -240,14 +252,171 @@ export function isOverlayPanel(el) {
   if (typeof getComputedStyle !== 'function') return false;
   const style = getComputedStyle(el);
   const pos = style.position;
-  if (pos !== 'absolute' && pos !== 'fixed') return false;
+  const ariaRole = (el.getAttribute?.('role') || '').toLowerCase();
+  const semantic =
+    ariaRole === 'menu' ||
+    ariaRole === 'listbox' ||
+    ariaRole === 'dialog' ||
+    el.hasAttribute?.('popover') ||
+    (el.tagName === 'DIALOG' && el.hasAttribute?.('open'));
+  const positioned =
+    pos === 'absolute' ||
+    pos === 'fixed' ||
+    (pos === 'sticky' && style.zIndex !== 'auto') ||
+    (style.transform && style.transform !== 'none' && style.zIndex !== 'auto');
+  if (!semantic && !positioned) return false;
+  if (
+    style.display === 'none' ||
+    style.visibility === 'hidden' ||
+    Number.parseFloat(style.opacity || '1') <= 0
+  ) {
+    analysisDiagnostics.flyoutRejectedHidden += 1;
+    return false;
+  }
   if (typeof el.getBoundingClientRect !== 'function') return false;
   const rect = el.getBoundingClientRect();
-  if (rect.width < 140 || rect.height < 48) return false;
+  const minWidth = semantic ? 80 : 140;
+  const minHeight = semantic ? 32 : 48;
+  if (rect.width < minWidth || rect.height < minHeight) {
+    if (semantic || positioned) analysisDiagnostics.flyoutRejectedGeometry += 1;
+    return false;
+  }
   const vw = typeof window !== 'undefined' ? window.innerWidth || 0 : 0;
   const vh = typeof window !== 'undefined' ? window.innerHeight || 0 : 0;
-  if (vw > 0 && vh > 0 && rect.width >= vw * 0.95 && rect.height >= vh * 0.95) return false;
+  if (
+    !semantic &&
+    vw > 0 &&
+    vh > 0 &&
+    rect.width >= vw * 0.95 &&
+    rect.height >= vh * 0.95
+  ) {
+    return false;
+  }
+  // Thumbnail badge/play layers are full-size positioned siblings of the
+  // poster. Painting them as flyouts covers the image.
+  if (!semantic && isMediaChromeOverlay(el, style, rect)) {
+    analysisDiagnostics.flyoutRejectedMediaChrome += 1;
+    return false;
+  }
   return true;
+}
+
+function firstMediaBox(node) {
+  if (!node || node.nodeType !== 1) return null;
+  if (MEDIA_CHROME_TAGS.has(node.tagName)) {
+    return typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
+  }
+  const inner = node.querySelector?.('img, video, picture, canvas');
+  if (inner && typeof inner.getBoundingClientRect === 'function') {
+    return inner.getBoundingClientRect();
+  }
+  const kids = node.children || node._children || [];
+  for (const kid of kids) {
+    const box = firstMediaBox(kid);
+    if (box) return box;
+  }
+  return null;
+}
+
+function overlapBox(a, b) {
+  if (!a || !b) return null;
+  const aw = a.width || 0;
+  const ah = a.height || 0;
+  const bw = b.width || 0;
+  const bh = b.height || 0;
+  if (aw < 1 || ah < 1 || bw < 1 || bh < 1) return null;
+  const hasOrigin =
+    Number.isFinite(a.left) &&
+    Number.isFinite(a.top) &&
+    Number.isFinite(b.left) &&
+    Number.isFinite(b.top);
+  if (!hasOrigin) return { w: Math.min(aw, bw), h: Math.min(ah, bh) };
+  const ar = a.right ?? a.left + aw;
+  const ab = a.bottom ?? a.top + ah;
+  const br = b.right ?? b.left + bw;
+  const bb = b.bottom ?? b.top + bh;
+  const w = Math.max(0, Math.min(ar, br) - Math.max(a.left, b.left));
+  const h = Math.max(0, Math.min(ab, bb) - Math.max(a.top, b.top));
+  if (w <= 0 || h <= 0) return null;
+  return { w, h };
+}
+
+function boxesCover(overlayRect, mediaRect) {
+  const overlap = overlapBox(overlayRect, mediaRect);
+  if (!overlap) return false;
+  const mw = mediaRect.width || 0;
+  const mh = mediaRect.height || 0;
+  const hasOrigin =
+    Number.isFinite(overlayRect.left) &&
+    Number.isFinite(overlayRect.top) &&
+    Number.isFinite(mediaRect.left) &&
+    Number.isFinite(mediaRect.top);
+  if (hasOrigin) return overlap.w * overlap.h >= mw * mh * 0.45;
+  const ow = overlayRect.width || 0;
+  const oh = overlayRect.height || 0;
+  return Math.min(ow, mw) / Math.max(ow, mw) >= 0.7 && Math.min(oh, mh) / Math.max(oh, mh) >= 0.7;
+}
+
+function isEdgeChromeOverMedia(overlayRect, mediaRect) {
+  const overlap = overlapBox(overlayRect, mediaRect);
+  if (!overlap) return false;
+  const ow = overlayRect.width || 0;
+  const oh = overlayRect.height || 0;
+  const mw = mediaRect.width || 0;
+  const mh = mediaRect.height || 0;
+  return oh < mh * 0.4 || ow < mw * 0.4;
+}
+
+/**
+ * True when `elRect` is essentially a media frame/stage (poster wrapper,
+ * badge layer), not a content sheet that merely embeds a small thumbnail.
+ * @param {{ width?: number, height?: number }} elRect
+ * @param {{ width?: number, height?: number }} mediaRect
+ */
+function isMediaSizedFrame(elRect, mediaRect) {
+  const ew = elRect.width || 0;
+  const eh = elRect.height || 0;
+  const mw = mediaRect.width || 0;
+  const mh = mediaRect.height || 0;
+  const ea = ew * eh;
+  const ma = mw * mh;
+  if (ea < 1 || ma < 1) return false;
+  // Media fills most of this box — chrome around the media, not a card.
+  if (ma / ea >= 0.45) return true;
+  // Near-matching dimensions (thin letterboxing still counts as a stage).
+  return (
+    Math.min(ew, mw) / Math.max(ew, mw) >= 0.7 && Math.min(eh, mh) / Math.max(eh, mh) >= 0.7
+  );
+}
+
+function coversOrStripsMedia(el, rect) {
+  const ownMedia = firstMediaBox(el);
+  // Self-cover must be media-sized. Otherwise any card that contains a
+  // thumbnail (Techmeme #qiobv / #podcasts) is falsely rejected as chrome.
+  if (ownMedia && isMediaSizedFrame(rect, ownMedia) && boxesCover(rect, ownMedia)) {
+    return true;
+  }
+  const parent = el.parentElement;
+  if (!parent) return false;
+  const kids = parent.children || parent._children || [];
+  for (const sib of kids) {
+    if (sib === el) continue;
+    const media = firstMediaBox(sib);
+    if (boxesCover(rect, media) || isEdgeChromeOverMedia(rect, media)) return true;
+  }
+  return false;
+}
+
+/**
+ * Poster/player chrome (badge layers, video stage, control strips), not a flyout.
+ * @param {Element} el
+ * @param {CSSStyleDeclaration} style
+ * @param {DOMRect} rect
+ */
+function isMediaChromeOverlay(el, style, rect) {
+  const pointerEvents = String(style.pointerEvents || '').toLowerCase();
+  if (pointerEvents === 'none') return true;
+  return coversOrStripsMedia(el, rect);
 }
 
 export function classifyElement(el) {
@@ -264,7 +433,10 @@ export function classifyElement(el) {
   const tokens = tokensFor(el);
 
   if (isOverlayPanel(el)) {
-    const value = result('surface', 0.88, ['positioned overlay panel']);
+    const value = {
+      ...result('surface', 0.88, ['positioned overlay panel']),
+      overlay: true,
+    };
     classificationCache.set(el, { key, value });
     return value;
   }
@@ -362,22 +534,59 @@ export function classifyElement(el) {
   return null;
 }
 
-function relativeLuminanceFromCss(bg) {
+function rgbaFromCss(bg) {
   const rgba = (bg || '').match(
     /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i
   );
   if (!rgba) return null;
-  if (rgba[4] !== undefined) {
-    const alpha = parseFloat(rgba[4]);
-    if (!Number.isNaN(alpha)) {
-      const a = String(rgba[4]).includes('%') ? alpha / 100 : alpha;
-      if (a <= 0) return null;
-    }
+  const parsedAlpha = rgba[4] === undefined ? 1 : parseFloat(rgba[4]);
+  const alpha = Number.isNaN(parsedAlpha)
+    ? 1
+    : String(rgba[4] || '').includes('%')
+      ? parsedAlpha / 100
+      : parsedAlpha;
+  return {
+    r: +rgba[1] / 255,
+    g: +rgba[2] / 255,
+    b: +rgba[3] / 255,
+    a: Math.max(0, Math.min(1, alpha)),
+  };
+}
+
+function luminanceFromRgba(color) {
+  if (!color || color.a <= 0) return null;
+  return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+}
+
+function parentPaintNode(el) {
+  if (el?.parentElement) return el.parentElement;
+  const root = el?.getRootNode?.();
+  return root?.host || null;
+}
+
+function effectiveBackground(el, style) {
+  const layers = [];
+  let node = el;
+  let currentStyle = style;
+  for (let depth = 0; node && depth < 12; depth += 1) {
+    const color = rgbaFromCss(currentStyle?.backgroundColor || '');
+    if (color && color.a > 0) layers.push(color);
+    if (color?.a >= 0.999) break;
+    node = parentPaintNode(node);
+    currentStyle =
+      node && typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
   }
-  const r = +rgba[1] / 255;
-  const g = +rgba[2] / 255;
-  const b = +rgba[3] / 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  let out = { r: 1, g: 1, b: 1, a: 1 };
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    const top = layers[index];
+    out = {
+      r: top.r * top.a + out.r * (1 - top.a),
+      g: top.g * top.a + out.g * (1 - top.a),
+      b: top.b * top.a + out.b * (1 - top.a),
+      a: top.a + out.a * (1 - top.a),
+    };
+  }
+  return out;
 }
 
 function firstCssColorToken(value) {
@@ -386,13 +595,15 @@ function firstCssColorToken(value) {
 }
 
 function captureNativeLuminance(el, style) {
+  if (el.hasAttribute?.(NATIVE_L_ATTR)) return;
   if (!style) {
     if (typeof getComputedStyle !== 'function') return;
     style = getComputedStyle(el);
   }
-  let lum = relativeLuminanceFromCss(style.backgroundColor || '');
+  const ownColor = rgbaFromCss(style.backgroundColor || '');
+  let lum = ownColor?.a > 0 ? luminanceFromRgba(effectiveBackground(el, style)) : null;
   if (lum == null) {
-    lum = relativeLuminanceFromCss(firstCssColorToken(style.backgroundImage || ''));
+    lum = luminanceFromRgba(rgbaFromCss(firstCssColorToken(style.backgroundImage || '')));
   }
   if (lum == null) return;
   el.setAttribute(NATIVE_L_ATTR, lum.toFixed(4));
@@ -501,6 +712,7 @@ export function stampOpaquePaintTargets(root = document.body) {
 
 function stamp(el, classification) {
   if (classification.role) el.setAttribute(ROLE_ATTR, classification.role);
+  if (classification.overlay) el.setAttribute(OVERLAY_ATTR, '');
   if (classification.media) el.setAttribute(MEDIA_ATTR, classification.media);
   el.setAttribute(CONFIDENCE_ATTR, classification.confidence.toFixed(2));
   el.setAttribute(REASONS_ATTR, classification.reasons.join('; '));
@@ -512,8 +724,10 @@ function stamp(el, classification) {
 function clearClassification(el) {
   el.removeAttribute(ROLE_ATTR);
   el.removeAttribute(MEDIA_ATTR);
+  el.removeAttribute(LOGO_ALPHA_ATTR);
   el.removeAttribute(CONFIDENCE_ATTR);
   el.removeAttribute(REASONS_ATTR);
+  el.removeAttribute(OVERLAY_ATTR);
   el.removeAttribute(NATIVE_L_ATTR);
   el.removeAttribute(TONE_STEP_ATTR);
 }
@@ -536,21 +750,9 @@ function isOpaqueBackground(el, style) {
     style = getComputedStyle(el);
   }
   const bg = style.backgroundColor || '';
-  if (bg && bg !== 'transparent') {
-    const rgba = bg.match(
-      /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i
-    );
-    if (!rgba) return true;
-    if (rgba[4] === undefined) return true;
-    const alpha = parseFloat(rgba[4]);
-    if (Number.isNaN(alpha)) return true;
-    // css opacity channel: 0 or 0% is transparent; 1 or 100% is opaque
-    if (String(rgba[4]).includes('%')) {
-      if (alpha > 0) return true;
-    } else if (alpha > 0) {
-      return true;
-    }
-  }
+  const rgba = rgbaFromCss(bg);
+  // Opaque-only means a meaningful native sheet, not a barely visible tint.
+  if (rgba ? rgba.a >= 0.5 : bg && bg !== 'transparent') return true;
   // Brand chrome often paints with linear-gradient and a transparent color.
   return hasCssGradientFill(style.backgroundImage || '');
 }
@@ -625,6 +827,7 @@ export function promotePaintedSurfaces(root = document.body) {
             rect.height >= SURFACE_PROMOTE_DEEP_MIN_HEIGHT &&
             rect.width * rect.height >= SURFACE_PROMOTE_DEEP_MIN_AREA
           : rect.width >= SURFACE_PROMOTE_MIN_WIDTH && rect.height >= SURFACE_PROMOTE_MIN_HEIGHT;
+        if (sizedOk && coversOrStripsMedia(el, rect)) sizedOk = false;
       }
       if (sizedOk) {
         stamp(el, result('surface', 0.8, [`opaque surface inside ${hostRole}`]));
@@ -769,6 +972,9 @@ export function seedPageSheets(root) {
     if (SHEET_SKIP_TAGS.has(el.tagName) || isOwnedByGmixer(el)) return;
     if (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR)) return;
     if (!isOpaqueBackground(el) || !isLargePaintedSheet(el)) return;
+    if (typeof el.getBoundingClientRect === 'function' && coversOrStripsMedia(el, el.getBoundingClientRect())) {
+      return;
+    }
     stamp(el, result('surface', 0.78, ['opaque page sheet']));
     stamped += 1;
   }
@@ -796,6 +1002,16 @@ export function seedPageSheets(root) {
     }
   }
   walk(start, 0);
+
+  // DFS spends the budget on the first column of a long feed. Also consider
+  // sizable boxes anywhere under start so later sidebar slabs are not starved.
+  const extras = start.querySelectorAll?.('div, aside, section, article') || [];
+  for (const el of extras) {
+    if (el.hasAttribute?.(ROLE_ATTR) || el.hasAttribute?.(MEDIA_ATTR)) continue;
+    if (typeof el.getBoundingClientRect === 'function' && !isLargePaintedSheet(el)) continue;
+    consider(el);
+  }
+
   return stamped;
 }
 
@@ -814,7 +1030,7 @@ export function assignToneSteps(root = document.body, steps = SURFACE_LADDER_STE
   const ranked = [];
   for (const el of root.querySelectorAll(`[${ROLE_ATTR}]`)) {
     const role = el.getAttribute(ROLE_ATTR) || '';
-    if (!TONE_RANK_ROLES.has(role)) continue;
+    if (!TONE_RANK_ROLES.has(role) && !CHROME_TONE_RANK_ROLES.has(role)) continue;
     let lum = parseFloat(el.getAttribute(NATIVE_L_ATTR) || '');
     if (Number.isNaN(lum)) {
       captureNativeLuminance(el);
@@ -825,14 +1041,34 @@ export function assignToneSteps(root = document.body, steps = SURFACE_LADDER_STE
   }
   if (!ranked.length) return 0;
 
-  ranked.sort((a, b) => a.lum - b.lum || 0);
-  ranked.forEach((item, index) => {
-    const step = Math.min(
-      stepCount - 1,
-      Math.floor((index / ranked.length) * stepCount)
-    );
-    item.el.setAttribute(TONE_STEP_ATTR, String(step));
-  });
+  const assignGroup = (items) => {
+    items.sort((a, b) => a.lum - b.lum || 0);
+    const clusters = [];
+    for (const item of items) {
+      const cluster = clusters.at(-1);
+      if (!cluster || Math.abs(item.lum - cluster.mean) > 0.02) {
+        clusters.push({ mean: item.lum, items: [item] });
+      } else {
+        cluster.items.push(item);
+        cluster.mean =
+          cluster.items.reduce((sum, current) => sum + current.lum, 0) /
+          cluster.items.length;
+      }
+    }
+    clusters.forEach((cluster, index) => {
+      const step =
+        clusters.length === 1
+          ? Math.floor((stepCount - 1) / 2)
+          : Math.round((index / (clusters.length - 1)) * (stepCount - 1));
+      for (const item of cluster.items) {
+        item.el.setAttribute(TONE_STEP_ATTR, String(step));
+      }
+    });
+  };
+  assignGroup(ranked.filter(({ el }) => TONE_RANK_ROLES.has(el.getAttribute(ROLE_ATTR) || '')));
+  assignGroup(
+    ranked.filter(({ el }) => CHROME_TONE_RANK_ROLES.has(el.getAttribute(ROLE_ATTR) || ''))
+  );
   return ranked.length;
 }
 
@@ -846,15 +1082,16 @@ export function assignToneSteps(root = document.body, steps = SURFACE_LADDER_STE
  *   attributes so we don't clear/restamp and re-run getComputedStyle on them.
  * @returns {{ stamped: number, scanned: number, surfaces: number, toneSteps: number }}
  */
-function classifyOneTree(root, options = {}) {
+function classifyOneTree(root, options = {}, budget = { remaining: MAX_SCAN }) {
   const skipClassified = options.skipClassified === true;
   let stamped = 0;
   let scanned = 0;
   /** @type {{ el: Element, classification: ReturnType<typeof classifyElement> }[]} */
   const pending = [];
   for (const el of elementsUnder(root)) {
-    if (scanned >= MAX_SCAN) break;
+    if (budget.remaining <= 0) break;
     if (isOwnedByGmixer(el)) continue;
+    budget.remaining -= 1;
     scanned += 1;
     if (skipClassified && (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR))) {
       const role = el.getAttribute(ROLE_ATTR);
@@ -884,12 +1121,11 @@ function classifyOneTree(root, options = {}) {
     }
   }
   stampOpaquePaintTargets(root);
-  const toneSteps = assignToneSteps(root);
   return {
     stamped: stamped + surfaces + sheets,
     scanned,
     surfaces: surfaces + sheets,
-    toneSteps,
+    toneSteps: 0,
   };
 }
 
@@ -907,15 +1143,27 @@ export function classifySubtree(root = document.body, options = {}) {
   for (const shadow of collectOpenShadowRoots(root)) trees.push(shadow);
 
   const seen = new Set();
+  const budget = { remaining: MAX_SCAN };
   const totals = { stamped: 0, scanned: 0, surfaces: 0, toneSteps: 0 };
   for (const tree of trees) {
     if (!tree || seen.has(tree)) continue;
     seen.add(tree);
-    const sub = classifyOneTree(tree, options);
+    const sub = classifyOneTree(tree, options, budget);
     totals.stamped += sub.stamped;
     totals.scanned += sub.scanned;
     totals.surfaces += sub.surfaces;
-    totals.toneSteps += sub.toneSteps;
+  }
+  if (budget.remaining <= 0) analysisDiagnostics.scanCapHits += 1;
+  const rankingRoots = new Set();
+  for (const tree of seen) {
+    const node = tree?.getRootNode?.();
+    if (isShadowRoot(tree)) rankingRoots.add(tree);
+    else if (isShadowRoot(node)) rankingRoots.add(node);
+    else if (typeof document !== 'undefined' && document.body) rankingRoots.add(document.body);
+    else rankingRoots.add(tree);
+  }
+  for (const rankingRoot of rankingRoots) {
+    totals.toneSteps += assignToneSteps(rankingRoot);
   }
   return totals;
 }

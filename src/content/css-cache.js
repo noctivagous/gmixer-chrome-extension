@@ -1,9 +1,12 @@
-// Fast path for document_start: remember the last CSS we applied per host and
+// Fast path for document_start: remember sample-independent CSS by host and
 // route in chrome.storage.session so the next navigation can paint the theme
 // before sync/local settings fully resolve (reduces flash-of-original).
+//
+// Adaptive/page-sampled CSS must never be written here. Scope-specific keys
+// keep concurrent routes and same-host frames from replacing one another.
 
 const CACHE_PREFIX = 'gmixer_css:';
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 function hasSessionStorage() {
   return typeof chrome !== 'undefined' && !!chrome.storage?.session;
@@ -11,6 +14,14 @@ function hasSessionStorage() {
 
 export function cssCacheScope(locationLike = location) {
   return `${locationLike.origin}${locationLike.pathname}`;
+}
+
+function cacheHostPrefix(hostname) {
+  return `${CACHE_PREFIX}${encodeURIComponent(hostname)}:`;
+}
+
+function cacheKey(hostname, scope) {
+  return `${cacheHostPrefix(hostname)}${encodeURIComponent(scope)}`;
 }
 
 export function cssCacheFingerprint(resolved) {
@@ -24,9 +35,9 @@ export function cssCacheFingerprint(resolved) {
 }
 
 export async function readCssCache(hostname, scope) {
-  if (!hasSessionStorage() || !hostname) return null;
+  if (!hasSessionStorage() || !hostname || !scope) return null;
   try {
-    const key = CACHE_PREFIX + hostname;
+    const key = cacheKey(hostname, scope);
     const data = await chrome.storage.session.get(key);
     const cached = data[key];
     if (
@@ -49,7 +60,7 @@ export async function writeCssCache(hostname, scope, resolved, css) {
   if (!hasSessionStorage() || !hostname || !scope || !resolved || !css) return;
   try {
     await chrome.storage.session.set({
-      [CACHE_PREFIX + hostname]: {
+      [cacheKey(hostname, scope)]: {
         version: CACHE_VERSION,
         scope,
         fingerprint: cssCacheFingerprint(resolved),
@@ -64,7 +75,10 @@ export async function writeCssCache(hostname, scope, resolved, css) {
 export async function clearCssCache(hostname) {
   if (!hasSessionStorage() || !hostname) return;
   try {
-    await chrome.storage.session.remove(CACHE_PREFIX + hostname);
+    const data = await chrome.storage.session.get(null);
+    const prefix = cacheHostPrefix(hostname);
+    const keys = Object.keys(data).filter((key) => key.startsWith(prefix));
+    if (keys.length) await chrome.storage.session.remove(keys);
   } catch {
     /* ignore */
   }

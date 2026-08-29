@@ -2,7 +2,15 @@
 // page. Deliberately CSS-only (no per-element JS styling) so it can be
 // generated once per state change and applies live to any element the
 // selectors match — including nodes added later, without extra JS work.
-import { buildPalette, deriveSurface, deriveSurfaceLadder, hexToHsl } from '../lib/color-theory.js';
+import {
+  deriveSurfaceLadder,
+  hexToHsl,
+  resolveGlowColor,
+} from '../lib/color-theory.js';
+import {
+  applyColorOverrides,
+  resolveEffectivePalette,
+} from '../lib/effective-palette.js';
 import { resolveImageFilterPreset } from '../config/image-filter-presets.js';
 import { normalizeEffects } from '../config/effects-catalog.js';
 import { getFontById } from '../config/fonts.js';
@@ -11,11 +19,14 @@ import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
-import { collectOpenShadowRoots } from './open-trees.js';
+import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
 
 export { PALETTE_FILTER_PRESETS, resolveImageFilterPreset } from '../config/image-filter-presets.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
+const HOST_STYLE_ID = 'gmixer-settings-host-style';
+/** Page overlay paint must not hit our Popover API hosts. */
+const GMIXER_UI_HOST_NOT = ':not(#gmixer-settings):not(#gmixer-walkthrough-host)';
 
 // Safer than "p, li, span, div" — avoid restyling every layout node and
 // wrecking icon fonts / UI chrome that happens to live in a span/div.
@@ -259,47 +270,127 @@ function clippingRule(clipping) {
 
 const EFFECTS_IMAGE_SELECTORS = 'img, picture img';
 const EFFECTS_VIDEO_SELECTORS = 'video';
-const EFFECTS_NAV_SELECTORS = [
-  'nav a',
+const CHROME_LINK_SELECTORS = [
   'header a',
-  '[role="navigation"] a',
+  'footer a',
+  'nav a',
   '[role="banner"] a',
-  '[data-gmixer-role="navigation"] a',
+  '[role="contentinfo"] a',
+  '[role="navigation"] a',
   '[data-gmixer-role="header"] a',
-  'button',
-  '[role="button"]',
-].join(', ');
+  '[data-gmixer-role="footer"] a',
+  '[data-gmixer-role="navigation"] a',
+];
+const HEADING_LINK_SELECTORS = [
+  'h1 a',
+  'h2 a',
+  'h3 a',
+  'h4 a',
+  'h5 a',
+  'h6 a',
+  '[role="heading"] a',
+];
+const EFFECTS_NAV_SELECTORS = [...CHROME_LINK_SELECTORS, 'button', '[role="button"]'].join(', ');
+const EFFECTS_BODY_LINK_CANCEL_SELECTORS = [...CHROME_LINK_SELECTORS, ...HEADING_LINK_SELECTORS].join(
+  ', '
+);
+
+function chromeLinkSelectorList(suffix = '') {
+  const base = CHROME_LINK_SELECTORS.map((selector) => `${selector}${suffix}`);
+  const nested = CHROME_LINK_SELECTORS.map((selector) => `[data-gmixer-role] ${selector}${suffix}`);
+  return [...base, ...nested].join(',\n    ');
+}
+
+function textGlowKeyframes(name, color) {
+  return `@keyframes ${name} {
+  0%, 100% { filter: drop-shadow(0 0 2px ${color}); }
+  50% { filter: drop-shadow(0 0 10px ${color}); }
+}`;
+}
+
+function boxGlowKeyframes(name, color, spreadPx = 0) {
+  const spread = spreadPx ? ` ${spreadPx}px` : '';
+  return `@keyframes ${name} {
+  0%, 100% { box-shadow: 0 0 4px${spread} ${color}; }
+  50% { box-shadow: 0 0 14px${spread} ${color}; }
+}`;
+}
+
+function dropGlowKeyframes(name, color) {
+  return `@keyframes ${name} {
+  0%, 100% { filter: drop-shadow(0 0 4px ${color}); }
+  50% { filter: drop-shadow(0 0 14px ${color}); }
+}`;
+}
+
+/** Direct parent overflow:hidden crops drop-shadow on the child. */
+function unclipGlow(selectors) {
+  const items = selectors
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const self = items.join(', ');
+  const parents = items.map((item) => `:has(> ${item})`).join(', ');
+  return `${self},
+${parents} {
+  overflow: visible !important;
+}
+:has(> a) > a {
+  border-radius: inherit;
+}
+:has(> a) > a img,
+:has(> a) > a video,
+:has(> a) > a picture {
+  border-radius: inherit;
+}`;
+}
 
 function effectsRules(effects, palette) {
   const normalized = normalizeEffects(effects);
   const rules = [];
-  const glowColor = normalized.glow.color || palette.accent;
+  const mediaGlowColor = resolveGlowColor(normalized.glow.color, palette.accent);
   const categories = normalized.categories;
 
   const imageEffect = categories.images.effect;
   const videoEffect = categories.videos.effect;
+  const linkEffect = categories.hyperlinks.effect;
   const navEffect = categories.navigation.effect;
+  const bodyInk = palette.link || palette.accent;
+  const navInk = palette.navLink || bodyInk;
+  const linkGlowColor = resolveGlowColor(categories.hyperlinks.glow?.color, bodyInk);
+  const navGlowColor = resolveGlowColor(categories.navigation.glow?.color, navInk);
 
-  if (imageEffect === 'glow' || videoEffect === 'glow' || navEffect === 'glow') {
-    if (normalized.glow.animated) {
-      rules.push(`@keyframes gmixer-glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 2px ${glowColor}); }
-  50% { filter: drop-shadow(0 0 10px ${glowColor}); }
-}`);
-      rules.push(`@keyframes gmixer-glow-box-pulse {
-  0%, 100% { box-shadow: 0 0 4px ${glowColor}; }
-  50% { box-shadow: 0 0 14px ${glowColor}; }
-}`);
-    }
+  if ((imageEffect === 'glow' || videoEffect === 'glow') && normalized.glow.animated) {
+    rules.push(boxGlowKeyframes('gmixer-glow-box-pulse', mediaGlowColor));
+  }
+  if (linkEffect === 'glow' && categories.hyperlinks.glow?.animated !== false) {
+    rules.push(textGlowKeyframes('gmixer-glow-pulse-link', linkGlowColor));
+  }
+  if (navEffect === 'glow' && categories.navigation.glow?.animated !== false) {
+    rules.push(textGlowKeyframes('gmixer-glow-pulse-nav', navGlowColor));
   }
 
   if (imageEffect === 'glow') {
+    rules.push(unclipGlow(EFFECTS_IMAGE_SELECTORS));
     // Prefer box-shadow so Media section filter: !important does not wipe glow.
-    rules.push(
-      normalized.glow.animated
-        ? `${EFFECTS_IMAGE_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
-        : `${EFFECTS_IMAGE_SELECTORS} { box-shadow: 0 0 12px ${glowColor}; }`
-    );
+    // Logos are cropped tight: outset the box 3px. Transparent logos skip the
+    // box (it would halo empty corners) and pulse a drop-shadow on the glyph.
+    const nonLogoImages = EFFECTS_IMAGE_SELECTORS.split(',')
+      .map((part) => `${part.trim()}:not([data-gmixer-media="logo"])`)
+      .join(', ');
+    const opaqueLogo = '[data-gmixer-media="logo"]:not([data-gmixer-alpha])';
+    const alphaLogo = '[data-gmixer-media="logo"][data-gmixer-alpha]';
+    if (normalized.glow.animated) {
+      rules.push(boxGlowKeyframes('gmixer-glow-logo-box-pulse', mediaGlowColor, 3));
+      rules.push(dropGlowKeyframes('gmixer-glow-logo-drop-pulse', mediaGlowColor));
+      rules.push(`${nonLogoImages} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`);
+      rules.push(`${opaqueLogo} { animation: gmixer-glow-logo-box-pulse 2.4s ease-in-out infinite; }`);
+      rules.push(`${alphaLogo} { animation: gmixer-glow-logo-drop-pulse 2.4s ease-in-out infinite; }`);
+    } else {
+      rules.push(`${nonLogoImages} { box-shadow: 0 0 12px ${mediaGlowColor}; }`);
+      rules.push(`${opaqueLogo} { box-shadow: 0 0 12px 3px ${mediaGlowColor}; }`);
+      rules.push(`${alphaLogo} { filter: drop-shadow(0 0 12px ${mediaGlowColor}); }`);
+    }
   } else if (imageEffect === 'pan-scan') {
     const { speed, zoom, loop } = normalized.panScan;
     const zoomScale = 1 + zoom / 100;
@@ -417,23 +508,43 @@ ${targetSel} {
   }
 
   if (videoEffect === 'glow') {
+    rules.push(unclipGlow(EFFECTS_VIDEO_SELECTORS));
     rules.push(
       normalized.glow.animated
         ? `${EFFECTS_VIDEO_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
-        : `${EFFECTS_VIDEO_SELECTORS} { box-shadow: 0 0 12px ${glowColor}; }`
+        : `${EFFECTS_VIDEO_SELECTORS} { box-shadow: 0 0 12px ${mediaGlowColor}; }`
+    );
+  }
+
+  if (linkEffect === 'glow' || linkEffect === 'flash') {
+    if (linkEffect === 'glow') {
+      const animated = categories.hyperlinks.glow?.animated !== false;
+      rules.push(unclipGlow('a'));
+      rules.push(`a { text-shadow: 0 0 8px ${linkGlowColor}; }`);
+      if (animated) {
+        rules.push(`a { animation: gmixer-glow-pulse-link 2.4s ease-in-out infinite; }`);
+      }
+    } else {
+      rules.push(`@keyframes gmixer-flash-link { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
+a { animation: gmixer-flash-link 3s linear infinite; }`);
+    }
+    rules.push(
+      `${EFFECTS_BODY_LINK_CANCEL_SELECTORS} { text-shadow: none; animation: none; filter: none; }`
     );
   }
 
   if (navEffect === 'glow') {
-    rules.push(
-      `${EFFECTS_NAV_SELECTORS} { text-shadow: 0 0 8px ${glowColor}; }`,
-      normalized.glow.animated
-        ? `${EFFECTS_NAV_SELECTORS} { animation: gmixer-glow-pulse 2.4s ease-in-out infinite; }`
-        : ''
-    );
+    const animated = categories.navigation.glow?.animated !== false;
+    rules.push(unclipGlow('a, button, [role="button"]'));
+    rules.push(`${EFFECTS_NAV_SELECTORS} { text-shadow: 0 0 8px ${navGlowColor}; }`);
+    if (animated) {
+      rules.push(
+        `${EFFECTS_NAV_SELECTORS} { animation: gmixer-glow-pulse-nav 2.4s ease-in-out infinite; }`
+      );
+    }
   } else if (navEffect === 'flash') {
-    rules.push(`@keyframes gmixer-flash { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
-${EFFECTS_NAV_SELECTORS} { animation: gmixer-flash 3s linear infinite; }`);
+    rules.push(`@keyframes gmixer-flash-nav { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
+${EFFECTS_NAV_SELECTORS} { animation: gmixer-flash-nav 3s linear infinite; }`);
   }
 
   if (categories.articles?.effect === 'link-shimmer') {
@@ -503,6 +614,43 @@ const NAV_CHROME_SELECTORS = [
   'body [data-gmixer-role="navigation"]',
 ].join(',\n    ');
 
+function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, brandFamily) {
+  return `
+    :root {
+      --gmixer-bg-primary: ${role('background')};
+      --gmixer-bg-secondary: ${role('backgroundSecondary')};
+      --gmixer-bg: var(--gmixer-bg-primary);
+      --gmixer-surface-gui: ${role('surfaceGui') || role('surface') || surfaceGui};
+      --gmixer-surface-containers: ${role('surfaceContainers') || surfaceContainers};
+      --gmixer-surface-0: ${ladder[0]};
+      --gmixer-surface-1: ${ladder[1]};
+      --gmixer-surface-2: ${ladder[2]};
+      --gmixer-text: ${role('text')};
+      --gmixer-muted: ${role('muted')};
+      --gmixer-accent: ${role('accent')};
+      --gmixer-link: ${role('link')};
+      --gmixer-link-hover: ${role('linkHover') || role('link')};
+      --gmixer-link-active: ${role('linkActive') || role('link')};
+      --gmixer-nav-link: ${role('navLink') || role('link')};
+      --gmixer-nav-link-hover: ${role('navLinkHover') || role('navLink') || role('link')};
+      --gmixer-nav-link-active: ${role('navLinkActive') || role('navLink') || role('link')};
+      --gmixer-border: ${role('border')};
+      --gmixer-focus: ${role('focus')};
+      --gmixer-brand: ${brandFamily.brand};
+      --gmixer-brand-tint: ${brandFamily.tint};
+      --gmixer-brand-shade: ${brandFamily.shade};
+      --gmixer-brand-text: ${brandFamily.textOnBrand};
+      --gmixer-brand-hover: ${brandFamily.hover};
+      --gmixer-brand-active: ${brandFamily.active};
+      --gmixer-masthead: ${role('masthead') || role('accent')};
+      --gmixer-masthead-text: ${deriveBrandFamily(role('masthead') || role('accent'), isDark).textOnBrand};
+      --gmixer-nav: ${role('nav') || role('accent')};
+      --gmixer-nav-text: ${deriveBrandFamily(role('nav') || role('accent'), isDark).textOnBrand};
+      color-scheme: ${isDark ? 'dark' : 'light'};
+    }
+  `;
+}
+
 /**
  * Page-role paint. Keep the fallback deliberately conservative: recolor the
  * document roots and common semantic text/control roles, then let classifier
@@ -553,6 +701,22 @@ function roleCss(
     : 'var(--gmixer-text)';
   const navFill = identityRegions.nav ? 'var(--gmixer-nav)' : 'var(--gmixer-bg-secondary)';
   const navText = identityRegions.nav ? 'var(--gmixer-nav-text)' : 'var(--gmixer-text)';
+  const chromeHostScope = `:is(
+      body :is(
+        header,
+        [role="banner"],
+        nav,
+        [role="navigation"],
+        .masthead,
+        .navbar,
+        #header,
+        #masthead,
+        [data-gmixer-role="header"],
+        [data-gmixer-role="navigation"]
+      ),
+      [data-gmixer-role="header"],
+      [data-gmixer-role="navigation"]
+    )`;
 
   const chromeRules = `
     ${maybeOpaque(HEADER_CHROME_SELECTORS)} {
@@ -573,36 +737,29 @@ function roleCss(
       background-image: none !important;
       color: ${navText} !important;
     }
+
+    /* Adopted sheets have no body ancestor. Classifier stamps provide the
+       shadow-safe chrome boundary. */
+    ${maybeOpaque(`[data-gmixer-role="header"]`)} {
+      --site-header-background-color: ${headerFill} !important;
+      --site-header-text-color: ${headerText} !important;
+      --header-background-color: ${headerFill} !important;
+      --header-bg: ${headerFill} !important;
+      --header-color: ${headerText} !important;
+      background-color: ${headerFill} !important;
+      background-image: none !important;
+      color: ${headerText} !important;
+    }
+
+    ${maybeOpaque(`[data-gmixer-role="navigation"]`)} {
+      background-color: ${navFill} !important;
+      background-image: none !important;
+      color: ${navText} !important;
+    }
   `;
 
   return `
-    :root {
-      --gmixer-bg-primary: ${role('background')};
-      --gmixer-bg-secondary: ${role('backgroundSecondary')};
-      --gmixer-bg: var(--gmixer-bg-primary);
-      --gmixer-surface-gui: ${role('surfaceGui') || role('surface') || surfaceGui};
-      --gmixer-surface-containers: ${role('surfaceContainers') || surfaceContainers};
-      --gmixer-surface-0: ${ladder[0]};
-      --gmixer-surface-1: ${ladder[1]};
-      --gmixer-surface-2: ${ladder[2]};
-      --gmixer-text: ${role('text')};
-      --gmixer-muted: ${role('muted')};
-      --gmixer-accent: ${role('accent')};
-      --gmixer-link: ${role('link')};
-      --gmixer-border: ${role('border')};
-      --gmixer-focus: ${role('focus')};
-      --gmixer-brand: ${brandFamily.brand};
-      --gmixer-brand-tint: ${brandFamily.tint};
-      --gmixer-brand-shade: ${brandFamily.shade};
-      --gmixer-brand-text: ${brandFamily.textOnBrand};
-      --gmixer-brand-hover: ${brandFamily.hover};
-      --gmixer-brand-active: ${brandFamily.active};
-      --gmixer-masthead: ${role('masthead') || role('accent')};
-      --gmixer-masthead-text: ${deriveBrandFamily(role('masthead') || role('accent'), isDark).textOnBrand};
-      --gmixer-nav: ${role('nav') || role('accent')};
-      --gmixer-nav-text: ${deriveBrandFamily(role('nav') || role('accent'), isDark).textOnBrand};
-      color-scheme: ${isDark ? 'dark' : 'light'};
-    }
+    ${themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, brandFamily)}
 
     html, body {
       background-color: var(--gmixer-bg) !important;
@@ -637,18 +794,7 @@ function roleCss(
     /* Header/nav in-bar items share one chrome fill. Do not elevate buttons,
        fields, or inline slabs into spaced darker blocks (Opera GX mastheads).
        Overlay flyouts are excluded — they need a solid sheet. */
-    body :is(
-      header,
-      [role="banner"],
-      nav,
-      [role="navigation"],
-      .masthead,
-      .navbar,
-      #header,
-      #masthead,
-      [data-gmixer-role="header"],
-      [data-gmixer-role="navigation"]
-    ) :is(
+    ${chromeHostScope} :is(
       ul,
       ol,
       li,
@@ -670,18 +816,7 @@ function roleCss(
     /* Dropdown / flyout / popover panels nested in header/nav. Same
        specificity as the transparent flush so this later rule wins.
        No host-specific class names. */
-    body :is(
-      header,
-      [role="banner"],
-      nav,
-      [role="navigation"],
-      .masthead,
-      .navbar,
-      #header,
-      #masthead,
-      [data-gmixer-role="header"],
-      [data-gmixer-role="navigation"]
-    ) :is(
+    ${chromeHostScope} :is(
       [role="menu"],
       [role="listbox"],
       [role="dialog"],
@@ -692,35 +827,44 @@ function roleCss(
       color: var(--gmixer-text) !important;
     }
 
+    /* Explicit and stamped panels may be portaled to body or live in an
+       adopted shadow sheet, so they cannot depend on header ancestry. */
     body :is(
-      header,
-      [role="banner"],
-      nav,
-      [role="navigation"],
-      .masthead,
-      .navbar,
-      #header,
-      #masthead,
-      [data-gmixer-role="header"],
-      [data-gmixer-role="navigation"]
-    ) :is(button, [role="button"], [role="menuitem"]):is(:hover, :focus-visible) {
+      [role="menu"],
+      [role="listbox"],
+      [role="dialog"],
+      [popover]:popover-open,
+      dialog[open],
+      [data-gmixer-overlay]
+    )${GMIXER_UI_HOST_NOT},
+    :is(
+      [role="menu"],
+      [role="listbox"],
+      [role="dialog"],
+      [popover]:popover-open,
+      dialog[open],
+      [data-gmixer-overlay]
+    )${GMIXER_UI_HOST_NOT} {
+      background-color: var(--gmixer-surface-gui) !important;
+      color: var(--gmixer-text) !important;
+    }
+
+    /* Poster chrome is a full-size sibling of the image. Do not sheet-paint
+       leftover overlay stamps on top of the thumbnail. Semantic menus keep
+       the fill above. */
+    :is(img, video, picture, canvas) ~ [data-gmixer-overlay]:not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not(dialog),
+    [data-gmixer-overlay]:not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not(dialog):has(~ :is(img, video, picture, canvas)) {
+      background-color: transparent !important;
+      background-image: none !important;
+    }
+
+    ${chromeHostScope} :is(button, [role="button"], [role="menuitem"]):is(:hover, :focus-visible) {
       background-color: color-mix(in srgb, var(--gmixer-text) 12%, transparent) !important;
       color: inherit !important;
       border-color: transparent !important;
     }
 
-    body :is(
-      header,
-      [role="banner"],
-      nav,
-      [role="navigation"],
-      .masthead,
-      .navbar,
-      #header,
-      #masthead,
-      [data-gmixer-role="header"],
-      [data-gmixer-role="navigation"]
-    ) :is(button, [role="button"], [role="menuitem"]):active {
+    ${chromeHostScope} :is(button, [role="button"], [role="menuitem"]):active {
       background-color: color-mix(in srgb, var(--gmixer-text) 18%, transparent) !important;
       color: inherit !important;
     }
@@ -798,9 +942,9 @@ function roleCss(
     body [data-gmixer-role="sidebar"],
     body [data-gmixer-role="hero"],
     body pre, body code, body kbd, body samp,
-    body dialog, body [role="dialog"], body [role="menu"],
+    body dialog, body [role="dialog"]${GMIXER_UI_HOST_NOT}, body [role="menu"],
     body [role="listbox"], body [role="alert"]`)} {
-      background-color: var(--gmixer-surface-1) !important;
+      background-color: var(--gmixer-surface-containers) !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -814,7 +958,7 @@ function roleCss(
     [data-gmixer-role="sidebar"],
     [data-gmixer-role="hero"],
     [data-gmixer-role="ad"]`)} {
-      background-color: var(--gmixer-surface-1) !important;
+      background-color: var(--gmixer-surface-containers) !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -855,11 +999,11 @@ function roleCss(
     }
 
     a:hover, a:focus-visible {
-      color: var(--gmixer-brand-hover) !important;
+      color: var(--gmixer-link-hover) !important;
     }
 
     a:active {
-      color: var(--gmixer-brand-active) !important;
+      color: var(--gmixer-link-active) !important;
     }
 
     /* Nested ink nodes inherit the host color we set above so site rules on
@@ -904,7 +1048,11 @@ function roleCss(
     [data-gmixer-role] a:focus-visible,
     [data-gmixer-role] a:hover *,
     [data-gmixer-role] a:focus-visible * {
-      color: var(--gmixer-brand-hover) !important;
+      color: var(--gmixer-link-hover) !important;
+    }
+    [data-gmixer-role] a:active,
+    [data-gmixer-role] a:active * {
+      color: var(--gmixer-link-active) !important;
     }
     [data-gmixer-role] :is(h1, h2, h3, h4, h5, h6, [role="heading"]) {
       color: var(--gmixer-accent) !important;
@@ -934,6 +1082,25 @@ function roleCss(
     h6 a:hover, h6 a:focus-visible,
     [role="heading"] a:hover, [role="heading"] a:focus-visible {
       color: var(--gmixer-brand-hover) !important;
+    }
+
+    ${chromeLinkSelectorList()},
+    ${chromeLinkSelectorList(':link')},
+    ${chromeLinkSelectorList(':visited')} {
+      color: var(--gmixer-nav-link) !important;
+    }
+    ${chromeLinkSelectorList(' *')} {
+      color: inherit !important;
+    }
+    ${chromeLinkSelectorList(':hover')},
+    ${chromeLinkSelectorList(':focus-visible')},
+    ${chromeLinkSelectorList(':hover *')},
+    ${chromeLinkSelectorList(':focus-visible *')} {
+      color: var(--gmixer-nav-link-hover) !important;
+    }
+    ${chromeLinkSelectorList(':active')},
+    ${chromeLinkSelectorList(':active *')} {
+      color: var(--gmixer-nav-link-active) !important;
     }
 
     body button:hover, body [role="button"]:hover,
@@ -1044,14 +1211,11 @@ export function isSectionEnabled(resolved, id) {
 
 export function buildCss(resolved, pageSample = null) {
   const colorOn = isSectionEnabled(resolved, 'color');
-  // Tone owns the surface direction. Without Color Scheme enabled, tone must
-  // remain neutral even if a hue relationship was selected previously.
-  const paletteScheme = colorOn ? resolved.color.scheme : 'monochrome';
-  const themePalette = buildPalette(
-    resolved.color.baseColor,
-    paletteScheme,
-    resolved.themeMode || 'dark'
-  );
+  const {
+    toneFocus,
+    themePalette,
+    overrides,
+  } = resolveEffectivePalette(resolved, { colorSectionOn: colorOn });
   const paintTone = isSectionEnabled(resolved, 'tone');
   const paintFonts = isSectionEnabled(resolved, 'fonts');
   const paintMedia = isSectionEnabled(resolved, 'filter');
@@ -1059,30 +1223,27 @@ export function buildCss(resolved, pageSample = null) {
   const paintEffects = isSectionEnabled(resolved, 'effects');
   // Tone uses the theme palette at full strength with structural header/nav
   // fills so Light|Gray|Dark is not muddied by page sampling / brand preserve.
-  const toneFocus = resolved?.ui?.settingsFocus === 'tone';
   const identityMode = toneFocus
     ? 'restyle'
     : resolved.color.identityMode || 'restyle';
   const intensity = toneFocus ? 100 : (resolved.color.intensity ?? 100);
   const structuralChrome = toneFocus || identityMode === 'restyle';
   const blended = blendWithPageSample(themePalette, pageSample, intensity, identityMode);
-  const overrides = resolved.color.overrides ?? {};
-  const role = (key) => {
-    const override = overrides[key];
-    if (typeof override === 'string' && override.trim()) return override;
-    return blended[key] ?? themePalette[key];
-  };
-  const background = role('background');
-  const isDark = hexToHsl(background).l < 50;
-  const surfaceGui =
-    overrides.surfaceGui || overrides.surface || blended.surfaceGui || blended.surface || deriveSurface(background, isDark);
-  const surfaceContainers =
-    overrides.surfaceContainers || blended.surfaceContainers || deriveSurface(surfaceGui, isDark);
-  const surfaceLadder =
-    blended.surfaceLadder || themePalette.surfaceLadder || deriveSurfaceLadder(background, isDark, 3);
+  const applied = applyColorOverrides(blended, overrides, { active: true });
+  const {
+    surfaceGui,
+    surfaceContainers,
+    isDark,
+    role: roleResolved,
+    cascadeFromPrimary,
+  } = applied;
+  const surfaceLadder = cascadeFromPrimary
+    ? applied.surfaceLadder
+    : blended.surfaceLadder || themePalette.surfaceLadder || applied.surfaceLadder;
 
   const brandFamily =
-    blended.brandFamily || deriveBrandFamily(role('accent') || themePalette.accent, isDark);
+    blended.brandFamily ||
+    deriveBrandFamily(roleResolved('accent') || themePalette.accent, isDark);
   // samplePageRoles keeps masthead/nav under `identity`; older callers may
   // still pass them at the top level. Structural chrome (Tone / Fully restyle)
   // forces secondary fills so CSS-variable brand mastheads follow Light|Gray|Dark.
@@ -1097,7 +1258,7 @@ export function buildCss(resolved, pageSample = null) {
     fontFaceRules(),
     paintTone
       ? roleCss(
-          role,
+          roleResolved,
           surfaceGui,
           surfaceContainers,
           isDark,
@@ -1127,7 +1288,14 @@ export function buildCss(resolved, pageSample = null) {
     // !important means Corners overrides on overlapping targets.
     paintShape ? clippingRule(resolved.clipping) : '',
     paintShape ? cornersRule(resolved.corners) : '',
-    paintEffects ? effectsRules(resolved.effects, blended) : '',
+    paintEffects
+      ? effectsRules(resolved.effects, {
+          ...blended,
+          accent: roleResolved('accent'),
+          link: roleResolved('link'),
+          navLink: roleResolved('navLink') || roleResolved('link'),
+        })
+      : '',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -1155,6 +1323,10 @@ export function injectStyle(css) {
   // over the page's own stylesheets even if they load after us.
   parent.appendChild(styleEl);
   adoptThemeSheet(css);
+  // Theme re-append would otherwise sit after the popover host reset and
+  // restyle [popover]/[role="dialog"] chrome. Keep gMixer UI last.
+  const hostStyle = document.getElementById(HOST_STYLE_ID);
+  if (hostStyle && hostStyle !== styleEl) parent.appendChild(hostStyle);
 }
 
 /**
@@ -1172,6 +1344,25 @@ export function removeStyle() {
     adoptIntoOpenShadows({ remove: true });
   }
   adoptedSheet = null;
+}
+
+/**
+ * Run native-style measurements without observing gMixer's own paint.
+ * Removal and restoration are synchronous, so the browser cannot present an
+ * unthemed frame between them.
+ * @template T
+ * @param {() => T} measure
+ * @returns {T}
+ */
+export function withStyleSuspended(measure) {
+  const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent || '';
+  if (!css) return measure();
+  removeStyle();
+  try {
+    return measure();
+  } finally {
+    injectStyle(css);
+  }
 }
 
 /**
@@ -1199,7 +1390,7 @@ function adoptIntoOpenShadows(options = {}) {
   for (const sr of collectOpenShadowRoots(document.documentElement)) {
     const current = [...(sr.adoptedStyleSheets || [])];
     const without = current.filter((item) => item !== sheet);
-    if (options.remove) {
+    if (options.remove || isGmixerUiShadowRoot(sr)) {
       if (without.length !== current.length) sr.adoptedStyleSheets = without;
       continue;
     }

@@ -210,6 +210,9 @@ describe('page-sampler branded roles', () => {
     assert.match(css, /--gmixer-brand-hover:/);
     assert.match(css, /--gmixer-brand-active:/);
     assert.match(css, /--gmixer-brand-text:/);
+    assert.match(css, /--gmixer-link-hover:/);
+    assert.match(css, /--gmixer-nav-link:/);
+    assert.match(css, /--gmixer-nav-link-hover:/);
     assert.match(css, /a:hover/);
     assert.match(css, /a:active/);
     assert.match(css, /button:hover/);

@@ -6,28 +6,29 @@
 // adaptive-pass.js here (and again from the MutationObserver for new
 // subtrees / SPA content).
 //
-// Also: re-assert the stylesheet into <head>, refresh the session CSS cache
-// for the next navigation's document_start, sync opt-in navigation, and
-// mount the in-page Settings host (toolbar / Alt+M / Alt+N).
+// Also: re-assert the stylesheet into <head>, sync opt-in navigation, and
+// mount the in-page Settings host (toolbar / Alt+M / Alt+N). The session
+// cache remains static-only and is owned by content-start.js.
 //
 // Performance: keep this host-agnostic. Prefer URL-shape, size, and tag
 // heuristics over `hostname === …` special cases.
 import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle, syncAdoptedTheme } from './style-injector.js';
 import { startMutationObserver } from './mutation-observer.js';
-import { cssCacheScope, writeCssCache, clearCssCache } from './css-cache.js';
+import { clearCssCache } from './css-cache.js';
 import { NavigationController } from './navigation-controller.js';
 import { initSettingsHost } from './settings-host.js';
 import {
   runAdaptivePass,
-  runAdaptiveSubtreePass,
+  runAdaptiveSubtreePasses,
   clearAdaptivePass,
 } from './adaptive-pass.js';
 import { collectOpenShadowRoots } from './open-trees.js';
 import { waitForPageSettle } from './page-settle.js';
-import { syncLinkShimmer, rescanLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
+import { syncLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
 import { syncPanScan } from './pan-scan.js';
 import { syncRotatingCube } from './rotating-cube.js';
+import { stampVisibleFlyouts, startFlyoutController } from './flyout-controller.js';
 import {
   LAYOUT_RESAMPLE_DEBOUNCE_MS,
   MUTATION_DEBOUNCE_MS,
@@ -38,7 +39,6 @@ import {
 async function main() {
   await store.ready;
   const hostname = location.hostname;
-  const getScope = () => cssCacheScope(location);
   // Subframes (ad/widget iframes) get CSS + classification only. Settings,
   // navigation patching, and media-effect wrapping stay on the top document.
   const isTopFrame = window === window.top;
@@ -46,12 +46,17 @@ async function main() {
   let sample = null;
   let lastLayoutKey = '';
   let layoutTimer = 0;
+  let delayedShadowTimer = 0;
+  let active = true;
 
   const nav = isTopFrame
     ? new NavigationController(() => store.getResolvedStateForHost(hostname))
     : null;
 
+  if (isTopFrame) initSettingsHost();
+
   const reapply = () => {
+    if (!active) return;
     const resolved = store.getResolvedStateForHost(hostname);
     if (resolved.enabled === false) {
       if (isTopFrame) {
@@ -74,7 +79,6 @@ async function main() {
     }
     const css = buildCss(resolved, sample);
     injectStyle(css);
-    writeCssCache(hostname, getScope(), resolved, css);
     if (isTopFrame) {
       nav?.sync();
       syncLinkShimmer(resolved);
@@ -83,21 +87,30 @@ async function main() {
   };
 
   const rescanOpenShadows = () => {
+    if (!active) return;
     const resolved = store.getResolvedStateForHost(hostname);
     if (resolved.enabled === false) return;
-    for (const shadow of collectOpenShadowRoots(document.documentElement)) {
-      runAdaptiveSubtreePass(shadow, resolved);
-    }
     syncAdoptedTheme();
+    if (isTopFrame) {
+      syncPanScan(resolved);
+      syncRotatingCube(resolved);
+      syncLinkShimmer(resolved);
+    }
   };
 
-  // Let the first paint settle before sampling the site's own colors.
   await waitForPageSettle();
-  reapply();
-  // Open shadows / ad slots often attach or gain size after the first pass.
-  window.setTimeout(rescanOpenShadows, 500);
+  const startAdaptive = () => {
+    if (!active) return;
+    reapply();
+    delayedShadowTimer = window.setTimeout(rescanOpenShadows, 500);
+  };
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(startAdaptive, { timeout: 1500 });
+  } else {
+    window.setTimeout(startAdaptive, 0);
+  }
 
-  const scheduleSpaResample = isTopFrame
+  const layoutAndSpa = isTopFrame
     ? watchLayoutAndSpa(reapply, {
         getLastKey: () => lastLayoutKey,
         setLastKey: (key) => {
@@ -108,7 +121,7 @@ async function main() {
           layoutTimer = id;
         },
       })
-    : () => {};
+    : { onNavigation: () => {}, destroy: () => {} };
 
   let mutationTimer = 0;
   /** @type {Element[]} */
@@ -129,16 +142,7 @@ async function main() {
       clearAdaptivePass();
       return;
     }
-    for (const root of roots) {
-      runAdaptiveSubtreePass(root, resolved);
-    }
-    if (isTopFrame) {
-      syncPanScan(resolved);
-      syncRotatingCube(resolved);
-      syncLinkShimmer(resolved);
-      rescanLinkShimmer();
-    }
-    // Open shadows created after the last inject need the shared sheet.
+    runAdaptiveSubtreePasses(roots, resolved);
     syncAdoptedTheme();
   };
 
@@ -163,16 +167,37 @@ async function main() {
     // Covers routers that mutate the route without invoking the History APIs
     // patched below. Run a full pass after its new DOM has had a chance to
     // paint instead of retaining the prior route's identity sample.
-    onNavigation: scheduleSpaResample,
+    onNavigation: layoutAndSpa.onNavigation,
+  });
+  const stopFlyoutAnalysis = startFlyoutController((roots) => {
+    const resolved = store.getResolvedStateForHost(hostname);
+    if (active && resolved.enabled !== false) stampVisibleFlyouts(roots);
   });
 
-  const unsubscribe = store.subscribe(reapply);
-  if (isTopFrame) initSettingsHost();
+  let reapplyTimer = 0;
+  const scheduleReapply = () => {
+    if (!active || reapplyTimer) return;
+    reapplyTimer = window.setTimeout(() => {
+      reapplyTimer = 0;
+      reapply();
+    }, 32);
+  };
+  const unsubscribe = store.subscribe(scheduleReapply);
 
+  let tornDown = false;
   const teardown = () => {
+    if (tornDown) return;
+    tornDown = true;
+    active = false;
+    window.removeEventListener('pagehide', teardown);
     unsubscribe();
     stopObserving();
+    stopFlyoutAnalysis();
     if (mutationTimer) window.clearTimeout(mutationTimer);
+    if (reapplyTimer) window.clearTimeout(reapplyTimer);
+    if (delayedShadowTimer) window.clearTimeout(delayedShadowTimer);
+    queuedRoots = [];
+    layoutAndSpa.destroy();
     nav?.destroy();
   };
   window.addEventListener('pagehide', teardown, { once: true });
@@ -219,11 +244,14 @@ function collapseMutationRoots(roots) {
  *   setTimer: (id: number) => void,
  * }} layout
  */
-function watchLayoutAndSpa(reapply, layout) {
+export function watchLayoutAndSpa(reapply, layout) {
+  let destroyed = false;
   const scheduleLayoutResample = () => {
+    if (destroyed) return;
     clearTimeout(layout.getTimer());
     layout.setTimer(
       window.setTimeout(() => {
+        if (destroyed) return;
         const next = layoutKey();
         if (next === layout.getLastKey()) return;
         layout.setLastKey(next);
@@ -235,15 +263,20 @@ function watchLayoutAndSpa(reapply, layout) {
   window.addEventListener('resize', scheduleLayoutResample, { passive: true });
 
   let routeTimer = 0;
+  let routeGeneration = 0;
   let lastHref = globalThis.location?.href ?? '';
   const onSpaNav = () => {
+    if (destroyed) return;
     const nextHref = globalThis.location?.href ?? '';
     const documentNav = isDocumentNavigation(lastHref, nextHref);
     lastHref = nextHref;
     if (!documentNav) return;
+    const generation = ++routeGeneration;
     clearTimeout(routeTimer);
     routeTimer = window.setTimeout(() => {
-      void waitForPageSettle().then(reapply);
+      void waitForPageSettle().then(() => {
+        if (!destroyed && generation === routeGeneration) reapply();
+      });
     }, SPA_ROUTE_DEBOUNCE_MS);
   };
   window.addEventListener('popstate', onSpaNav);
@@ -251,17 +284,38 @@ function watchLayoutAndSpa(reapply, layout) {
 
   const originalPush = history.pushState;
   const originalReplace = history.replaceState;
-  history.pushState = function pushStatePatched(...args) {
+  const historyPushPatched = function pushStatePatched(...args) {
     const result = originalPush.apply(this, args);
     onSpaNav();
     return result;
   };
-  history.replaceState = function replaceStatePatched(...args) {
+  const historyReplacePatched = function replaceStatePatched(...args) {
     const result = originalReplace.apply(this, args);
     onSpaNav();
     return result;
   };
-  return onSpaNav;
+  history.pushState = historyPushPatched;
+  history.replaceState = historyReplacePatched;
+
+  return {
+    onNavigation: onSpaNav,
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      routeGeneration += 1;
+      window.removeEventListener('resize', scheduleLayoutResample);
+      window.removeEventListener('popstate', onSpaNav);
+      window.removeEventListener('hashchange', onSpaNav);
+      clearTimeout(layout.getTimer());
+      layout.setTimer(0);
+      clearTimeout(routeTimer);
+      routeTimer = 0;
+      if (history.pushState === historyPushPatched) history.pushState = originalPush;
+      if (history.replaceState === historyReplacePatched) history.replaceState = originalReplace;
+    },
+  };
 }
 
-main();
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  main();
+}

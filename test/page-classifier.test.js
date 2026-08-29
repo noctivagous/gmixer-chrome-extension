@@ -4,6 +4,7 @@ import {
   CLASSIFIER_CONFIDENCE_THRESHOLD,
   classifyElement,
   classifySubtree,
+  isOverlayPanel,
   promotePaintedSurfaces,
   seedPageSheets,
   stampOpaquePaintTargets,
@@ -71,6 +72,7 @@ describe('page-classifier', () => {
   it('uses a conservative confidence threshold for unknown elements', () => {
     const unknown = el('div');
     assert.equal(classifyElement(unknown), null);
+    assert.equal(classifyElement(el('div', { id: 'gmixer-walkthrough-host' })), null);
     assert.equal(CLASSIFIER_CONFIDENCE_THRESHOLD, 0.7);
   });
 
@@ -136,6 +138,243 @@ describe('page-classifier', () => {
     } finally {
       globalThis.getComputedStyle = previousCs;
       globalThis.window = previousWin;
+    }
+  });
+
+  it('recognizes compact semantic and Windows Central-shaped flyout panels', () => {
+    const semantic = el('div', { role: 'menu' });
+    const windowsCentral = el('ul', { class: 'meganav-item-list left-0' });
+    semantic.getBoundingClientRect = () => ({ width: 96, height: 36 });
+    windowsCentral.getBoundingClientRect = () => ({ width: 260, height: 180 });
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = (node) => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: '10',
+      transform: 'none',
+      backgroundColor: node === semantic ? 'rgb(30, 30, 30)' : 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(semantic), true);
+      assert.equal(isOverlayPanel(windowsCentral), true);
+      assert.equal(classifyElement(windowsCentral)?.role, 'surface');
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects pointer-events-none layers as overlay panels', () => {
+    const badges = el('div', { class: 'video-thumbnail__thumb-badges' });
+    badges.getBoundingClientRect = () => ({ width: 259, height: 146, left: 0, top: 0, right: 259, bottom: 146 });
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: 'auto',
+      transform: 'none',
+      pointerEvents: 'none',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(badges), false);
+      assert.equal(classifyElement(badges), null);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects a full-size sibling of an image as overlay even when it is clickable', () => {
+    const img = el('img', { class: 'video-thumbnail__image' });
+    img.getBoundingClientRect = () => ({
+      width: 259,
+      height: 146,
+      left: 10,
+      top: 20,
+      right: 269,
+      bottom: 166,
+    });
+    const overlay = el('div', { class: 'video-thumbnail__thumb-badges' });
+    overlay.getBoundingClientRect = () => ({
+      width: 259,
+      height: 146,
+      left: 10,
+      top: 20,
+      right: 269,
+      bottom: 166,
+    });
+    const frame = el('a', { class: 'thumb-link' }, [img, overlay]);
+    img.parentElement = frame;
+    overlay.parentElement = frame;
+    frame.children = [img, overlay];
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: 'auto',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(overlay), false);
+      assert.equal(classifyElement(overlay), null);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects a positioned wrapper that contains a video as overlay', () => {
+    const video = el('video');
+    video.getBoundingClientRect = () => ({
+      width: 800,
+      height: 450,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 450,
+    });
+    const stage = el('div', { class: 'player-stage' }, [video]);
+    stage.getBoundingClientRect = () => ({
+      width: 800,
+      height: 450,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 450,
+    });
+    video.parentElement = stage;
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: 'auto',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgb(0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(stage), false);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects a bottom control strip over a sibling video as overlay', () => {
+    const video = el('video');
+    video.getBoundingClientRect = () => ({
+      width: 800,
+      height: 450,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 450,
+    });
+    const controls = el('div', { class: 'player-controls' });
+    controls.getBoundingClientRect = () => ({
+      width: 800,
+      height: 50,
+      left: 0,
+      top: 400,
+      right: 800,
+      bottom: 450,
+    });
+    const player = el('div', { class: 'player' }, [video, controls]);
+    video.parentElement = player;
+    controls.parentElement = player;
+    player.children = [video, controls];
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: '10',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(controls), false);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('still classifies a semantic menu that happens to sit next to an image', () => {
+    const img = el('img');
+    img.getBoundingClientRect = () => ({ width: 200, height: 120, left: 0, top: 0, right: 200, bottom: 120 });
+    const menu = el('div', { role: 'menu' });
+    menu.getBoundingClientRect = () => ({ width: 200, height: 120, left: 0, top: 0, right: 200, bottom: 120 });
+    const frame = el('div', {}, [img, menu]);
+    img.parentElement = frame;
+    menu.parentElement = frame;
+    frame.children = [img, menu];
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: '20',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgb(30, 30, 30)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(menu), true);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects hidden flyouts until they have visible layout', () => {
+    const panel = el('ul', { class: 'menu-panel' });
+    panel.getBoundingClientRect = () => ({ width: 260, height: 180 });
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'none',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: '10',
+      transform: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(panel), false);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
     }
   });
 
@@ -261,6 +500,16 @@ describe('page-classifier', () => {
     } finally {
       globalThis.getComputedStyle = previous;
     }
+  });
+
+  it('keeps equal native luminance surfaces on the same tone step', () => {
+    const first = el('div', { [ROLE_ATTR]: 'surface', [NATIVE_L_ATTR]: '0.75' });
+    const second = el('div', { [ROLE_ATTR]: 'card', [NATIVE_L_ATTR]: '0.75' });
+    const root = {
+      querySelectorAll: (selector) => (selector === `[${ROLE_ATTR}]` ? [first, second] : []),
+    };
+    assert.equal(assignToneSteps(root, 3), 2);
+    assert.equal(first.getAttribute(TONE_STEP_ATTR), second.getAttribute(TONE_STEP_ATTR));
   });
 
   it('does not promote opaque menu wrappers inside header chrome', () => {
@@ -465,6 +714,177 @@ describe('page-classifier', () => {
     }
   });
 
+  it('does not treat a barely visible alpha tint as an opaque surface', () => {
+    const panel = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface' }),
+      closest: () => null,
+    };
+    const root = { querySelectorAll: () => [panel] };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 0);
+      assert.equal(panel.hasAttribute(NATIVE_L_ATTR), false);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds large opaque sheets that embed small thumbnails (not media chrome)', () => {
+    // Techmeme #qiobv / #podcasts: sidebar slabs with nested imgs must seed.
+    // coversOrStripsMedia used to reject any box that merely contains media.
+    const thumb = {
+      tagName: 'IMG',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'ill' }),
+      getBoundingClientRect: () => ({
+        width: 135,
+        height: 43,
+        top: 200,
+        left: 20,
+        right: 155,
+        bottom: 243,
+      }),
+    };
+    const sponsor = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [thumb],
+      ...mockAttrs({ id: 'qiobv' }),
+      getBoundingClientRect: () => ({
+        width: 365,
+        height: 764,
+        top: 80,
+        left: 0,
+        right: 365,
+        bottom: 844,
+      }),
+      querySelector: (selector) => {
+        if (String(selector).includes('img')) return thumb;
+        return null;
+      },
+      _bg: 'rgb(244, 244, 244)',
+    };
+    thumb.parentElement = sponsor;
+
+    const podArt = {
+      tagName: 'IMG',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'podill' }),
+      getBoundingClientRect: () => ({
+        width: 115,
+        height: 117,
+        top: 900,
+        left: 20,
+        right: 135,
+        bottom: 1017,
+      }),
+    };
+    const podcasts = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [podArt],
+      ...mockAttrs({ id: 'podcasts' }),
+      getBoundingClientRect: () => ({
+        width: 365,
+        height: 900,
+        top: 860,
+        left: 0,
+        right: 365,
+        bottom: 1760,
+      }),
+      querySelector: (selector) => {
+        if (String(selector).includes('img')) return podArt;
+        return null;
+      },
+      _bg: 'rgb(240, 246, 253)',
+    };
+    podArt.parentElement = podcasts;
+
+    // Near-full-size video stage must still be rejected as media chrome.
+    const video = {
+      tagName: 'VIDEO',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 800,
+        height: 450,
+        top: 0,
+        left: 0,
+        right: 800,
+        bottom: 450,
+      }),
+    };
+    const stage = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [video],
+      ...mockAttrs({ class: 'player-stage' }),
+      getBoundingClientRect: () => ({
+        width: 800,
+        height: 450,
+        top: 0,
+        left: 0,
+        right: 800,
+        bottom: 450,
+      }),
+      querySelector: (selector) => {
+        if (String(selector).includes('video')) return video;
+        return null;
+      },
+      _bg: 'rgb(0, 0, 0)',
+    };
+    video.parentElement = stage;
+
+    const body = {
+      tagName: 'BODY',
+      nodeType: 1,
+      children: [sponsor, podcasts, stage],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({ width: 1200, height: 1800 }),
+      querySelectorAll: (selector) => {
+        if (String(selector).includes('section') || String(selector).includes('main')) return [];
+        if (String(selector).includes('div')) return [sponsor, podcasts, stage];
+        return [];
+      },
+      _bg: 'rgb(26, 15, 15)',
+    };
+    sponsor.parentElement = body;
+    podcasts.parentElement = body;
+    stage.parentElement = body;
+
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.document = { body, documentElement: body };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      const stamped = seedPageSheets(body);
+      assert.equal(stamped, 2);
+      assert.equal(sponsor.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(podcasts.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(stage.getAttribute(ROLE_ATTR), null);
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
   it('seeds mid-width opaque cards and composers as page sheets', () => {
     const card = {
       tagName: 'DIV',
@@ -513,6 +933,51 @@ describe('page-classifier', () => {
       assert.equal(card.getAttribute(ROLE_ATTR), 'surface');
       assert.equal(seedPageSheets(composer), 1);
       assert.equal(composer.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds sizable opaque boxes that sit after a long feed in tree order', () => {
+    const late = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ id: 'sidebar-slab' }),
+      getBoundingClientRect: () => ({
+        width: 365,
+        height: 764,
+        top: 80,
+        left: 800,
+        right: 1165,
+        bottom: 844,
+      }),
+      _bg: 'rgb(244, 244, 244)',
+    };
+    const body = {
+      tagName: 'BODY',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({}),
+      querySelectorAll: (selector) =>
+        String(selector).includes('div') ? [late] : [],
+      getBoundingClientRect: () => ({ width: 1200, height: 800 }),
+      _bg: 'rgb(26, 15, 15)',
+    };
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.document = { body, documentElement: body };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(seedPageSheets(body), 1);
+      assert.equal(late.getAttribute(ROLE_ATTR), 'surface');
     } finally {
       globalThis.document = previousDoc;
       globalThis.window = previousWin;

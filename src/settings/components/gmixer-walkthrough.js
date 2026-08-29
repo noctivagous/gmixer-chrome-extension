@@ -1,9 +1,11 @@
-import { html, css, svg } from 'lit';
+import { html, css, svg, unsafeCSS } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
 import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theory.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { defineElement } from '../../lib/define-element.js';
+import { closeHostPopover } from '../close-host-popover.js';
+import { GRID_CSS_VARS } from '../tokens.js';
 
 import '../../popup/components/color-panel.js';
 import '../../popup/components/gmixer-color-wheel.js';
@@ -147,6 +149,19 @@ function walkthroughTabIcon(index) {
 }
 
 /**
+ * Color Scheme HSL slider defaults per Tone. Dark is a low-chroma night
+ * canvas; Light mirrors that as a pale wash; Gray stays mid-value with
+ * less saturation so mid-lightness does not read as a strong tint.
+ * @type {Record<'light'|'gray'|'dark', { s: number, l: number }>}
+ */
+const COLOR_SCHEME_HSL_BY_TONE = {
+  dark: { s: 15, l: 15 },
+  // Mid-canvas Gray must stay below ~45 L so dark-mode text/accents keep contrast.
+  gray: { s: 10, l: 42 },
+  light: { s: 18, l: 85 },
+};
+
+/**
  * gMixer Onboarding Walkthrough: 5 slides in a centered popover modal.
  */
 export class GmixerWalkthrough extends StoreBoundElement {
@@ -157,10 +172,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   static styles = css`
     :host {
+      all: initial;
+      ${unsafeCSS(GRID_CSS_VARS)}
       display: flex;
       flex-direction: column;
-      width: 100%;
-      height: 100%;
+      box-sizing: border-box;
       width: min(1120px, calc(90vw + 80px), calc(100vw - 32px));
       height: min(840px, calc(85vh + 80px));
       max-width: none;
@@ -175,8 +191,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     :host([showcompletion]) {
+      position: fixed;
+      inset: 0;
+      margin: auto;
       width: min(440px, calc(100vw - 32px));
-      height: auto;
+      height: fit-content;
     }
 
     .completion-dialog {
@@ -258,13 +277,19 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     .step-description {
-      margin: 16px 0 0;
-      padding: 14px var(--gm-space-3, 24px) 0;
-      border-top: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
+      margin: 16px var(--gm-space-3, 24px) 0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #2a2a2e;
       font-size: 14px;
       line-height: 1.45;
       text-align: left;
       color: var(--gm-muted, rgba(242, 238, 252, 0.75));
+    }
+
+    .step-description b {
+      color: var(--gm-text, #f2eefc);
+      font-weight: 650;
     }
 
     .tab {
@@ -538,14 +563,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
       box-sizing: border-box;
     }
 
-    .color-picker-stack {
-      display: grid;
-      gap: 12px;
+    .color-picker-row gmixer-color-wheel {
       width: 160px;
     }
 
-    .color-picker-stack gmixer-color-scheme-scales {
-      width: 160px;
+    .color-picker-row gmixer-color-scheme-scales {
+      grid-column: 1 / -1;
+      width: 100%;
+      min-width: 0;
     }
 
     .color-picker-row .scheme-options {
@@ -892,13 +917,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
         justify-self: stretch;
       }
 
-      .color-picker-stack,
+      .color-picker-row gmixer-color-wheel,
       .color-picker-row .scheme-options {
         justify-self: center;
       }
 
       .color-picker-row .scheme-options {
         width: min(100%, 360px);
+      }
+
+      .color-picker-row gmixer-color-scheme-scales {
+        justify-self: stretch;
       }
     }
 
@@ -1026,19 +1055,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _closeCompletion() {
-    const popover = document.getElementById('gmixer-walkthrough-host');
-    if (popover && typeof popover.hidePopover === 'function') {
-      popover.hidePopover();
-    }
+    closeHostPopover();
   }
 
   /** Closing or finishing both permanently dismiss auto-open onboarding. */
   _dismissWalkthrough() {
     this.updateGlobal({ ui: { walkthroughCompleted: true } });
-    const popover = document.getElementById('gmixer-walkthrough-host');
-    if (popover && typeof popover.hidePopover === 'function') {
-      popover.hidePopover();
-    }
+    closeHostPopover();
   }
 
   _activateSection(id, event) {
@@ -1065,12 +1088,9 @@ export class GmixerWalkthrough extends StoreBoundElement {
     if (this._activatedSlides.has(index)) return;
     this._activatedSlides.add(index);
 
-    const color = this.state?.global?.color;
-    const hsl = hexToHsl(color?.baseColor || '#8a8a8a');
-
     switch (index) {
       case 1: {
-        const baseColor = hslToHex({ ...hsl, s: Math.max(hsl.s, 70) });
+        const baseColor = this._colorSchemeBaseForTone();
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { color: true },
@@ -1084,7 +1104,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
           sections: { filter: true },
           imageFilter: {
             enabled: true,
-            preset: 'monochrome',
+            preset: 'accent-tint',
             scope: 'both',
             revealOnHover: true,
           },
@@ -1178,7 +1198,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _selectTone(mode) {
-    this.updateGlobal({ themeMode: mode });
+    /** @type {Record<string, unknown>} */
+    const patch = { themeMode: mode };
+    if (this._isColorSchemeEnabled()) {
+      const baseColor = this._colorSchemeBaseForTone(mode);
+      patch.activeThemePackId = 'user-made';
+      patch.color = { baseColor, schemeBaseColor: baseColor };
+    }
+    this.updateGlobal(patch);
   }
 
   _onToneTabKeyDown(event, index) {
@@ -1197,6 +1224,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
     return this.state?.global?.sections?.color === true;
   }
 
+  /**
+   * @param {'light'|'gray'|'dark'} [mode]
+   * @returns {string}
+   */
+  _colorSchemeBaseForTone(mode) {
+    const themeMode = mode || this.state?.global?.themeMode || 'dark';
+    const hsl = hexToHsl(this.state?.global?.color?.baseColor || '#8a8a8a');
+    const defaults = COLOR_SCHEME_HSL_BY_TONE[themeMode] || COLOR_SCHEME_HSL_BY_TONE.dark;
+    return hslToHex({ h: hsl.h, s: defaults.s, l: defaults.l });
+  }
+
   _setColorMode(useColor) {
     const color = this.state?.global?.color;
     if (!color) return;
@@ -1204,13 +1242,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     if (useColor) {
       const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
+      const baseColor = this._colorSchemeBaseForTone();
       this.updateGlobal({
         activeThemePackId: 'user-made',
         sections: { color: true },
         color: {
           scheme,
-          baseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
-          schemeBaseColor: hslToHex({ ...hsl, s: Math.max(hsl.s, 70) }),
+          baseColor,
+          schemeBaseColor: baseColor,
         },
       });
       return;
@@ -1231,10 +1270,15 @@ export class GmixerWalkthrough extends StoreBoundElement {
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
     const lightness = Math.max(8, Math.min(92, Number(value)));
+    const newHex = hslToHex({ h: hsl.h, s: 0, l: lightness });
     this.updateGlobal({
       activeThemePackId: 'user-made',
       sections: { color: false },
-      color: { baseColor: hslToHex({ h: hsl.h, s: 0, l: lightness }), scheme: 'monochrome' },
+      color: {
+        baseColor: newHex,
+        schemeBaseColor: newHex,
+        scheme: 'monochrome',
+      },
     });
   }
 
@@ -1242,10 +1286,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
+    const newHex = hslToHex({ ...hsl, [key]: Number(value) });
     this.updateGlobal({
       activeThemePackId: 'user-made',
       sections: { color: true },
-      color: { baseColor: hslToHex({ ...hsl, [key]: Number(value) }) },
+      color: { baseColor: newHex, schemeBaseColor: newHex },
     });
   }
 
@@ -1372,17 +1417,22 @@ export class GmixerWalkthrough extends StoreBoundElement {
   _getDescription(index = this.currentSlide) {
     if (index === 1) {
       return this._isColorSchemeEnabled()
-        ? 'How do you want it to look? Pick a base color and a scheme.'
-        : 'Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.';
+        ? html`How do you want it to look? Pick a base color and a scheme.<br/>
+            <b>We chose a Triadic color scheme for you.</b>`
+        : html`Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.`;
     }
     const descriptions = [
-      'Welcome to gMixer, a web page themer. To start, choose the light mode for pages.',
-      '',
-      'How do you want images and videos to look?',
-      'Choose the typefaces that fit your style.',
-      'Finally, add some visual effects to the page.',
+      html`Welcome to gMixer, a web page themer. To start, choose the light mode for pages.<br/>
+        <b>We chose Dark tone for you.</b>`,
+      html``,
+      html`How do you want images and videos to look?<br/>
+        <b>We chose accent-tinted images/videos for you.</b>`,
+      html`Choose the typefaces that fit your style.<br/>
+        <b>We set up some typefaces for you</b>`,
+      html`Finally, add some visual effects to the page.<br/>
+        <b>We made images and navigation glow.</b>`,
     ];
-    return descriptions[index] || '';
+    return descriptions[index] || html``;
   }
 
   _renderSlide() {
@@ -1491,13 +1541,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
         ${colorEnabled
           ? html`
               <div class="color-picker-row">
-                <div class="color-picker-stack">
-                  <gmixer-color-wheel></gmixer-color-wheel>
-                  <gmixer-color-scheme-scales
-                    compact
-                    active-scheme-only
-                  ></gmixer-color-scheme-scales>
-                </div>
+                <gmixer-color-wheel></gmixer-color-wheel>
                 <div class="hsl-sliders" aria-label="Color adjustments">
                   ${this._renderColorHslSlider(
                     'S',
@@ -1540,6 +1584,9 @@ export class GmixerWalkthrough extends StoreBoundElement {
                     `
                   )}
                 </div>
+                <gmixer-color-scheme-scales
+                  active-scheme-only
+                ></gmixer-color-scheme-scales>
               </div>
             `
           : html`

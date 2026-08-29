@@ -29,29 +29,29 @@ export const WALKTHROUGH_POPOVER_ID = 'gmixer-walkthrough-host';
 export { MSG_TOGGLE_SETTINGS, MSG_TOGGLE_SITE };
 
 const HOST_STYLE_ID = 'gmixer-settings-host-style';
-let settingsUiPromise;
-let walkthroughUiPromise;
+const SETTINGS_FRAME = 'settings-frame.html';
+const WALKTHROUGH_FRAME = 'walkthrough-frame.html';
 /** @type {(() => void) | null} */
 let unsubscribeStore = null;
 
-function loadSettingsUi() {
-  if (!settingsUiPromise) {
-    settingsUiPromise = Promise.all([
-      import('@webcomponents/custom-elements'),
-      import('lit/polyfill-support.js'),
-    ]).then(() => import('../settings/settings-entry.js'));
+function frameSrc(file) {
+  try {
+    return chrome.runtime.getURL(file);
+  } catch {
+    return file;
   }
-  return settingsUiPromise;
 }
 
-function loadWalkthroughUi() {
-  if (!walkthroughUiPromise) {
-    walkthroughUiPromise = Promise.all([
-      import('@webcomponents/custom-elements'),
-      import('lit/polyfill-support.js'),
-    ]).then(() => import('../settings/components/gmixer-walkthrough.js'));
+function ensureUiFrame(el, file) {
+  let iframe = el.querySelector('iframe.gmixer-ui-frame');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.className = 'gmixer-ui-frame';
+    iframe.src = frameSrc(file);
+    iframe.title = el.getAttribute('aria-label') || 'gMixer';
+    el.appendChild(iframe);
   }
-  return walkthroughUiPromise;
+  return iframe;
 }
 
 async function persistSettingsOpen(open) {
@@ -71,25 +71,26 @@ function ensureHostStyles() {
   style.id = HOST_STYLE_ID;
   style.textContent = `
     #${SETTINGS_POPOVER_ID} {
+      all: revert;
       ${GRID_CSS_VARS}
-      box-sizing: border-box;
-      position: fixed;
-      inset: 0 auto 0 0;
-      margin: 0;
-      width: min(${GRID.panelWidth}px, calc(100vw - ${GRID.panelPagePeek}px));
-      height: 100vh;
-      height: 100dvh;
-      max-width: calc(100vw - ${GRID.panelPagePeek}px);
-      max-height: none;
-      border: 0;
-      border-right: 1px solid var(--gm-border);
-      border-radius: 0;
-      padding: 0;
-      overflow: hidden;
-      background: var(--gm-bg);
-      color: var(--gm-text);
-      font: 13px/var(--gm-line) system-ui, sans-serif;
-      box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+      box-sizing: border-box !important;
+      position: fixed !important;
+      inset: 0 auto 0 0 !important;
+      margin: 0 !important;
+      width: min(${GRID.panelWidth}px, calc(100vw - ${GRID.panelPagePeek}px)) !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-width: calc(100vw - ${GRID.panelPagePeek}px) !important;
+      max-height: none !important;
+      border: 0 !important;
+      border-right: 1px solid var(--gm-border) !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: var(--gm-bg) !important;
+      color: var(--gm-text) !important;
+      font: 13px/var(--gm-line) system-ui, sans-serif !important;
+      box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35) !important;
       transform: translateX(-100%);
       transition:
         transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
@@ -115,30 +116,33 @@ function ensureHostStyles() {
       pointer-events: none;
     }
 
-    #${SETTINGS_POPOVER_ID} gmixer-settings {
-      display: flex;
+    #${SETTINGS_POPOVER_ID} iframe.gmixer-ui-frame {
+      display: block;
       flex: 1;
       min-height: 0;
       width: 100%;
       height: 100%;
+      border: 0;
+      background: var(--gm-bg);
     }
 
     #${WALKTHROUGH_POPOVER_ID} {
+      all: revert;
       ${GRID_CSS_VARS}
-      box-sizing: border-box;
-      position: fixed;
-      inset: 0;
-      margin: auto;
-      width: fit-content;
-      height: fit-content;
-      max-width: 90vw;
-      max-height: 90vh;
-      border: 0;
-      padding: 0;
-      overflow: visible;
-      background: transparent;
-      color: var(--gm-text);
-      box-shadow: none;
+      box-sizing: border-box !important;
+      position: fixed !important;
+      inset: 0 !important;
+      margin: auto !important;
+      width: fit-content !important;
+      height: fit-content !important;
+      max-width: 90vw !important;
+      max-height: 90vh !important;
+      border: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: transparent !important;
+      color: var(--gm-text) !important;
+      box-shadow: none !important;
       opacity: 0;
       transform: scale(0.95);
       transition:
@@ -167,13 +171,22 @@ function ensureHostStyles() {
       backdrop-filter: blur(4px);
       pointer-events: auto;
     }
+
+    #${WALKTHROUGH_POPOVER_ID} iframe.gmixer-ui-frame {
+      display: block;
+      border: 0;
+      background: transparent;
+      width: min(1120px, calc(90vw + 80px), calc(100vw - 32px));
+      height: min(840px, calc(85vh + 80px));
+      max-width: 90vw;
+      max-height: 90vh;
+    }
   `;
   (document.head || document.documentElement).appendChild(style);
 }
 
 /** @returns {Promise<HTMLElement>} */
 export async function ensureSettingsPopover() {
-  await loadSettingsUi();
   ensureHostStyles();
   ensureDocumentFontFaces();
 
@@ -185,15 +198,14 @@ export async function ensureSettingsPopover() {
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'gMixer Settings');
-    el.appendChild(document.createElement('gmixer-settings'));
     document.documentElement.appendChild(el);
   }
+  ensureUiFrame(el, SETTINGS_FRAME);
   return el;
 }
 
 /** @returns {Promise<HTMLElement>} */
 export async function ensureWalkthroughPopover() {
-  await loadWalkthroughUi();
   ensureHostStyles();
   ensureDocumentFontFaces();
 
@@ -205,18 +217,21 @@ export async function ensureWalkthroughPopover() {
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'gMixer Walkthrough');
-    el.appendChild(document.createElement('gmixer-walkthrough'));
     document.documentElement.appendChild(el);
   }
+  ensureUiFrame(el, WALKTHROUGH_FRAME);
   return el;
 }
 
 export async function openWalkthroughPopover() {
   const el = await ensureWalkthroughPopover();
-  const walkthrough = el.querySelector('gmixer-walkthrough');
-  if (walkthrough) {
-    walkthrough.currentSlide = 0;
-    walkthrough.showCompletion = false;
+  const iframe = el.querySelector('iframe.gmixer-ui-frame');
+  const reset = () => {
+    iframe?.contentWindow?.postMessage({ source: 'gmixer-host', type: 'reset' }, '*');
+  };
+  if (iframe) {
+    iframe.addEventListener('load', reset, { once: true });
+    reset();
   }
   if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
     el.showPopover();
@@ -340,6 +355,11 @@ function firstFocusable(root) {
 }
 
 function focusFirstIn(root) {
+  const frame = root.querySelector?.('iframe.gmixer-ui-frame');
+  if (frame && typeof frame.focus === 'function') {
+    frame.focus();
+    return;
+  }
   const target = firstFocusable(root);
   if (target && typeof target.focus === 'function') target.focus();
 }
@@ -460,9 +480,23 @@ function onRuntimeMessage(message, _sender, sendResponse) {
   }
 }
 
+function onUiFrameMessage(event) {
+  if (event.data?.source !== 'gmixer-ui' || event.data?.type !== 'close') return;
+  const settings = document.getElementById(SETTINGS_POPOVER_ID);
+  const walkthrough = document.getElementById(WALKTHROUGH_POPOVER_ID);
+  const fromSettings = settings?.querySelector('iframe')?.contentWindow === event.source;
+  const fromWalkthrough = walkthrough?.querySelector('iframe')?.contentWindow === event.source;
+  if (fromWalkthrough) {
+    walkthrough?.hidePopover?.();
+    return;
+  }
+  if (fromSettings) void closeSettingsPopover();
+}
+
 /** Call once from content-end. */
 export function initSettingsHost() {
   document.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('message', onUiFrameMessage);
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
       chrome.runtime.onMessage.addListener(onRuntimeMessage);
@@ -478,14 +512,14 @@ export function initSettingsHost() {
     .then(() => {
       unsubscribeStore?.();
       unsubscribeStore = store.subscribe(syncPopoverFromStore);
-      
+
       const state = store.getState();
       // Align with persisted open state (reload + already-open other tabs).
       syncPopoverFromStore(state);
 
-      // Trigger walkthrough if not completed and not in a frame.
       if (!state?.global?.ui?.walkthroughCompleted && window === window.top) {
-        void initializeWalkthrough().then(() => openWalkthroughPopover());
+        void openWalkthroughPopover();
+        void initializeWalkthrough();
       }
     })
     .catch((err) => {

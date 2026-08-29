@@ -15,7 +15,7 @@ export const LAYOUT_RESAMPLE_DEBOUNCE_MS = 400;
  * Coalesce MutationObserver subtree work. Heavy SPAs inject many sibling
  * batches per turn; a microtask flush per batch restyles the tab.
  */
-export const MUTATION_DEBOUNCE_MS = 64;
+export const MUTATION_DEBOUNCE_MS = 160;
 
 /**
  * True when origin/path/search changed. Hash-only swaps stay on the same

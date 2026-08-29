@@ -1,6 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { FONT_CATEGORIES, getFontById, getFontsForTarget } from '../../config/fonts.js';
 import { defineElement } from '../../lib/define-element.js';
+import { ensureDocumentFontFaces } from '../../lib/font-faces.js';
+
+ensureDocumentFontFaces();
 
 /**
  * Listbox font picker that renders each option in its own typeface.

@@ -166,6 +166,73 @@ function rotate(h, degrees) {
   return (h + degrees + 360) % 360;
 }
 
+function sameHex(first, second) {
+  if (!first || !second) return false;
+  return first.replace('#', '').toLowerCase() === second.replace('#', '').toLowerCase();
+}
+
+/**
+ * Slightly nudge a rest color for hover/focus. Same hue; lightness only.
+ * @param {string} hex
+ * @param {boolean} [isDark=true]
+ */
+export function deriveHoverColor(hex, isDark = true) {
+  const base = hexToHsl(hex);
+  return hslToHex({
+    ...base,
+    l: Math.max(0, Math.min(100, base.l + (isDark ? 8 : -8))),
+  });
+}
+
+/** Pressed-state companion to {@link deriveHoverColor}. */
+export function deriveActiveColor(hex, isDark = true) {
+  const base = hexToHsl(hex);
+  return hslToHex({
+    ...base,
+    l: Math.max(0, Math.min(100, base.l + (isDark ? -6 : 6))),
+  });
+}
+
+/**
+ * Halo color for text glow. Related hue, but never identical to the ink it
+ * sits behind — a same-color glow just looks like a blur of the letters.
+ * @param {string} inkHex
+ */
+export function deriveGlowColor(inkHex) {
+  const { h, s, l } = hexToHsl(inkHex || '#888888');
+  const glowL = l >= 50 ? Math.max(12, l - 20) : Math.min(88, l + 20);
+  let glowS = s < 12 ? s : Math.min(100, s + 14);
+  let candidate = hslToHex({ h, s: glowS, l: glowL });
+  if (sameHex(candidate, inkHex)) {
+    candidate = hslToHex({
+      h,
+      s: glowS,
+      l: l >= 50 ? Math.max(0, l - 28) : Math.min(100, l + 28),
+    });
+  }
+  if (sameHex(candidate, inkHex)) {
+    candidate = hslToHex({
+      h: rotate(h, 12),
+      s: Math.max(glowS, 18),
+      l: glowL,
+    });
+  }
+  return candidate;
+}
+
+/**
+ * Prefer a configured glow color, but replace it when it matches the ink.
+ * Empty / missing configured values use {@link deriveGlowColor}.
+ * @param {string|null|undefined} configured
+ * @param {string} inkHex
+ */
+export function resolveGlowColor(configured, inkHex) {
+  const trimmed = typeof configured === 'string' ? configured.trim() : '';
+  const candidate = trimmed || deriveGlowColor(inkHex);
+  if (sameHex(candidate, inkHex)) return deriveGlowColor(inkHex);
+  return candidate;
+}
+
 export const SCHEMES = [
   { id: 'analog', label: 'Analogous' },
   { id: 'complement', label: 'Complementary' },
@@ -238,7 +305,7 @@ export function deriveSurface(backgroundHex) {
   const surfaceIsDark = l < 50;
   return hslToHex({
     h,
-    s: Math.min(s, 25),
+    s,
     l: surfaceIsDark ? Math.min(l + 10, 88) : Math.max(l - 8, 12),
   });
 }
@@ -269,13 +336,19 @@ export function deriveSurfaceLadder(backgroundHex, isDark, steps = 3) {
  * @param {string} baseColorHex
  * @param {'analog'|'complement'|'splitComplement'|'triadic'|'tetradic'|'monochrome'} scheme
  * @param {'light'|'gray'|'dark'} [mode='dark']
- * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, border: string, focus: string, isDark: boolean }}
+ * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, linkHover: string, navLink: string, navLinkHover: string, border: string, focus: string, isDark: boolean }}
  */
 export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   const base = hexToHsl(baseColorHex);
   const offsets = accentHueOffsets(scheme);
-  const accentHue = offsets.length ? rotate(base.h, offsets[0]) : base.h;
-  const linkHue = offsets.length > 1 ? rotate(base.h, offsets[1]) : accentHue;
+  // Relationship hues after the base. Spread later stops across chrome roles
+  // so triadic's 3rd and tetradic's 4th show up beyond body links.
+  const relationshipHues = offsets.map((offset) => rotate(base.h, offset));
+  const accentHue = relationshipHues[0] ?? base.h;
+  const linkHue = relationshipHues[1] ?? accentHue;
+  const navLinkHue = relationshipHues[2] ?? relationshipHues[1] ?? accentHue;
+  const focusHue = relationshipHues[1] ?? accentHue;
+  const borderHue = relationshipHues[0] ?? base.h;
   // Tone-only / monochrome themes must not introduce a saturated accent.
   // A gray source has an arbitrary hue (usually 0°), which otherwise becomes
   // orange/red when the regular accent rule enforces high saturation.
@@ -285,27 +358,40 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   const linkSaturation = scheme === 'monochrome'
     ? Math.min(base.s, 12)
     : Math.max(base.s, 60);
+  const borderSaturation = scheme === 'monochrome'
+    ? Math.min(base.s, 20)
+    : Math.min(Math.max(base.s, 28), 42);
 
   const isDark = mode !== 'light';
-  const tonalBase = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
-  // In monochrome, baseColor is the neutral-value control. Keep the
-  // Light/Gray/Dark character intact while allowing a user-selected gray to
-  // brighten or deepen the entire surface ladder.
-  const neutralOffset = scheme === 'monochrome' ? (base.l - 50) * 0.24 : 0;
-  const backgroundLightness = Math.max(
-    mode === 'light' ? 80 : 3,
-    Math.min(mode === 'light' ? 99 : mode === 'gray' ? 58 : 20, tonalBase + neutralOffset)
-  );
+  // Monochrome: Light|Gray|Dark owns the canvas; picker L is a small nudge.
+  // Chromatic: picker H/S/L is the color; mode only biases lightness so a
+  // lime pick can still be lime (not a 25% gray-green).
+  let backgroundLightness;
+  if (scheme === 'monochrome') {
+    const tonalBase = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
+    const neutralOffset = (base.l - 50) * 0.24;
+    backgroundLightness = Math.max(
+      mode === 'light' ? 80 : 3,
+      Math.min(mode === 'light' ? 99 : mode === 'gray' ? 58 : 20, tonalBase + neutralOffset)
+    );
+  } else {
+    const modeBias = mode === 'light' ? 18 : mode === 'gray' ? 0 : -18;
+    backgroundLightness = Math.max(4, Math.min(96, base.l + modeBias));
+  }
+  const backgroundSaturation = scheme === 'monochrome' ? Math.min(base.s, 8) : base.s;
   const textLightness = isDark ? 92 : 12;
   const mutedLightness = isDark ? 66 : 44;
   const accentLightness = isDark ? 62 : 45;
   const linkLightness = isDark ? 68 : 42;
+  // Nav chrome prefers a later scheme stop (tetradic 4th / triadic 3rd) at a
+  // distinct lightness so it stays in-scheme without matching body-link ink.
+  const navLinkLightness = isDark ? 74 : 36;
   const borderLightness = isDark ? 22 : 84;
   const focusLightness = isDark ? 74 : 50;
 
   const background = hslToHex({
     h: base.h,
-    s: Math.min(base.s, mode === 'gray' ? 18 : 25),
+    s: backgroundSaturation,
     l: backgroundLightness,
   });
   const backgroundSecondary = deriveSurface(background, isDark);
@@ -334,13 +420,18 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     background,
     4.5
   );
+  const navLink = ensureContrast(
+    hslToHex({ h: navLinkHue, s: linkSaturation, l: navLinkLightness }),
+    background,
+    4.5
+  );
   const border = ensureContrast(
-    hslToHex({ h: base.h, s: Math.min(base.s, 20), l: borderLightness }),
+    hslToHex({ h: borderHue, s: borderSaturation, l: borderLightness }),
     background,
     3
   );
   const focus = ensureContrast(
-    hslToHex({ h: accentHue, s: relationshipSaturation, l: focusLightness }),
+    hslToHex({ h: focusHue, s: relationshipSaturation, l: focusLightness }),
     surfaceGui,
     3
   );
@@ -358,6 +449,11 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     muted,
     accent,
     link,
+    linkHover: deriveHoverColor(link, isDark),
+    linkActive: deriveActiveColor(link, isDark),
+    navLink,
+    navLinkHover: deriveHoverColor(navLink, isDark),
+    navLinkActive: deriveActiveColor(navLink, isDark),
     border,
     focus,
     isDark,

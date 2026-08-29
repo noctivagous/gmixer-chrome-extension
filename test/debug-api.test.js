@@ -94,7 +94,7 @@ describe('debug-api', () => {
 
     await api.setSettingsFocus('tone');
     assert.equal(store.getState().global.ui.settingsFocus, 'tone');
-    assert.equal(store.getState().global.sections.color, true);
+    assert.equal(store.getState().global.sections.color, false);
   });
 
   it('rebuildCss prefers reapply when provided', () => {

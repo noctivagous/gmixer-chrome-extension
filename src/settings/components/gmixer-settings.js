@@ -1,11 +1,13 @@
-import { html, css } from 'lit';
+import { html, css, unsafeCSS } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { store } from '../../state/store.js';
 import { buildPalette, hexToHsl, hslToHex } from '../../lib/color-theory.js';
+import { emptyColorOverrides } from '../../lib/effective-palette.js';
 import { getFontById } from '../../config/fonts.js';
 
 import '../../popup/components/theme-preview-panel.js';
 import '../../popup/components/palette-swatches.js';
+import { effectiveRoleColors } from '../../popup/components/palette-swatches.js';
 import '../../popup/components/color-panel.js';
 import '../../popup/components/fonts-panel.js';
 import '../../popup/components/image-filter-panel.js';
@@ -17,6 +19,8 @@ import '../../popup/components/site-toggle.js';
 import { THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
 import './font-browser.js';
 import { defineElement } from '../../lib/define-element.js';
+import { closeHostPopover } from '../close-host-popover.js';
+import { GRID_CSS_VARS } from '../tokens.js';
 import { MSG_OPEN_WALKTHROUGH } from '../../messaging/messages.js';
 import {
   SETTINGS_FOCUS_OPTIONS,
@@ -229,8 +233,11 @@ const SECTIONS = [
 export class GmixerSettings extends StoreBoundElement {
   static styles = css`
     :host {
+      all: initial;
+      ${unsafeCSS(GRID_CSS_VARS)}
       display: flex;
       flex-direction: column;
+      box-sizing: border-box;
       width: 100%;
       height: 100%;
       min-height: 0;
@@ -309,6 +316,7 @@ export class GmixerSettings extends StoreBoundElement {
       font-size: 12px;
       line-height: var(--gm-baseline, 24px);
       color: var(--gm-muted, rgba(242, 238, 252, 0.65));
+      white-space: nowrap;
     }
 
     kbd {
@@ -325,6 +333,8 @@ export class GmixerSettings extends StoreBoundElement {
     }
 
     .close {
+      /* Stay in the trailing column even if .shortcut is display:none. */
+      grid-column: -1;
       width: var(--gm-titlebar, 48px);
       height: 100%;
       border: 0;
@@ -756,7 +766,9 @@ export class GmixerSettings extends StoreBoundElement {
       }
     }
 
-    @media (max-width: 560px) {
+    /* Panel is ~520px; only drop the hint on very narrow hosts. Keep .close on
+       grid-column:-1 so hiding the shortcut does not pull it off the right edge. */
+    @media (max-width: 360px) {
       .body {
         padding: var(--gm-space-2, 16px);
       }
@@ -823,13 +835,7 @@ export class GmixerSettings extends StoreBoundElement {
 
   _close() {
     this.updateGlobal({ ui: { settingsOpen: false } });
-    const popover =
-      this.parentElement?.id === 'gmixer-settings'
-        ? this.parentElement
-        : document.getElementById('gmixer-settings');
-    if (popover && typeof popover.hidePopover === 'function') {
-      popover.hidePopover();
-    }
+    closeHostPopover();
   }
 
   /**
@@ -844,6 +850,8 @@ export class GmixerSettings extends StoreBoundElement {
       color: {
         ...pack.patch.color,
         schemeBaseColor: pack.patch.color?.baseColor,
+        // Pack personality replaces prior manual role tweaks.
+        overrides: emptyColorOverrides(),
       },
     });
   }
@@ -1183,16 +1191,14 @@ export class GmixerSettings extends StoreBoundElement {
     // Theme Preview hosts the full live blurb — no mini strip.
     if (id === 'preview') return null;
     const g = this.state?.global;
-    const palette = g?.color
-      ? buildPalette(g.color.baseColor, g.color.scheme, g.themeMode || 'dark')
-      : null;
+    const liveColors = g?.color ? effectiveRoleColors(g) : null;
     if (id === 'color') {
       return html`
         <div class="section-preview">
           ${['background', 'backgroundSecondary', 'surfaceGui', 'surfaceContainers'].map(
             (role) => html`<span
               class="preview-swatch"
-              style="background:${palette?.[role] || '#1c1826'}"
+              style="background:${liveColors?.[role] || '#1c1826'}"
             ></span>`
           )}
           <span class="preview-copy">

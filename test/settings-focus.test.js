@@ -59,9 +59,10 @@ describe('settings-focus', () => {
     assert.equal(patch.imageFilter.revealOnHover, true);
   });
 
-  it('enables Tone with a monochrome full-restyle default', () => {
+  it('enables Tone with Color Scheme Off (walkthrough slide 0 baseline)', () => {
     const patch = patchForSettingsFocus('tone');
     assert.equal(patch.sections.tone, true);
+    assert.equal(patch.sections.color, false);
     assert.equal(patch.ui.openSection, 'tone');
     assert.equal(patch.color.scheme, 'monochrome');
     assert.equal(patch.color.identityMode, 'restyle');

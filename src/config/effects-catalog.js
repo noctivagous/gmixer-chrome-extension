@@ -2,7 +2,8 @@
 
 /**
  * @typedef {'none' | 'glow' | 'pan-scan' | 'rotating-cube' | 'flash' | 'link-shimmer'} EffectId
- * @typedef {'images' | 'videos' | 'navigation' | 'articles'} EffectCategoryId
+ * @typedef {'images' | 'videos' | 'hyperlinks' | 'navigation' | 'articles'} EffectCategoryId
+ * @typedef {{ animated: boolean, color: string }} GlowParams
  */
 
 /** @type {Record<EffectCategoryId, { label: string, effects: { id: EffectId, label: string }[] }>} */
@@ -23,6 +24,14 @@ export const EFFECT_CATEGORIES = {
       { id: 'glow', label: 'Glow' },
     ],
   },
+  hyperlinks: {
+    label: 'Body links',
+    effects: [
+      { id: 'none', label: 'None' },
+      { id: 'glow', label: 'Glow' },
+      { id: 'flash', label: 'Flash' },
+    ],
+  },
   navigation: {
     label: 'Navigation',
     effects: [
@@ -40,18 +49,42 @@ export const EFFECT_CATEGORIES = {
   },
 };
 
+function defaultGlow() {
+  return { animated: true, color: '' };
+}
+
 export function createDefaultEffects() {
   return {
     categories: {
       images: { effect: /** @type {EffectId} */ ('none') },
       videos: { effect: /** @type {EffectId} */ ('none') },
-      navigation: { effect: /** @type {EffectId} */ ('none') },
+      hyperlinks: {
+        effect: /** @type {EffectId} */ ('none'),
+        glow: defaultGlow(),
+      },
+      navigation: {
+        effect: /** @type {EffectId} */ ('none'),
+        glow: defaultGlow(),
+      },
       articles: { effect: /** @type {EffectId} */ ('none') },
     },
-    glow: { animated: true, color: '' },
+    glow: defaultGlow(),
     panScan: { speed: 16, zoom: 14, distance: 3, loop: 'fade', motion: 'scan' },
     cursor: { enabled: false, style: 'default' },
     backgroundMotion: { enabled: false },
+  };
+}
+
+/**
+ * @param {object|null|undefined} raw
+ * @param {GlowParams} [fallback]
+ * @returns {GlowParams}
+ */
+function normalizeGlow(raw, fallback = defaultGlow()) {
+  const source = raw && typeof raw === 'object' ? raw : fallback;
+  return {
+    animated: source?.animated !== false,
+    color: typeof source?.color === 'string' ? source.color : '',
   };
 }
 
@@ -63,10 +96,19 @@ export function normalizeEffects(raw) {
   const defaults = createDefaultEffects();
   if (!raw || typeof raw !== 'object') return defaults;
 
+  const sharedGlow = normalizeGlow(raw.glow);
   const categories = {
     images: { effect: raw.categories?.images?.effect || 'none' },
     videos: { effect: raw.categories?.videos?.effect || 'none' },
-    navigation: { effect: raw.categories?.navigation?.effect || 'none' },
+    hyperlinks: {
+      effect: raw.categories?.hyperlinks?.effect || 'none',
+      glow: normalizeGlow(raw.categories?.hyperlinks?.glow),
+    },
+    navigation: {
+      effect: raw.categories?.navigation?.effect || 'none',
+      // Pre-split saved state stored nav glow on the shared `effects.glow`.
+      glow: normalizeGlow(raw.categories?.navigation?.glow, sharedGlow),
+    },
     articles: { effect: raw.categories?.articles?.effect || 'none' },
   };
 
@@ -85,10 +127,7 @@ export function normalizeEffects(raw) {
 
   return {
     categories,
-    glow: {
-      animated: raw.glow?.animated !== false,
-      color: typeof raw.glow?.color === 'string' ? raw.glow.color : '',
-    },
+    glow: sharedGlow,
     panScan: {
       speed: clampNumber(raw.panScan?.speed, 4, 40, 16),
       zoom: clampNumber(raw.panScan?.zoom, 4, 40, 14),
@@ -112,10 +151,24 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
-/** True when any category uses glow (for shared glow option UI). */
+/** True when images or videos use glow (shared media glow option UI). */
+export function mediaUsesGlow(effects) {
+  const normalized = normalizeEffects(effects);
+  return (
+    normalized.categories.images.effect === 'glow' ||
+    normalized.categories.videos.effect === 'glow'
+  );
+}
+
+/** True when any category uses glow. */
 export function anyCategoryUsesGlow(effects) {
   const normalized = normalizeEffects(effects);
   return Object.values(normalized.categories).some((slot) => slot.effect === 'glow');
+}
+
+/** True when a specific category uses glow. */
+export function categoryUsesGlow(effects, categoryId) {
+  return normalizeEffects(effects).categories[categoryId]?.effect === 'glow';
 }
 
 /** True when Articles link-shimmer should run. */

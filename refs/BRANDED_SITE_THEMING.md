@@ -143,10 +143,14 @@ After analysis:
 6. Leave original site declarations available underneath the overrides.
 7. Use dedicated overlays for background images; never replace the original
    `background-image` just to recolor it.
+8. Discover interaction-only flyouts after hover/focus/click layout settles,
+   stamp confirmed semantic or positioned panels as surfaces, and paint them
+   independently of their header ancestry.
 
 Re-run full analysis on initial `document_end`, major SPA navigation, explicit
 settings reapply, and significant layout changes. Use incremental
-classification between those events instead of rescanning every mutation.
+classification between those events instead of rescanning every mutation, but
+suspend gMixer paint during every native-background/luminance measurement.
 
 ## What gMixer does today
 

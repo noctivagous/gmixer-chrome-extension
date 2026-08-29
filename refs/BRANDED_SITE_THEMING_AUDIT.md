@@ -21,7 +21,7 @@ tokens and painted back to classified/semantic chrome.
 | `getComputedStyle` after stabilize | Present | `waitForPageSettle()` before first adaptive pass |
 | Sample + semantics, area, position, frequency, contrast | Present | Scored regions; text-on-brand contrast bonus/penalty |
 | Perceptual clustering + identity confidence | Present | Lab ΔE clustering (`COLOR_CLUSTER_DELTA_E`) |
-| Preserve site identity | Present | `color.identityMode: 'preserve'` (default) |
+| Preserve site identity | Present | `color.identityMode: 'preserve'` (opt-in; fresh state uses `restyle`) |
 | Harmonize identity hue → theme accent | Present | `harmonizeHue()` + `identityMode: 'harmonize'` |
 | Fully restyle | Present | `identityMode: 'restyle'` (legacy intensity blend) |
 | Brand family (tint/shade/text-on-brand/hover) | Present | Derived tokens + `--gmixer-brand-*` hover/active CSS |
@@ -61,7 +61,7 @@ and overlays for background images instead of replacing `background-image`.
 
 - Full sample (`runAdaptivePass`) on `document_end` / settings reapply.
 - Incremental classify only (`runAdaptiveSubtreePass`) on mutations; reuses
-  last color sample.
+  the last color sample and suspends gMixer paint while capturing native fills.
 - Full resample after page settle, settings reapply, significant layout change,
   History API navigation, and URL changes observed alongside route DOM changes.
 - `removeStyle()`, tonal layers, and background-image overlays are cleared
@@ -75,8 +75,11 @@ and overlays for background images instead of replacing `background-image`.
 Implemented: computed styles → visible regions → Lab clusters → identity scoring
              → preserve | harmonize | restyle → semantic/classified CSS + overlays
 
-Not covered: cross-origin frames, shadow-root internals, gradients/SVG paint,
-             arbitrary component chrome, or arbitrary below-fold page regions.
+Partially covered: frames are themed independently; open shadow roots receive
+             adopted CSS and classification, but do not contribute to the
+             parent document's identity sample.
+Not covered: closed shadow roots, parent-brand propagation into cross-origin
+             frames, arbitrary SVG paint, or arbitrary below-fold regions.
 ```
 
 ---

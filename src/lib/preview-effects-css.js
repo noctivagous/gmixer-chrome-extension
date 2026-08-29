@@ -1,44 +1,54 @@
 import { normalizeEffects } from '../config/effects-catalog.js';
+import { resolveGlowColor } from './color-theory.js';
 
 /**
  * Scoped CSS for the live theme preview blurb (settings + walkthrough).
  * Mirrors page effects in miniature without page-wide selectors.
  *
  * @param {object|null|undefined} effects
- * @param {{ accent?: string }} palette
+ * @param {{ accent?: string, link?: string, navLink?: string }} palette
  * @param {string} [root='.theme-preview']
  * @returns {string}
  */
 export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview') {
   const normalized = normalizeEffects(effects);
   const accent = palette?.accent || '#a78bfa';
-  const glowColor = normalized.glow.color || accent;
+  const bodyInk = palette?.link || accent;
+  const navInk = palette?.navLink || bodyInk;
+  const mediaGlowColor = resolveGlowColor(normalized.glow.color, accent);
+  const linkGlowColor = resolveGlowColor(normalized.categories.hyperlinks.glow?.color, bodyInk);
+  const navGlowColor = resolveGlowColor(normalized.categories.navigation.glow?.color, navInk);
   /** @type {string[]} */
   const rules = [];
 
   const img = `${root} .blurb-image`;
   const imgWrap = `${root} .blurb-image-wrap`;
   const cube = `${root} .blurb-cube`;
-  const nav = `${root} .blurb-button, ${root} .blurb-link`;
+  const nav = `${root} .blurb-button, ${root} .blurb-nav-link`;
   const link = `${root} .blurb-link`;
   const blurb = `${root} .blurb`;
 
   const imageEffect = normalized.categories.images.effect;
+  const linkEffect = normalized.categories.hyperlinks.effect;
   const navEffect = normalized.categories.navigation.effect;
   const articleEffect = normalized.categories.articles.effect;
 
-  const usesAnimatedGlow =
-    normalized.glow.animated &&
-    (imageEffect === 'glow' || navEffect === 'glow');
-
-  if (usesAnimatedGlow) {
-    rules.push(`@keyframes gmixer-preview-glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 1px ${glowColor}); }
-  50% { filter: drop-shadow(0 0 8px ${glowColor}); }
-}`);
+  if (imageEffect === 'glow' && normalized.glow.animated) {
     rules.push(`@keyframes gmixer-preview-glow-box-pulse {
-  0%, 100% { box-shadow: 0 0 4px ${glowColor}; }
-  50% { box-shadow: 0 0 14px ${glowColor}; }
+  0%, 100% { box-shadow: 0 0 4px ${mediaGlowColor}; }
+  50% { box-shadow: 0 0 14px ${mediaGlowColor}; }
+}`);
+  }
+  if (linkEffect === 'glow' && normalized.categories.hyperlinks.glow?.animated !== false) {
+    rules.push(`@keyframes gmixer-preview-glow-pulse-link {
+  0%, 100% { filter: drop-shadow(0 0 1px ${linkGlowColor}); }
+  50% { filter: drop-shadow(0 0 8px ${linkGlowColor}); }
+}`);
+  }
+  if (navEffect === 'glow' && normalized.categories.navigation.glow?.animated !== false) {
+    rules.push(`@keyframes gmixer-preview-glow-pulse-nav {
+  0%, 100% { filter: drop-shadow(0 0 1px ${navGlowColor}); }
+  50% { filter: drop-shadow(0 0 8px ${navGlowColor}); }
 }`);
   }
 
@@ -46,7 +56,7 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
     rules.push(
       normalized.glow.animated
         ? `${img} { animation: gmixer-preview-glow-box-pulse 2.4s ease-in-out infinite; }`
-        : `${img} { box-shadow: 0 0 12px ${glowColor}; }`
+        : `${img} { box-shadow: 0 0 12px ${mediaGlowColor}; }`
     );
   } else if (imageEffect === 'pan-scan') {
     const { speed, zoom, distance, loop, motion } = normalized.panScan;
@@ -85,10 +95,23 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
     );
   }
 
+  if (linkEffect === 'glow') {
+    rules.push(`${link} { text-shadow: 0 0 8px ${linkGlowColor}; }`);
+    if (normalized.categories.hyperlinks.glow?.animated !== false) {
+      rules.push(`${link} { animation: gmixer-preview-glow-pulse-link 2.4s ease-in-out infinite; }`);
+    }
+  } else if (linkEffect === 'flash') {
+    rules.push(`@keyframes gmixer-preview-flash-link {
+  0%, 90%, 100% { opacity: 1; }
+  95% { opacity: 0.55; }
+}`);
+    rules.push(`${link} { animation: gmixer-preview-flash-link 3s linear infinite; }`);
+  }
+
   if (navEffect === 'glow') {
-    rules.push(`${nav} { text-shadow: 0 0 8px ${glowColor}; }`);
-    if (normalized.glow.animated) {
-      rules.push(`${nav} { animation: gmixer-preview-glow-pulse 2.4s ease-in-out infinite; }`);
+    rules.push(`${nav} { text-shadow: 0 0 8px ${navGlowColor}; }`);
+    if (normalized.categories.navigation.glow?.animated !== false) {
+      rules.push(`${nav} { animation: gmixer-preview-glow-pulse-nav 2.4s ease-in-out infinite; }`);
     }
   } else if (navEffect === 'flash') {
     rules.push(`@keyframes gmixer-preview-flash {

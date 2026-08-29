@@ -38,4 +38,13 @@ export default [
       globals: globals.node,
     },
   },
+  {
+    files: ['test/browser/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+      },
+    },
+  },
 ];

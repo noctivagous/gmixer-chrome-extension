@@ -51,8 +51,8 @@ shared component directory used by the in-page Lit/Popover settings panel.
 
 | Limitation | Impact | Recommended next step |
 |---|---|---|
-| `all_frames: false` | Embedded iframes are not themed. | Decide whether same-origin frame theming is desirable before expanding manifest scope. |
-| Shadow DOM boundary | Head-injected CSS and the current sampler do not access component internals. | Design open-shadow traversal and per-root stylesheet ownership before implementation. |
+| Per-frame identity | `all_frames: true` themes embedded frames independently, but cross-origin frames cannot inherit the parent page's sampled brand. | Keep frame CSS sample-independent at document start; treat parent-brand propagation as a separate product decision. |
+| Shadow DOM boundary | Open roots are classified and receive an adopted theme sheet; closed roots remain inaccessible and open-root internals do not contribute to the parent sample. | Keep bounded rediscovery for late open roots and document the closed-root limit. |
 | Site-specific / gradient / SVG chrome | Arbitrary component bars, image gradients, SVG fills, and icon paint may remain unchanged. | Add bounded role-to-selector heuristics only after a site regression suite is established. |
 | Sampling bounds | Candidate caps and viewport prioritization can miss long/infinite-scroll content. | Profile before raising limits; do not trade browsing performance for unbounded scans. |
 | Router timing | A delayed/lazy route header can still appear after the settle window. | Add browser integration coverage with representative client routers before changing timing budgets. |

@@ -54,6 +54,18 @@ const entries = [
     format: 'iife',
     ...shared,
   },
+  {
+    entryPoints: ['src/ui/walkthrough-frame.js'],
+    outfile: `${OUT_DIR}/walkthrough-frame.js`,
+    format: 'iife',
+    ...shared,
+  },
+  {
+    entryPoints: ['src/ui/settings-frame.js'],
+    outfile: `${OUT_DIR}/settings-frame.js`,
+    format: 'iife',
+    ...shared,
+  },
 ];
 
 async function run() {

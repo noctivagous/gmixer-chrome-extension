@@ -3,6 +3,9 @@ import { StoreBoundElement } from '../../popup/components/store-bound-element.js
 import { FONT_CATEGORIES, FONTS, getFontById } from '../../config/fonts.js';
 import { isFontSuitableForTarget, unsuitableReason } from '../../config/font-heuristics.js';
 import { defineElement } from '../../lib/define-element.js';
+import { ensureDocumentFontFaces } from '../../lib/font-faces.js';
+
+ensureDocumentFontFaces();
 
 const SAMPLE_DEFAULT = 'The quick brown fox jumps over the lazy dog';
 const APPLY_TARGETS = [

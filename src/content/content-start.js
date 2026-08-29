@@ -29,11 +29,15 @@ import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
 
 async function applyStaticTheme() {
   const hostname = location.hostname;
-  const scope = cssCacheScope(location);
+  const initialScope = cssCacheScope(location);
 
   // Kick the cache read immediately — don't wait for store merge.
-  const cachePromise = readCssCache(hostname, scope).then((cached) => {
-    if (cached && !document.getElementById(STYLE_ELEMENT_ID)) {
+  const cachePromise = readCssCache(hostname, initialScope).then((cached) => {
+    if (
+      cached &&
+      cssCacheScope(location) === initialScope &&
+      !document.getElementById(STYLE_ELEMENT_ID)
+    ) {
       injectStyle(cached.css);
     }
     return cached;
@@ -42,6 +46,7 @@ async function applyStaticTheme() {
   const [, cached] = await Promise.all([store.ready, cachePromise]);
 
   const resolved = store.getResolvedStateForHost(hostname);
+  const scope = cssCacheScope(location);
   if (resolved.enabled === false) {
     removeStyle();
     await clearCssCache(hostname);
@@ -54,10 +59,9 @@ async function applyStaticTheme() {
   const cacheMatches =
     cached?.scope === scope && cached.fingerprint === fingerprint;
 
-  // Keep a validated analyzed stylesheet in place until document_end can
-  // perform its synchronous adaptive refresh. This avoids downgrading a good
-  // cache hit back to the less complete static stylesheet.
-  if (cacheMatches && cached.css) return;
+  // Cached styles are static-only, so a matching entry is the exact fast-path
+  // stylesheet this pass would rebuild.
+  if (cacheMatches && cached.css && initialScope === scope) return;
 
   // Static only: pure theme palette, no live page sample.
   const css = buildCss(resolved, null);

@@ -4,7 +4,7 @@ import { THEME_PACKS } from '../../config/theme-packs.js';
 import { buildPalette } from '../../lib/color-theory.js';
 import { getFontById } from '../../config/fonts.js';
 import { createDefaultState } from '../../state/schema.js';
-import { roleColors } from './palette-swatches.js';
+import { effectiveRoleColors, roleColors } from './palette-swatches.js';
 import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
 import { imageFilterPresetCss } from '../../content/style-injector.js';
 import { defineElement } from '../../lib/define-element.js';
@@ -119,9 +119,23 @@ export class ThemePreviewPanel extends StoreBoundElement {
       align-items: center;
       margin: 0;
     }
+    .blurb-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 0 0 2px;
+      padding: 4px 0 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 11px;
+    }
+    .blurb-nav-link,
     .blurb-link {
       text-decoration: underline;
       font-size: 12px;
+    }
+    .blurb-nav-link {
+      font-size: 11px;
+      font-weight: 600;
     }
     .blurb-code {
       display: inline-block;
@@ -272,17 +286,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const global = this.state?.global;
     const activeId = global?.activeThemePackId;
     const activeMode = global?.themeMode || 'dark';
-    const overrides = global?.color?.overrides ?? {};
     const pack = THEME_PACKS.find((item) => item.id === activeId) || THEME_PACKS[0];
     const basePalette = paletteForPack(pack, activeMode);
-    const livePalette = global?.color
-      ? buildPalette(
-          global.color.baseColor,
-          global.sections?.color === true ? global.color.scheme : 'monochrome',
-          activeMode
-        )
-      : basePalette;
-    const colors = roleColors(livePalette, overrides, true);
+    const colors = global?.color
+      ? effectiveRoleColors(global)
+      : roleColors(basePalette, {}, false);
     const fonts = {
       ...(pack.patch?.fonts || {}),
       ...(global?.fonts || {}),
@@ -321,7 +329,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
         : 'none';
     const effectsOn = previewEffectsActive(global);
     const previewEffectsCss = effectsOn
-      ? buildPreviewEffectsCss(global.effects, { accent: colors.accent })
+      ? buildPreviewEffectsCss(global.effects, {
+          accent: colors.accent,
+          link: colors.link,
+          navLink: colors.navLink,
+        })
       : '';
     const useRotatingCube =
       effectsOn && global.effects?.categories?.images?.effect === 'rotating-cube';
@@ -353,6 +365,14 @@ export class ThemePreviewPanel extends StoreBoundElement {
           "
           aria-label="${pack.label} preview"
         >
+          <p
+            class="blurb-nav"
+            style="font-family: ${uiFamily}; border-color: ${colors.border}"
+          >
+            <span class="blurb-nav-link" style="color: ${colors.navLink}">Home</span>
+            <span class="blurb-nav-link" style="color: ${colors.navLink}">Topics</span>
+            <span class="blurb-nav-link" style="color: ${colors.navLink}">About</span>
+          </p>
           <div class="blurb-top">
             <div class="blurb-copy">
               <p
@@ -369,7 +389,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
               </p>
               <p
                 class="blurb-subhead"
-                style="font-family: ${subheadFamily}; color: ${colors.accent}"
+                style="font-family: ${subheadFamily}; color: ${colors.link}"
               >
                 Subheading for section hierarchy
               </p>

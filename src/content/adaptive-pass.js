@@ -10,6 +10,7 @@
 
 import { samplePageRoles } from './page-sampler.js';
 import { classifyPage, classifySubtree } from './page-classifier.js';
+import { stampLogoAlpha } from './logo-alpha.js';
 import {
   shouldTagBackgroundImages,
   tagBackgroundImageElements,
@@ -39,6 +40,7 @@ export function runAdaptivePass(resolved) {
   removeStyle();
   removeBackgroundImageOverlays();
   const classification = classifyPage();
+  stampLogoAlpha();
   // Classification marks ads before the sample walk so identity scoring can
   // reject sponsor/creative colors that are unrelated to the site's brand.
   const sample = samplePageRoles();
@@ -61,17 +63,29 @@ export function runAdaptivePass(resolved) {
  * @param {object} resolved
  * @returns {{ stamped: number, scanned: number }}
  */
-export function runAdaptiveSubtreePass(root, resolved) {
+function runNativeSubtreePass(root, resolved) {
   const classification = classifySubtree(root, { skipClassified: true });
-
+  stampLogoAlpha(root);
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles)) {
     tagBackgroundImageElements(root);
     for (const shadow of collectOpenShadowRoots(root)) {
       tagBackgroundImageElements(shadow);
     }
   }
-
   return classification;
+}
+
+export function runAdaptiveSubtreePass(root, resolved) {
+  return runNativeSubtreePass(root, resolved);
+}
+
+/**
+ * Incremental mutation work. Do not suspend the theme stylesheet here —
+ * removing it on a busy page (Windows Central, Gmail) restyles the whole
+ * document on every batch and stalls Settings/walkthrough.
+ */
+export function runAdaptiveSubtreePasses(roots, resolved) {
+  return (roots || []).map((root) => runNativeSubtreePass(root, resolved));
 }
 
 /** Tear down adaptive DOM annotations when gMixer is disabled for the host. */

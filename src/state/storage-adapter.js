@@ -32,6 +32,17 @@ const FIELD_STORAGE_AREAS = {
 };
 
 const PER_SITE_AREA = 'local';
+/** chrome.storage.sync allows 120 writes/minute. Coalesce slider/wheel input. */
+const PERSIST_DEBOUNCE_MS = 400;
+
+let persistTimer = 0;
+let queuedState = null;
+/** @type {Promise<void> | null} */
+let persistWaiters = null;
+/** @type {(() => void) | null} */
+let resolvePersistWaiters = null;
+let lastSyncJson = '';
+let lastLocalJson = '';
 
 function isInvalidatedExtensionContext(err) {
   return /Extension context invalidated|context invalidated/i.test(String(err?.message || err));
@@ -86,35 +97,138 @@ export async function loadPersistedState() {
     global.enabled = localState.global.enabled;
   }
 
-  return {
+  const resolved = {
     version: syncState?.version ?? localState?.version,
     global,
     perSite: localState?.perSite ?? {},
   };
+  rememberWritten(resolved);
+  return resolved;
 }
 
-/** Persist the full state, splitting fields across sync/local per FIELD_STORAGE_AREAS. */
-export async function persistState(state) {
-  if (!hasChromeStorage()) return;
-
+function payloadsFor(state) {
   const { sync, local } = splitGlobal(state.global);
-  const syncPayload = { [STORAGE_KEY]: { version: state.version, global: sync } };
-  const localPayload = {
-    [STORAGE_KEY]: {
-      version: state.version,
-      global: local,
-      ...(PER_SITE_AREA === 'local' ? { perSite: state.perSite } : {}),
+  return {
+    syncPayload: { [STORAGE_KEY]: { version: state.version, global: sync } },
+    localPayload: {
+      [STORAGE_KEY]: {
+        version: state.version,
+        global: local,
+        ...(PER_SITE_AREA === 'local' ? { perSite: state.perSite } : {}),
+      },
     },
   };
+}
 
+function rememberWritten(state) {
+  const { syncPayload, localPayload } = payloadsFor(state);
+  lastSyncJson = JSON.stringify(syncPayload);
+  lastLocalJson = JSON.stringify(localPayload);
+}
+
+function enqueuePersistWaiter() {
+  if (!persistWaiters) {
+    persistWaiters = new Promise((resolve) => {
+      resolvePersistWaiters = resolve;
+    });
+  }
+  return persistWaiters;
+}
+
+function settlePersistWaiters() {
+  resolvePersistWaiters?.();
+  persistWaiters = null;
+  resolvePersistWaiters = null;
+}
+
+async function flushPersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = 0;
+  }
+  const state = queuedState;
+  queuedState = null;
+  if (!state || !hasChromeStorage()) {
+    settlePersistWaiters();
+    return;
+  }
+
+  const { syncPayload, localPayload } = payloadsFor(state);
+  const syncJson = JSON.stringify(syncPayload);
+  const localJson = JSON.stringify(localPayload);
+  /** @type {Promise<void>[]} */
+  const writes = [];
+  if (syncJson !== lastSyncJson) {
+    lastSyncJson = syncJson;
+    writes.push(chrome.storage.sync.set(syncPayload));
+  }
+  if (localJson !== lastLocalJson) {
+    lastLocalJson = localJson;
+    writes.push(chrome.storage.local.set(localPayload));
+  }
+  if (!writes.length) {
+    settlePersistWaiters();
+    return;
+  }
   try {
-    await Promise.all([
-      chrome.storage.sync.set(syncPayload),
-      chrome.storage.local.set(localPayload),
-    ]);
+    await Promise.all(writes);
   } catch (err) {
     warnUnlessInvalidated('storage write', err);
+  } finally {
+    settlePersistWaiters();
   }
+}
+
+/**
+ * Persist the full state, splitting fields across sync/local per FIELD_STORAGE_AREAS.
+ * Writes are coalesced so color-wheel / slider input cannot exhaust
+ * chrome.storage.sync's 120 writes/minute quota.
+ *
+ * @param {object} state
+ * @param {{ immediate?: boolean }} [options]
+ */
+export function persistState(state, { immediate = false } = {}) {
+  if (!hasChromeStorage()) return Promise.resolve();
+  queuedState = state;
+  const waiter = enqueuePersistWaiter();
+  if (immediate) {
+    return flushPersist();
+  }
+  if (!persistTimer) {
+    persistTimer = setTimeout(() => {
+      persistTimer = 0;
+      void flushPersist();
+    }, PERSIST_DEBOUNCE_MS);
+  }
+  return waiter;
+}
+
+/** Flush a pending coalesced write (pagehide / tests). */
+export function flushPersistedState() {
+  return flushPersist();
+}
+
+/** Test-only: drop debounce timers and last-write cache. */
+export function resetPersistCacheForTests() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = 0;
+  }
+  queuedState = null;
+  lastSyncJson = '';
+  lastLocalJson = '';
+  settlePersistWaiters();
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void flushPersist();
+  });
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    void flushPersist();
+  });
 }
 
 /** Subscribe to external storage changes (e.g. settings edited in another tab/window). */

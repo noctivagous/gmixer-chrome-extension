@@ -5,6 +5,8 @@ import {
   loadPersistedState,
   onPersistedStateChanged,
   persistState,
+  flushPersistedState,
+  resetPersistCacheForTests,
 } from '../src/state/storage-adapter.js';
 import { isCurrentPersistedState } from '../src/state/store.js';
 
@@ -41,6 +43,7 @@ function installStorage(syncData = {}, localData = {}) {
 }
 
 afterEach(() => {
+  resetPersistCacheForTests();
   globalThis.chrome = originalChrome;
 });
 
@@ -55,7 +58,7 @@ describe('storage adapter', () => {
     state.global.ui.settingsOpen = true;
     state.perSite['example.test'] = { color: { baseColor: '#abcdef' } };
 
-    await persistState(state);
+    await persistState(state, { immediate: true });
 
     assert.equal(syncData.gmixer_state.global.color.baseColor, '#123456');
     assert.equal(syncData.gmixer_state.global.enabled, undefined);
@@ -96,6 +99,30 @@ describe('storage adapter', () => {
 
     unsubscribe();
     assert.equal(listeners.size, 0);
+  });
+
+  it('coalesces rapid writes and skips unchanged sync payloads', async () => {
+    let syncSets = 0;
+    const syncData = {};
+    const localData = {};
+    installStorage(syncData, localData);
+    chrome.storage.sync.set = async (patch) => {
+      syncSets += 1;
+      Object.assign(syncData, patch);
+    };
+
+    const state = createDefaultState();
+    state.global.color.baseColor = '#111111';
+    const first = persistState(state);
+    state.global.color.baseColor = '#222222';
+    const second = persistState(state);
+    await flushPersistedState();
+    await Promise.all([first, second]);
+    assert.equal(syncSets, 1);
+    assert.equal(syncData.gmixer_state.global.color.baseColor, '#222222');
+
+    await persistState(state, { immediate: true });
+    assert.equal(syncSets, 1);
   });
 });
 
