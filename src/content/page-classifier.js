@@ -23,6 +23,16 @@ export const OVERLAY_ATTR = 'data-gmixer-overlay';
 export const NATIVE_L_ATTR = 'data-gmixer-native-l';
 /** Ranked tone step 0..N-1 (0 = originally darkest among ranked surfaces). */
 export const TONE_STEP_ATTR = 'data-gmixer-tone-step';
+/**
+ * Soft page-matching gradient wash (e.g. HF from-gray-50-to-white rails).
+ * Cleared in CSS so the themed body canvas shows through — not a new surface.
+ */
+export const CANVAS_WASH_ATTR = 'data-gmixer-canvas-wash';
+/**
+ * Semi-transparent / backdrop-filter chrome (Opera GX frosted header).
+ * Value is native alpha 0..1. CSS keeps the glaze and swaps in theme color.
+ */
+export const GLAZE_ATTR = 'data-gmixer-glaze';
 
 export const CLASSIFIER_CONFIDENCE_THRESHOLD = 0.7;
 export const SURFACE_LADDER_STEPS = 3;
@@ -45,6 +55,7 @@ const analysisDiagnostics = {
   flyoutRejectedHidden: 0,
   flyoutRejectedGeometry: 0,
   flyoutRejectedMediaChrome: 0,
+  flyoutRejectedTransparent: 0,
 };
 
 export function getAnalysisDiagnostics() {
@@ -316,7 +327,28 @@ export function isOverlayPanel(el) {
     analysisDiagnostics.flyoutRejectedMediaChrome += 1;
     return false;
   }
+  // Absolute parallax / decorative floaters with no native fill are not menus.
+  // Painting them invents solid sheets over artwork (Opera GX POV section).
+  if (!semantic && !hasOverlayFill(style)) {
+    analysisDiagnostics.flyoutRejectedTransparent =
+      (analysisDiagnostics.flyoutRejectedTransparent || 0) + 1;
+    return false;
+  }
   return true;
+}
+
+function hasBackdropFilter(style) {
+  const value = `${style.backdropFilter || ''} ${style.webkitBackdropFilter || ''}`.trim();
+  return !!(value && value !== 'none' && value !== 'none none');
+}
+
+/** Native sheet, glaze, or gradient — anything that should read as a panel fill. */
+function hasOverlayFill(style) {
+  const rgba = rgbaFromCss(style.backgroundColor || '');
+  if (rgba && rgba.a >= 0.15) return true;
+  if (hasBackdropFilter(style)) return true;
+  if (hasCssGradientFill(style.backgroundImage || '')) return true;
+  return false;
 }
 
 function firstMediaBox(node) {
@@ -642,13 +674,35 @@ function effectiveBackground(el, style) {
   return out;
 }
 
+const CSS_COLOR_TOKEN_RE =
+  /rgba?\([^)]+\)|hsla?\([^)]+\)|oklch\([^)]+\)|oklab\([^)]+\)|color\([^)]+\)|#[0-9a-f]{3,8}\b/gi;
+
 function firstCssColorToken(value) {
   // Prefer rgb(a) when present; otherwise accept modern CSS color functions /
   // hex stops (Hugging Face Tailwind gradients often use oklch()).
-  const match = (value || '').match(
-    /rgba?\([^)]+\)|hsla?\([^)]+\)|oklch\([^)]+\)|oklab\([^)]+\)|color\([^)]+\)|#[0-9a-f]{3,8}\b/i
-  );
+  CSS_COLOR_TOKEN_RE.lastIndex = 0;
+  const match = CSS_COLOR_TOKEN_RE.exec(value || '');
   return match ? match[0] : '';
+}
+
+/** @param {string} value */
+function cssColorTokens(value) {
+  CSS_COLOR_TOKEN_RE.lastIndex = 0;
+  return [...(value || '').matchAll(CSS_COLOR_TOKEN_RE)].map((match) => match[0]);
+}
+
+/** Relative luminance of the document canvas (body, then html). */
+function pageCanvasLuminance() {
+  if (typeof getComputedStyle !== 'function' || typeof document === 'undefined') return 1;
+  for (const el of [document.body, document.documentElement]) {
+    if (!el) continue;
+    const style = getComputedStyle(el);
+    const rgba = rgbaFromCss(style.backgroundColor || '');
+    if (rgba && rgba.a >= 0.5) return luminanceFromRgba(rgba);
+    const fromGradient = luminanceFromCssColorToken(firstCssColorToken(style.backgroundImage || ''));
+    if (fromGradient != null) return fromGradient;
+  }
+  return 1;
 }
 
 /**
@@ -701,8 +755,34 @@ function captureNativeLuminance(el, style) {
   if (lum == null && hasCssGradientFill(style.backgroundImage || '')) {
     lum = 0.5;
   }
+  if (lum == null && hasBackdropFilter(style)) {
+    // Frosted chrome with no resolvable color — treat as mid glaze.
+    lum = 0.2;
+  }
   if (lum == null) return;
   el.setAttribute(NATIVE_L_ATTR, lum.toFixed(4));
+  captureNativeGlaze(el, style, ownColor);
+}
+
+/**
+ * Mark frosted / semi-transparent chrome so CSS can keep the glaze while
+ * swapping in theme colors (Opera GX header menus).
+ * @param {Element} el
+ * @param {CSSStyleDeclaration} style
+ * @param {{ r: number, g: number, b: number, a: number }|null} [ownColor]
+ */
+function captureNativeGlaze(el, style, ownColor = null) {
+  if (el.hasAttribute?.(GLAZE_ATTR)) return;
+  const rgba = ownColor || rgbaFromCss(style.backgroundColor || '');
+  const backdrop = hasBackdropFilter(style);
+  if (backdrop) {
+    const alpha = rgba && rgba.a > 0.05 && rgba.a < 0.95 ? rgba.a : 0.5;
+    el.setAttribute(GLAZE_ATTR, String(+alpha.toFixed(2)));
+    return;
+  }
+  if (rgba && rgba.a > 0.08 && rgba.a < 0.92) {
+    el.setAttribute(GLAZE_ATTR, String(+rgba.a.toFixed(2)));
+  }
 }
 
 /**
@@ -749,6 +829,8 @@ const OPAQUE_PAINT_TARGET_SELECTORS = [
   'body textarea',
   'body select',
   'body button',
+  'body a.button',
+  'body a.btn',
   'body [role="textbox"]',
   'body [role="searchbox"]',
   'body [role="combobox"]',
@@ -826,6 +908,8 @@ function clearClassification(el) {
   el.removeAttribute(OVERLAY_ATTR);
   el.removeAttribute(NATIVE_L_ATTR);
   el.removeAttribute(TONE_STEP_ATTR);
+  el.removeAttribute(CANVAS_WASH_ATTR);
+  el.removeAttribute(GLAZE_ATTR);
 }
 
 function elementsUnder(root) {
@@ -851,6 +935,63 @@ function isOpaqueBackground(el, style) {
   if (rgba ? rgba.a >= 0.5 : bg && bg !== 'transparent') return true;
   // Brand chrome often paints with linear-gradient and a transparent color.
   return hasCssGradientFill(style.backgroundImage || '');
+}
+
+/**
+ * Soft gradient that matches the page canvas (HF `from-gray-50-to-white` rails).
+ * @param {CSSStyleDeclaration} style
+ */
+function isCanvasWashGradient(style) {
+  if (!hasCssGradientFill(style.backgroundImage || '')) return false;
+  const rgba = rgbaFromCss(style.backgroundColor || '');
+  // A real solid sheet underneath is not a wash.
+  if (rgba && rgba.a >= 0.5) return false;
+
+  const lums = cssColorTokens(style.backgroundImage || '')
+    .map(luminanceFromCssColorToken)
+    .filter((l) => l != null);
+  if (!lums.length) return false;
+
+  const pageLum = pageCanvasLuminance();
+  if (lums.every((l) => Math.abs(l - pageLum) <= 0.1)) return true;
+  if (lums.every((l) => l >= 0.93) || lums.every((l) => l <= 0.08)) return true;
+  return false;
+}
+
+/**
+ * True when a fill should become its own surface sheet under seed/promote.
+ * Soft page-matching gradient washes share the canvas and must not invent
+ * secondary surfaces under Tone. Solid opaque fills and brand gradients still
+ * qualify.
+ *
+ * @param {Element} el
+ * @param {CSSStyleDeclaration} [style]
+ */
+function isDistinctSheetBackground(el, style) {
+  if (!style) {
+    if (typeof getComputedStyle !== 'function') return false;
+    style = getComputedStyle(el);
+  }
+  const rgba = rgbaFromCss(style.backgroundColor || '');
+  if (rgba && rgba.a >= 0.5) return true;
+  if (!hasCssGradientFill(style.backgroundImage || '')) return false;
+  // Parsed canvas washes are not distinct; unparsed gradients still count as
+  // brand chrome we cannot inspect.
+  return !isCanvasWashGradient(style);
+}
+
+/** Mark canvas washes so CSS can clear them without inventing a surface. */
+function stampCanvasWash(el, style) {
+  if (!el || el.nodeType !== 1) return false;
+  if (el.hasAttribute?.(ROLE_ATTR) || el.hasAttribute?.(MEDIA_ATTR)) return false;
+  if (!style) {
+    if (typeof getComputedStyle !== 'function') return false;
+    style = getComputedStyle(el);
+  }
+  if (!isCanvasWashGradient(style)) return false;
+  if (!isLargePaintedSheet(el)) return false;
+  el.setAttribute(CANVAS_WASH_ATTR, '');
+  return true;
 }
 
 /**
@@ -912,7 +1053,7 @@ export function promotePaintedSurfaces(root = document.body) {
       !SURFACE_SKIP_TAGS.has(el.tagName) &&
       !el.hasAttribute(ROLE_ATTR) &&
       !el.hasAttribute(MEDIA_ATTR) &&
-      isOpaqueBackground(el)
+      isDistinctSheetBackground(el)
     ) {
       let sizedOk = true;
       if (typeof el.getBoundingClientRect === 'function') {
@@ -1042,7 +1183,7 @@ export function seedPageSheets(root) {
   for (const el of sheets) {
     if (isOwnedByGmixer(el)) continue;
     if (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR)) continue;
-    if (!isOpaqueBackground(el)) continue;
+    if (!isDistinctSheetBackground(el)) continue;
     if (typeof el.getBoundingClientRect === 'function') {
       const rect = el.getBoundingClientRect();
       if (rect.width < 120 || rect.height < 80) continue;
@@ -1067,7 +1208,13 @@ export function seedPageSheets(root) {
     if (el === document.body || el === document.documentElement) return;
     if (SHEET_SKIP_TAGS.has(el.tagName) || isOwnedByGmixer(el)) return;
     if (el.hasAttribute(ROLE_ATTR) || el.hasAttribute(MEDIA_ATTR)) return;
-    if (!isOpaqueBackground(el) || !isLargePaintedSheet(el)) return;
+    if (typeof getComputedStyle === 'function') {
+      const style = getComputedStyle(el);
+      if (stampCanvasWash(el, style)) return;
+      if (!isDistinctSheetBackground(el, style) || !isLargePaintedSheet(el)) return;
+    } else if (!isDistinctSheetBackground(el) || !isLargePaintedSheet(el)) {
+      return;
+    }
     if (typeof el.getBoundingClientRect === 'function' && coversOrStripsMedia(el, el.getBoundingClientRect())) {
       return;
     }

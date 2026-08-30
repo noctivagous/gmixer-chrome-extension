@@ -186,11 +186,33 @@ describe('effectsRules category paint', () => {
       null
     );
     assert.match(css, /gmixer-glow-pulse-link/);
-    assert.match(css, /:has\(> a\)/);
-    assert.match(css, /overflow: visible !important/);
+    // Unclip the anchors only — parent :has(> a) breaks overflow:hidden dropdowns.
+    assert.match(css, /(?:^|\n)\s*a \{\s*overflow: visible !important;/);
+    assert.doesNotMatch(css, /:has\(> a\),\s*:has\(> button\)/);
     assert.match(css, /#ff00aa/);
     assert.match(css, /footer a,[\s\S]*h1 a[\s\S]*text-shadow: none/);
     assert.doesNotMatch(css, /gmixer-glow-pulse-nav/);
+  });
+
+  it('unclips image glow parents but not link/nav glow parents', () => {
+    const imageCss = buildCss(
+      withEffects({
+        categories: { images: { effect: 'glow' } },
+        glow: { animated: true, color: '' },
+      }),
+      null
+    );
+    assert.match(imageCss, /:has\(> img\)/);
+    assert.match(imageCss, /overflow: visible !important/);
+
+    const navCss = buildCss(
+      withEffects({
+        categories: { navigation: { effect: 'glow' } },
+        glow: { animated: true, color: '' },
+      }),
+      null
+    );
+    assert.doesNotMatch(navCss, /:has\(> a\),/);
   });
 
   it('keeps independent glow colors for body vs navigation links', () => {

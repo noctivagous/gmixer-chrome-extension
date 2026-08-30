@@ -387,13 +387,26 @@ function dropGlowKeyframes(name, color) {
 }`;
 }
 
-/** Direct parent overflow:hidden crops drop-shadow on the child. */
-function unclipGlow(selectors) {
+/**
+ * Direct parent overflow:hidden crops drop-shadow on the child.
+ * @param {string} selectors
+ * @param {{ includeParents?: boolean }} [options]
+ *   Parent `:has(> …)` unclip is for replaced media (img/video). Do NOT enable
+ *   it for `a` / button glow — that matches collapsed dropdown panels
+ *   (Opera GX `max-height:0; overflow:hidden`) and forces menus open.
+ */
+function unclipGlow(selectors, options = {}) {
+  const includeParents = options.includeParents !== false;
   const items = selectors
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
   const self = items.join(', ');
+  if (!includeParents) {
+    return `${self} {
+  overflow: visible !important;
+}`;
+  }
   const parents = items.map((item) => `:has(> ${item})`).join(', ');
   return `${self},
 ${parents} {
@@ -583,7 +596,8 @@ ${targetSel} {
   if (linkEffect === 'glow' || linkEffect === 'flash') {
     if (linkEffect === 'glow') {
       const animated = categories.hyperlinks.glow?.animated !== false;
-      rules.push(unclipGlow('a'));
+      // Text-shadow glow — unclip the anchors only, never :has(> a) parents.
+      rules.push(unclipGlow('a', { includeParents: false }));
       rules.push(`a { text-shadow: 0 0 8px ${linkGlowColor}; }`);
       if (animated) {
         rules.push(`a { animation: gmixer-glow-pulse-link 2.4s ease-in-out infinite; }`);
@@ -599,7 +613,7 @@ a { animation: gmixer-flash-link 3s linear infinite; }`);
 
   if (navEffect === 'glow') {
     const animated = categories.navigation.glow?.animated !== false;
-    rules.push(unclipGlow('a, button, [role="button"]'));
+    rules.push(unclipGlow('a, button, [role="button"]', { includeParents: false }));
     rules.push(`${EFFECTS_NAV_SELECTORS} { text-shadow: 0 0 8px ${navGlowColor}; }`);
     if (animated) {
       rules.push(
@@ -749,6 +763,11 @@ function roleCss(
           .map((part) => `${part.trim()}[data-gmixer-native-l]`)
           .join(',\n    ')
       : selectors;
+  const eachSelector = (selectors, suffix) =>
+    selectors
+      .split(',')
+      .map((part) => `${part.trim()}${suffix}`)
+      .join(',\n    ');
   /** Keep tagged photo backgrounds (overlay path); clear CSS gradients/fills. */
   const solidPaint = (selectors) =>
     selectors
@@ -789,7 +808,7 @@ function roleCss(
     )`;
 
   const chromeRules = `
-    ${maybeOpaque(HEADER_CHROME_SELECTORS)} {
+    ${eachSelector(maybeOpaque(HEADER_CHROME_SELECTORS), ':not([data-gmixer-glaze])')} {
       /* Remap common header fill/text vars so var()-based utilities follow. */
       --site-header-background-color: ${headerFill} !important;
       --site-header-text-color: ${headerText} !important;
@@ -802,7 +821,7 @@ function roleCss(
       color: ${headerText} !important;
     }
 
-    ${maybeOpaque(NAV_CHROME_SELECTORS)} {
+    ${eachSelector(maybeOpaque(NAV_CHROME_SELECTORS), ':not([data-gmixer-glaze])')} {
       background-color: ${navFill} !important;
       background-image: none !important;
       color: ${navText} !important;
@@ -810,7 +829,7 @@ function roleCss(
 
     /* Adopted sheets have no body ancestor. Classifier stamps provide the
        shadow-safe chrome boundary. */
-    ${maybeOpaque(`[data-gmixer-role="header"]`)} {
+    ${eachSelector(maybeOpaque(`[data-gmixer-role="header"]`), ':not([data-gmixer-glaze])')} {
       --site-header-background-color: ${headerFill} !important;
       --site-header-text-color: ${headerText} !important;
       --header-background-color: ${headerFill} !important;
@@ -821,8 +840,28 @@ function roleCss(
       color: ${headerText} !important;
     }
 
-    ${maybeOpaque(`[data-gmixer-role="navigation"]`)} {
+    ${eachSelector(maybeOpaque(`[data-gmixer-role="navigation"]`), ':not([data-gmixer-glaze])')} {
       background-color: ${navFill} !important;
+      background-image: none !important;
+      color: ${navText} !important;
+    }
+
+    /* Frosted / semi-transparent chrome: keep the glaze, swap in theme color.
+       Do not force an opaque slab (Opera GX header menus). */
+    ${eachSelector(maybeOpaque(HEADER_CHROME_SELECTORS), '[data-gmixer-glaze]')},
+    ${eachSelector(maybeOpaque(`[data-gmixer-role="header"]`), '[data-gmixer-glaze]')} {
+      --site-header-background-color: ${headerFill} !important;
+      --site-header-text-color: ${headerText} !important;
+      --header-background-color: ${headerFill} !important;
+      --header-bg: ${headerFill} !important;
+      --header-color: ${headerText} !important;
+      background-color: color-mix(in srgb, ${headerFill} 50%, transparent) !important;
+      background-image: none !important;
+      color: ${headerText} !important;
+    }
+    ${eachSelector(maybeOpaque(NAV_CHROME_SELECTORS), '[data-gmixer-glaze]')},
+    ${eachSelector(maybeOpaque(`[data-gmixer-role="navigation"]`), '[data-gmixer-glaze]')} {
+      background-color: color-mix(in srgb, ${navFill} 50%, transparent) !important;
       background-image: none !important;
       color: ${navText} !important;
     }
@@ -834,6 +873,14 @@ function roleCss(
     html, body {
       background-color: var(--gmixer-bg) !important;
       color: var(--gmixer-text) !important;
+    }
+
+    /* Page-matching gradient washes (HF from-gray-50-to-white rails): clear
+       the native wash so the themed body canvas shows through. Do not invent
+       a secondary surface fill. */
+    [data-gmixer-canvas-wash] {
+      background-color: transparent !important;
+      background-image: none !important;
     }
 
     /* Semantic page regions — opaque-only skips transparent layout wrappers. */
@@ -857,8 +904,10 @@ function roleCss(
       color: var(--gmixer-text) !important;
     }
 
-    /* Compact controls use the GUI surface. */
+    /* Compact controls use the GUI surface. Include a.button CTAs (Opera GX
+       Download) so the generic transparent-link rule does not wipe them. */
     ${maybeOpaque(`body input, body textarea, body select, body button,
+    body a.button, body a.btn, body a[class~="button"],
     body [role="textbox"], body [role="searchbox"], body [role="combobox"],
     body [role="button"], body [contenteditable="true"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
@@ -1082,12 +1131,30 @@ function roleCss(
       background-color: transparent !important;
     }
 
+    /* CTA / button-styled anchors keep a GUI surface (Opera GX Download). */
+    body a.button,
+    body a.btn,
+    body a[class~="button"] {
+      background-color: var(--gmixer-surface-gui) !important;
+      color: var(--gmixer-text) !important;
+    }
+
     a:hover, a:focus-visible {
       color: var(--gmixer-link-hover) !important;
     }
 
     a:active {
       color: var(--gmixer-link-active) !important;
+    }
+
+    body a.button:hover,
+    body a.btn:hover,
+    body a[class~="button"]:hover,
+    body a.button:focus-visible,
+    body a.btn:focus-visible,
+    body a[class~="button"]:focus-visible {
+      background-color: var(--gmixer-brand-hover) !important;
+      color: var(--gmixer-brand-text) !important;
     }
 
     /* Nested ink nodes inherit the host color we set above so site rules on

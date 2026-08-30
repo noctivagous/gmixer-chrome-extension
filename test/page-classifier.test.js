@@ -13,6 +13,7 @@ import {
   MEDIA_ATTR,
   NATIVE_L_ATTR,
   TONE_STEP_ATTR,
+  CANVAS_WASH_ATTR,
 } from '../src/content/page-classifier.js';
 
 function el(tag, attrs = {}, children = []) {
@@ -203,13 +204,51 @@ describe('page-classifier', () => {
       opacity: '1',
       zIndex: '10',
       transform: 'none',
-      backgroundColor: node === semantic ? 'rgb(30, 30, 30)' : 'rgba(0, 0, 0, 0)',
+      backgroundColor: node === semantic ? 'rgb(30, 30, 30)' : 'rgb(20, 20, 20)',
       backgroundImage: 'none',
+      backdropFilter: 'none',
+      webkitBackdropFilter: 'none',
     });
     try {
       assert.equal(isOverlayPanel(semantic), true);
       assert.equal(isOverlayPanel(windowsCentral), true);
       assert.equal(classifyElement(windowsCentral)?.role, 'surface');
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('rejects transparent parallax floaters as overlay panels', () => {
+    // Opera GX .parallax__floating-container — absolute, huge, no native fill.
+    const floater = el('div', { class: 'parallax__floating-container' });
+    floater.getBoundingClientRect = () => ({
+      width: 1644,
+      height: 950,
+      top: 200,
+      left: 100,
+      right: 1744,
+      bottom: 1150,
+    });
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1900, innerHeight: 1000 };
+    globalThis.getComputedStyle = () => ({
+      position: 'absolute',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: 'auto',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+      backdropFilter: 'none',
+      webkitBackdropFilter: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(floater), false);
+      assert.equal(classifyElement(floater), null);
     } finally {
       globalThis.getComputedStyle = previousCs;
       globalThis.window = previousWin;
@@ -833,6 +872,83 @@ describe('page-classifier', () => {
       assert.equal(stampOpaquePaintTargets(root), 0);
       assert.equal(panel.hasAttribute(NATIVE_L_ATTR), false);
     } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('does not seed HF-style page-matching gradient washes as sheets', () => {
+    // from-gray-50-to-white side rails: transparent solid + near-white gradient.
+    const rail = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'from-gray-50-to-white lg:bg-linear-to-l' }),
+      getBoundingClientRect: () => ({
+        width: 240,
+        height: 900,
+        top: 100,
+        left: 200,
+        right: 440,
+        bottom: 1000,
+      }),
+      querySelector: () => null,
+      _bg: 'rgba(0, 0, 0, 0)',
+      _bgImage:
+        'linear-gradient(to left, oklch(0.985 0.002 247.839) 0%, rgb(255, 255, 255) 100%)',
+    };
+    const brand = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'masthead-gradient' }),
+      getBoundingClientRect: () => ({
+        width: 1200,
+        height: 200,
+        top: 0,
+        left: 0,
+        right: 1200,
+        bottom: 200,
+      }),
+      querySelector: () => null,
+      _bg: 'rgba(0, 0, 0, 0)',
+      _bgImage: 'linear-gradient(90deg, rgb(255, 100, 40) 0%, rgb(200, 40, 120) 100%)',
+    };
+    const body = {
+      tagName: 'BODY',
+      nodeType: 1,
+      children: [rail, brand],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({ width: 1400, height: 1200 }),
+      querySelectorAll: (selector) => {
+        if (String(selector).includes('section') || String(selector).includes('main')) return [];
+        if (String(selector).includes('div')) return [rail, brand];
+        return [];
+      },
+      _bg: 'rgb(255, 255, 255)',
+    };
+    rail.parentElement = body;
+    brand.parentElement = body;
+
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1400, innerHeight: 900 };
+    globalThis.document = { body, documentElement: body };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: node._bgImage || 'none',
+    });
+
+    try {
+      const stamped = seedPageSheets(body);
+      assert.equal(rail.getAttribute(ROLE_ATTR), null);
+      assert.equal(rail.hasAttribute(CANVAS_WASH_ATTR), true);
+      assert.equal(brand.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(brand.hasAttribute(CANVAS_WASH_ATTR), false);
+      assert.equal(stamped, 1);
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
       globalThis.getComputedStyle = previousCs;
     }
   });
