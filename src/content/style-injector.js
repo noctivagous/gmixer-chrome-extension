@@ -12,7 +12,9 @@ import {
   resolveEffectivePalette,
 } from '../lib/effective-palette.js';
 import {
+  COLOR_CAST_ROLE_BY_PRESET,
   normalizeImageFilter,
+  paletteHexForFilterPreset,
   resolveImageFilterPreset,
 } from '../config/image-filter-presets.js';
 import { normalizeEffects } from '../config/effects-catalog.js';
@@ -30,10 +32,13 @@ export {
   PALETTE_FILTER_PRESETS,
   resolveImageFilterPreset,
   normalizeImageFilter,
+  paletteHexForFilterPreset,
 } from '../config/image-filter-presets.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
 const HOST_STYLE_ID = 'gmixer-settings-host-style';
+/** Marks html/body when we force canvas paint via inline !important. */
+const DOC_CANVAS_INLINE_ATTR = 'data-gmixer-doc-canvas';
 /** Page overlay paint must not hit our Popover API hosts. */
 const GMIXER_UI_HOST_NOT = ':not(#gmixer-settings):not(#gmixer-walkthrough-host)';
 
@@ -116,6 +121,12 @@ function hueRotateFromSepia(hex) {
   return Math.round(((hue - 35) % 360 + 360) % 360);
 }
 
+/** Full palette color cast (same weight as link-wash / duotone). */
+function colorCastFilterCss(hex) {
+  const rotate = hueRotateFromSepia(hex);
+  return `grayscale(1) sepia(1) hue-rotate(${rotate}deg) saturate(1.4)`;
+}
+
 /**
  * @param {string} preset
  * @param {{ accent?: string, link?: string, isDark?: boolean }} palette
@@ -142,10 +153,20 @@ export function imageFilterPresetCss(preset, palette, customFilter, options = {}
     'link-wash': `grayscale(1) sepia(1) hue-rotate(${linkRotate}deg) saturate(1.4)`,
     custom: customFilter || 'none',
   };
-  return presets[resolved] ?? 'none';
+  if (presets[resolved]) return presets[resolved];
+  if (COLOR_CAST_ROLE_BY_PRESET[resolved]) {
+    const hex = paletteHexForFilterPreset(resolved, palette) || palette.accent;
+    return colorCastFilterCss(hex);
+  }
+  return 'none';
 }
 
-function backgroundOverlayForPreset(preset, palette) {
+/**
+ * Background-image overlay recipe for a Chroming Media preset.
+ * @param {string} preset
+ * @param {Record<string, string|boolean|undefined>} palette
+ */
+export function backgroundOverlayForPreset(preset, palette) {
   if (preset === 'invert') {
     return { color: '#ffffff', blend: 'difference', opacity: 1 };
   }
@@ -157,6 +178,10 @@ function backgroundOverlayForPreset(preset, palette) {
   }
   if (preset === 'link-wash') {
     return { color: palette.link || palette.accent, blend: 'color', opacity: 0.72 };
+  }
+  if (COLOR_CAST_ROLE_BY_PRESET[preset]) {
+    const color = paletteHexForFilterPreset(preset, palette) || palette.accent || '#808080';
+    return { color, blend: 'color', opacity: 0.72 };
   }
   return { color: '#808080', blend: 'saturation', opacity: 0.72 };
 }
@@ -870,8 +895,11 @@ function roleCss(
   return `
     ${themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, brandFamily)}
 
+    /* Document canvas: clear native body/html gradients (Gan Jing World light
+       wash, etc.) so bg:primary is not covered by background-image. */
     html, body {
       background-color: var(--gmixer-bg) !important;
+      background-image: none !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -905,11 +933,12 @@ function roleCss(
     }
 
     /* Compact controls use the GUI surface. Include a.button CTAs (Opera GX
-       Download) so the generic transparent-link rule does not wipe them. */
+       Download) so the generic transparent-link rule does not wipe them.
+       Tabs that had a native chip fill (often faint alpha) keep GUI too. */
     ${maybeOpaque(`body input, body textarea, body select, body button,
     body a.button, body a.btn, body a[class~="button"],
     body [role="textbox"], body [role="searchbox"], body [role="combobox"],
-    body [role="button"], body [contenteditable="true"]`)} {
+    body [role="button"], body [role="tab"], body [contenteditable="true"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
       color: var(--gmixer-text) !important;
     }
@@ -1129,6 +1158,13 @@ function roleCss(
     a, a:link, a:visited {
       color: var(--gmixer-link) !important;
       background-color: transparent !important;
+    }
+
+    /* Tab chips that had a native fill: GUI wins over the transparent-link wipe.
+       Later than the bare anchor rule so equal-origin !important favors tabs. */
+    ${maybeOpaque(`body a[role="tab"], body [role="tab"]`)} {
+      background-color: var(--gmixer-surface-gui) !important;
+      color: var(--gmixer-text) !important;
     }
 
     /* CTA / button-styled anchors keep a GUI surface (Opera GX Download). */
@@ -1465,6 +1501,52 @@ export function buildCss(resolved, pageSample = null) {
 /** Shared constructed sheet adopted into open shadow roots. */
 let adoptedSheet = null;
 
+/**
+ * Clear inline document-canvas overrides we previously set.
+ * Safe to call when theming is off or during native-style suspension.
+ */
+export function clearDocumentCanvasInline() {
+  if (typeof document === 'undefined') return;
+  for (const el of [document.documentElement, document.body]) {
+    if (!el?.hasAttribute?.(DOC_CANVAS_INLINE_ATTR)) continue;
+    el.style.removeProperty('background-color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('color');
+    el.removeAttribute(DOC_CANVAS_INLINE_ATTR);
+  }
+}
+
+/**
+ * Force html/body canvas colors with inline !important.
+ * Needed when sites use cascade @layer !important washes (Gan Jing World)
+ * that beat unlayered stylesheet rules — including our html, body block.
+ * Reads theme tokens from :root after the override sheet is in the DOM.
+ */
+export function syncDocumentCanvasInline() {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return;
+  const root = document.documentElement;
+  if (!root || !document.getElementById(STYLE_ELEMENT_ID)) {
+    clearDocumentCanvasInline();
+    return;
+  }
+  const cs = getComputedStyle(root);
+  const bg =
+    cs.getPropertyValue('--gmixer-bg-primary').trim() ||
+    cs.getPropertyValue('--gmixer-bg').trim();
+  const text = cs.getPropertyValue('--gmixer-text').trim();
+  if (!bg) {
+    clearDocumentCanvasInline();
+    return;
+  }
+  for (const el of [root, document.body]) {
+    if (!el) continue;
+    el.style.setProperty('background-color', bg, 'important');
+    el.style.setProperty('background-image', 'none', 'important');
+    if (text) el.style.setProperty('color', text, 'important');
+    el.setAttribute(DOC_CANVAS_INLINE_ATTR, '');
+  }
+}
+
 export function injectStyle(css) {
   let styleEl = document.getElementById(STYLE_ELEMENT_ID);
   if (!styleEl) {
@@ -1482,6 +1564,8 @@ export function injectStyle(css) {
   // restyle [popover]/[role="dialog"] chrome. Keep gMixer UI last.
   const hostStyle = document.getElementById(HOST_STYLE_ID);
   if (hostStyle && hostStyle !== styleEl) parent.appendChild(hostStyle);
+  // Inline canvas beats layered site !important (stylesheet alone can lose).
+  syncDocumentCanvasInline();
 }
 
 /**
@@ -1494,6 +1578,7 @@ export function syncAdoptedTheme() {
 }
 
 export function removeStyle() {
+  clearDocumentCanvasInline();
   document.getElementById(STYLE_ELEMENT_ID)?.remove();
   if (adoptedSheet && typeof document !== 'undefined') {
     adoptIntoOpenShadows({ remove: true });

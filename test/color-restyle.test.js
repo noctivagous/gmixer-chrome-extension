@@ -406,7 +406,7 @@ describe('buildCss page paint', () => {
     assert.match(css, /corner-shape: inherit !important/);
     assert.match(
       css,
-      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*\}[\s\S]*body > header\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)[\s\S]*background-color: var\(--gmixer-surface-1\)/
+      /html, body \{[\s\S]*background-color: var\(--gmixer-bg\)[\s\S]*background-image: none !important;[\s\S]*\}[\s\S]*body > header\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-bg-secondary\)[\s\S]*body input\[data-gmixer-native-l\][\s\S]*background-color: var\(--gmixer-surface-gui\)[\s\S]*body \.card\[data-gmixer-native-l\]:not\(\[data-gmixer-bgimg\]\)[\s\S]*background-color: var\(--gmixer-surface-1\)/
     );
     // Opaque mains get elevated fill; layout-only mains stay unpainted.
     assert.match(
@@ -577,6 +577,17 @@ describe('buildCss page paint', () => {
     );
   });
 
+  it('paints role=tab chips that had a native fill with the GUI surface', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(css, /body \[role="tab"\]\[data-gmixer-native-l\]/);
+    assert.match(
+      css,
+      /body a\[role="tab"\]\[data-gmixer-native-l\],[\s\S]*body \[role="tab"\]\[data-gmixer-native-l\] \{[\s\S]*background-color: var\(--gmixer-surface-gui\)/
+    );
+    // Transparent-link wipe still exists, but the later tab rule restores GUI.
+    assert.match(css, /a, a:link, a:visited \{[\s\S]*background-color: transparent !important;/);
+  });
+
   it('clears header/nav/footer CSS gradients so brand mastheads follow Tone', () => {
     const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(
@@ -726,6 +737,29 @@ describe('buildCss page paint', () => {
     );
   });
 
+  it('emits surface color casts (bg:secondary) when Color is on', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.sections.color = true;
+    global.imageFilter.enabled = true;
+    global.color.baseColor = '#3366ff';
+    global.color.scheme = 'complement';
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'bg:secondary',
+      bgImages: 'bg:secondary',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
+    const css = buildCss(global, null);
+    assert.match(
+      css,
+      /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\) sepia\(1\) hue-rotate\(\d+deg\) saturate\(1\.4\)/
+    );
+    assert.match(css, /mix-blend-mode: color/);
+    assert.doesNotMatch(css, /background: #808080 !important/);
+  });
+
   it('falls palette washes back to monochrome when Color is off', () => {
     const global = createDefaultState().global;
     global.sections.filter = true;
@@ -745,6 +779,25 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /sepia\(0\.55\)/);
     assert.match(css, /mix-blend-mode: saturation/);
     assert.match(css, /background: #808080 !important/);
+  });
+
+  it('falls surface color casts back to monochrome when Color is off', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.sections.color = false;
+    global.sections.tone = false;
+    global.imageFilter.enabled = true;
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'bg:secondary',
+      bgImages: 'surface:gui',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
+    const css = buildCss(global, null);
+    assert.match(css, /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\) contrast/);
+    assert.doesNotMatch(css, /sepia\(1\) hue-rotate/);
+    assert.match(css, /mix-blend-mode: saturation/);
   });
 
   it('omits media CSS when the Media section is off', () => {

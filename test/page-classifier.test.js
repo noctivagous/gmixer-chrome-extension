@@ -876,6 +876,56 @@ describe('page-classifier', () => {
     }
   });
 
+  it('stamps faint native chip fills on role=tab', () => {
+    const tab = {
+      tagName: 'A',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ role: 'tab', class: 'home-tag' }),
+      closest: () => null,
+    };
+    const root = {
+      querySelectorAll: (selector) =>
+        String(selector).includes('[role="tab"]') ? [tab] : [],
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundColor: 'rgba(0, 0, 0, 0.05)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 1);
+      assert.ok(tab.hasAttribute(NATIVE_L_ATTR));
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('keeps a prior role=tab native-l stamp when theme paint hides the chip tint', () => {
+    const tab = {
+      tagName: 'A',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ role: 'tab', [NATIVE_L_ATTR]: '0.9500' }),
+      closest: () => null,
+    };
+    const root = {
+      querySelectorAll: (selector) =>
+        String(selector).includes('[role="tab"]') ? [tab] : [],
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 0);
+      assert.equal(tab.getAttribute(NATIVE_L_ATTR), '0.9500');
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
   it('does not seed HF-style page-matching gradient washes as sheets', () => {
     // from-gray-50-to-white side rails: transparent solid + near-white gradient.
     const rail = {

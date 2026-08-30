@@ -835,6 +835,7 @@ const OPAQUE_PAINT_TARGET_SELECTORS = [
   'body [role="searchbox"]',
   'body [role="combobox"]',
   'body [role="button"]',
+  'body [role="tab"]',
   'body [contenteditable="true"]',
   `[${ROLE_ATTR}="main"]`,
   `[${ROLE_ATTR}="article"]`,
@@ -869,8 +870,15 @@ export function stampOpaquePaintTargets(root = document.body) {
   for (const el of nodes) {
     if (isOwnedByGmixer(el)) continue;
     const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
-    if (style && isOpaqueBackground(el, style)) {
+    const isTab = el.getAttribute?.('role') === 'tab';
+    if (
+      style &&
+      (isOpaqueBackground(el, style) || (isTab && hasTabChipFill(style)))
+    ) {
       toStamp.push({ el, style });
+    } else if (isTab && el.hasAttribute?.(NATIVE_L_ATTR)) {
+      // Incremental passes run with the theme sheet on; our tab GUI fill
+      // hides the native chip tint. Keep a prior stamp instead of clearing.
     } else {
       toClear.push(el);
     }
@@ -934,6 +942,19 @@ function isOpaqueBackground(el, style) {
   // Opaque-only means a meaningful native sheet, not a barely visible tint.
   if (rgba ? rgba.a >= 0.5 : bg && bg !== 'transparent') return true;
   // Brand chrome often paints with linear-gradient and a transparent color.
+  return hasCssGradientFill(style.backgroundImage || '');
+}
+
+/**
+ * Tab chips (Gan Jing `.home-tag-menu [role=tab]`) often use a faint tint
+ * (~5% alpha) that is not an opaque sheet but should still keep a themed fill.
+ * @param {CSSStyleDeclaration} style
+ */
+function hasTabChipFill(style) {
+  const bg = style.backgroundColor || '';
+  const rgba = rgbaFromCss(bg);
+  if (rgba && rgba.a >= 0.02) return true;
+  if (!rgba && bg && bg !== 'transparent') return true;
   return hasCssGradientFill(style.backgroundImage || '');
 }
 

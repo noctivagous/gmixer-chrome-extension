@@ -171,8 +171,8 @@ export class ImageFilterPanel extends StoreBoundElement {
       </p>
       ${!colorOn
         ? html`<p class="hint">
-            Color is off — accent tint, link wash, and duotone paint as monochrome until Color is
-            enabled.
+            Color is off — accent tint, link wash, duotone, and surface color casts paint as
+            monochrome until Color is enabled.
           </p>`
         : html``}
 

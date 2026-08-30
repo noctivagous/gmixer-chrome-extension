@@ -1,10 +1,44 @@
 /** Chroming Media presets + primary category catalog. */
 
-/** Presets that need Color-section palette roles (accent / link). */
-export const PALETTE_FILTER_PRESETS = new Set(['duotone', 'accent-tint', 'link-wash']);
+/**
+ * Palette-role color casts shown at the bottom of Chroming Media dropdowns.
+ * Ids mirror Color swatch labels (`bg:secondary`, `surface:gui`, …).
+ * @type {ReadonlyArray<{ id: string, label: string, role: string, requiresColor: true }>}
+ */
+export const COLOR_CAST_PRESETS = [
+  { id: 'bg:primary', label: 'bg:primary', role: 'background', requiresColor: true },
+  { id: 'bg:secondary', label: 'bg:secondary', role: 'backgroundSecondary', requiresColor: true },
+  { id: 'surface:gui', label: 'surface:gui', role: 'surfaceGui', requiresColor: true },
+  {
+    id: 'surface:containers',
+    label: 'surface:containers',
+    role: 'surfaceContainers',
+    requiresColor: true,
+  },
+  { id: 'text', label: 'text', role: 'text', requiresColor: true },
+  { id: 'muted', label: 'muted', role: 'muted', requiresColor: true },
+  { id: 'accent', label: 'accent', role: 'accent', requiresColor: true },
+  { id: 'link', label: 'link', role: 'link', requiresColor: true },
+  { id: 'nav', label: 'nav', role: 'navLink', requiresColor: true },
+  { id: 'border', label: 'border', role: 'border', requiresColor: true },
+  { id: 'focus', label: 'focus', role: 'focus', requiresColor: true },
+];
+
+/** @type {Readonly<Record<string, string>>} */
+export const COLOR_CAST_ROLE_BY_PRESET = Object.freeze(
+  Object.fromEntries(COLOR_CAST_PRESETS.map((preset) => [preset.id, preset.role]))
+);
+
+/** Presets that need Color-section palette roles (accent / link / surfaces). */
+export const PALETTE_FILTER_PRESETS = new Set([
+  'duotone',
+  'accent-tint',
+  'link-wash',
+  ...COLOR_CAST_PRESETS.map((preset) => preset.id),
+]);
 
 /**
- * @typedef {'none' | 'grayscale' | 'sepia' | 'invert' | 'monochrome' | 'duotone' | 'accent-tint' | 'link-wash' | 'custom'} ImageFilterPresetId
+ * @typedef {string} ImageFilterPresetId
  * @typedef {'articleImages' | 'images' | 'bgImages' | 'videos' | 'videoPlayback'} MediaFilterCategoryId
  * @typedef {Record<MediaFilterCategoryId, ImageFilterPresetId>} MediaFilterCategories
  * @typedef {{
@@ -27,8 +61,43 @@ export const IMAGE_FILTER_PRESETS = [
   { id: 'duotone', label: 'duotone', requiresColor: true },
   { id: 'accent-tint', label: 'accent tint', requiresColor: true },
   { id: 'link-wash', label: 'link wash', requiresColor: true },
+  // Surface / role color casts sit at the bottom of the list (before custom).
+  ...COLOR_CAST_PRESETS,
   { id: 'custom', label: 'custom' },
 ];
+
+/**
+ * Resolve the palette hex a Chroming Media preset should cast toward.
+ * @param {string} preset
+ * @param {Record<string, string|boolean|undefined>|null|undefined} palette
+ * @returns {string|null}
+ */
+export function paletteHexForFilterPreset(preset, palette) {
+  if (!palette || typeof palette !== 'object') return null;
+  if (preset === 'duotone' || preset === 'accent-tint' || preset === 'sepia') {
+    return typeof palette.accent === 'string' ? palette.accent : null;
+  }
+  if (preset === 'link-wash') {
+    if (typeof palette.link === 'string' && palette.link) return palette.link;
+    return typeof palette.accent === 'string' ? palette.accent : null;
+  }
+  const role = COLOR_CAST_ROLE_BY_PRESET[preset];
+  if (!role) return null;
+  const direct = palette[role];
+  if (typeof direct === 'string' && direct) return direct;
+  // Legacy alias: older palettes expose `surface` for GUI.
+  if (role === 'surfaceGui' && typeof palette.surface === 'string' && palette.surface) {
+    return palette.surface;
+  }
+  if (role === 'link' && typeof palette.accent === 'string' && palette.accent) {
+    return palette.accent;
+  }
+  if (role === 'navLink') {
+    if (typeof palette.link === 'string' && palette.link) return palette.link;
+    if (typeof palette.accent === 'string' && palette.accent) return palette.accent;
+  }
+  return null;
+}
 
 /** Level 3 detailed category dropdowns (includes Auto). */
 export const DETAILED_CATEGORY_PRESETS = [

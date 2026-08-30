@@ -1333,7 +1333,9 @@ export class GmixerWalkthrough extends StoreBoundElement {
     const themeMode = mode || this.state?.global?.themeMode || 'dark';
     const hsl = hexToHsl(this.state?.global?.color?.baseColor || '#8a8a8a');
     const defaults = COLOR_SCHEME_HSL_BY_TONE[themeMode] || COLOR_SCHEME_HSL_BY_TONE.dark;
-    return hslToHex({ h: hsl.h, s: defaults.s, l: defaults.l });
+    // Gray has H=0; use blue (210°) instead of red when Color is enabled.
+    const h = hsl.s < 5 ? 210 : hsl.h;
+    return hslToHex({ h, s: defaults.s, l: defaults.l });
   }
 
   _setScheme(schemeId) {

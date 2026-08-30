@@ -7,11 +7,15 @@ import { createDefaultState } from '../../state/schema.js';
 import { effectiveRoleColors, roleColors } from './palette-swatches.js';
 import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
 import { buildPreviewTextureCss, previewTextureActive } from '../../lib/preview-texture-css.js';
-import { imageFilterPresetCss } from '../../content/style-injector.js';
+import {
+  backgroundOverlayForPreset,
+  imageFilterPresetCss,
+} from '../../content/style-injector.js';
 import {
   PALETTE_FILTER_PRESETS,
   normalizeImageFilter,
   IMAGE_FILTER_PRESETS,
+  resolveImageFilterPreset,
 } from '../../config/image-filter-presets.js';
 import { defineElement } from '../../lib/define-element.js';
 import {
@@ -964,23 +968,12 @@ export class ThemePreviewPanel extends StoreBoundElement {
     };
     const articleFilterCss = cssForCategory('articleImages');
     const videosFilterCss = cssForCategory('videos');
-    const bgFilterPreset = chromingOn ? cats.bgImages : 'none';
+    const bgFilterPreset = chromingOn
+      ? resolveImageFilterPreset(cats.bgImages, colorOn)
+      : 'none';
     const bgOverlay =
       bgFilterPreset && bgFilterPreset !== 'none'
-        ? (() => {
-            const resolved = bgFilterPreset;
-            if (resolved === 'invert') return { color: '#ffffff', blend: 'difference', opacity: 1 };
-            if (resolved === 'duotone' || resolved === 'sepia') {
-              return { color: colors.accent, blend: 'color', opacity: 0.72 };
-            }
-            if (resolved === 'accent-tint') {
-              return { color: colors.accent, blend: 'color', opacity: 0.45 };
-            }
-            if (resolved === 'link-wash') {
-              return { color: colors.link || colors.accent, blend: 'color', opacity: 0.72 };
-            }
-            return { color: '#808080', blend: 'saturation', opacity: 0.72 };
-          })()
+        ? backgroundOverlayForPreset(bgFilterPreset, colors)
         : null;
     const revealOnHover = filterState.revealOnHover;
     const effectsOn = previewEffectsActive(global);

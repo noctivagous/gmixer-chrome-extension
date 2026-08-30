@@ -507,7 +507,9 @@ export class ColorPanel extends StoreBoundElement {
     const mode = this.state?.global?.themeMode || 'dark';
     if (enabled) {
       const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
-      const baseColor = hslToHex({ ...hsl, s: Math.max(hsl.s, 70) });
+      // Gray has H=0; use blue (210°) instead of red when raising saturation.
+      const h = hsl.s < 5 ? 210 : hsl.h;
+      const baseColor = hslToHex({ ...hsl, h, s: Math.max(hsl.s, 70) });
       this.updateGlobal({
         activeThemePackId: 'user-made',
         sections: { color: true },

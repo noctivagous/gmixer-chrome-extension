@@ -11,4 +11,4 @@ restyling is faster.
 
 deferred sections: Texture, Clipping.
 
-0.1.2 - Texturing of pages.
+0.1.1 - Texturing of page, Clipping corners

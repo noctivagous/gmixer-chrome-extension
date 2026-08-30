@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import {
   MEDIA_FILTER_CATEGORIES,
   DEFAULT_MEDIA_FILTER_CATEGORIES,
+  IMAGE_FILTER_PRESETS,
+  COLOR_CAST_PRESETS,
   normalizeImageFilter,
   migrateLegacyImageFilterCategories,
   resolveAutoMediaRoleFilter,
   imageFilterAppliesToBackgrounds,
+  isImageFilterPresetId,
+  paletteHexForFilterPreset,
 } from '../src/config/image-filter-presets.js';
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
@@ -18,6 +22,28 @@ describe('image-filter categories', () => {
       MEDIA_FILTER_CATEGORIES.map((category) => category.id),
       ['articleImages', 'images', 'bgImages', 'videos', 'videoPlayback']
     );
+  });
+
+  it('appends surface color casts at the bottom of the preset list (before custom)', () => {
+    const ids = IMAGE_FILTER_PRESETS.map((preset) => preset.id);
+    assert.equal(ids.at(-1), 'custom');
+    const castIds = COLOR_CAST_PRESETS.map((preset) => preset.id);
+    assert.deepEqual(ids.slice(-(castIds.length + 1), -1), castIds);
+    assert.ok(castIds.includes('bg:secondary'));
+    assert.ok(isImageFilterPresetId('bg:secondary'));
+    assert.ok(isImageFilterPresetId('surface:gui'));
+  });
+
+  it('resolves palette hexes for surface color casts', () => {
+    const palette = {
+      background: '#111111',
+      backgroundSecondary: '#222222',
+      surfaceGui: '#333333',
+      accent: '#3366ff',
+    };
+    assert.equal(paletteHexForFilterPreset('bg:secondary', palette), '#222222');
+    assert.equal(paletteHexForFilterPreset('surface:gui', palette), '#333333');
+    assert.equal(paletteHexForFilterPreset('accent', palette), '#3366ff');
   });
 
   it('migrates legacy preset+scope into categories', () => {
