@@ -9,6 +9,6 @@ setting for each site in cache
 for document_start script so that
 restyling is faster.
 
-suspended sections: Texture, Clipping.
+deferred sections: Texture, Clipping.
 
 0.1.2 - Texturing of pages.
