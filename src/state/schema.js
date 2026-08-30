@@ -205,7 +205,8 @@ export function createDefaultState() {
         settingsFocus: /** @type {SettingsFocus} */ ('theme'),
         // After onboarding, Alt+M / toolbar open this shell.
         preferredShell: /** @type {PreferredShell} */ ('side-panel'),
-        // 1 = Tone…Effects (incl. Texture); 2 = + Preview/Clipping/Nav/Font browser; 3 reserved.
+        // 1 = Tone…Effects; 2 = + Preview/Nav/Font browser; 3 reserved.
+        // Texture + Clipping/Corners deferred for 0.1.0 (see RELEASE-GOALS.md).
         customizationLevel: /** @type {CustomizationLevel} */ (1),
         // On/Off remembered for sections forced off when level drops beneath them.
         customizationLevelSectionMemory: /** @type {Record<string, boolean>} */ ({}),

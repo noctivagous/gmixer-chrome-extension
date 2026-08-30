@@ -14,6 +14,7 @@ import {
   WALKTHROUGH_SLIDES,
   customizationLevelSelectStyles,
   effectiveCustomizationLevel,
+  isDeferredSection,
   patchForCustomizationLevel,
   renderCustomizationLevelSelect,
   visibleWalkthroughSlides,
@@ -1008,7 +1009,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
     /** @type {number[]} */
     const indexes = [];
     WALKTHROUGH_SLIDES.forEach((slide, index) => {
-      if (slide.level <= level) indexes.push(index);
+      if (!isDeferredSection(slide.id) && slide.level <= level) indexes.push(index);
     });
     return indexes;
   }

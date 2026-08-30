@@ -169,6 +169,16 @@ describe('preview-texture-css', () => {
     );
   });
 
+  it('is inactive while Texture is deferred for 0.1.0 even if the section is on', () => {
+    assert.equal(
+      previewTextureActive({
+        sections: { texture: true },
+        texture: { mode: 'noise', surfaces: { 'gui.button': true } },
+      }),
+      false
+    );
+  });
+
   it('emits scoped rules for enabled fill and text surfaces', () => {
     const css = buildPreviewTextureCss({
       mode: 'noise',
@@ -240,18 +250,13 @@ describe('texture-page-css', () => {
     assert.match(css, /mix-blend-mode:\s*soft-light\s*!important/);
   });
 
-  it('buildCss includes texture rules only when the Texture section is on', () => {
+  it('buildCss omits texture rules while Texture is deferred for 0.1.0', () => {
     const global = createDefaultState().global;
-    global.sections.texture = false;
+    global.sections.texture = true;
     global.texture = {
       mode: 'noise',
       surfaces: { 'gui.button': true },
     };
     assert.doesNotMatch(buildCss(global, null), /body button[\s\S]*background-blend-mode/);
-
-    global.sections.texture = true;
-    const css = buildCss(global, null);
-    assert.match(css, /body button/);
-    assert.match(css, /background-blend-mode:\s*soft-light\s*!important/);
   });
 });

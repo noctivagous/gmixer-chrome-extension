@@ -9,6 +9,8 @@ setting for each site in cache
 for document_start script so that
 restyling is faster.
 
-deferred sections: Texture, Clipping.
+deferred sections: Texture, Clipping/Corners.
 
-0.1.1 - Texturing of page, Clipping corners
+0.1.1 - Texturing of page, Clipping/Corners.
+Minimum/maximum values for Typography
+groups.

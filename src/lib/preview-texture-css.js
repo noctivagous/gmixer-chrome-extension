@@ -5,12 +5,15 @@ import {
   texturePatternDeclarations,
   textureSurfaceEnabled,
 } from '../config/texture-catalog.js';
+import { isDeferredSection } from '../settings/customization-level.js';
 
 /**
  * Whether Live Preview should inject texture CSS for this global state.
  * @param {object|null|undefined} global
  */
 export function previewTextureActive(global) {
+  // Texture UI/paint suspended for 0.1.0 (RELEASE-GOALS.md); return in 0.1.1.
+  if (isDeferredSection('texture')) return false;
   if (!global || global.sections?.texture !== true) return false;
   const texture = normalizeTexture(global.texture);
   if (texture.mode === 'none') return false;

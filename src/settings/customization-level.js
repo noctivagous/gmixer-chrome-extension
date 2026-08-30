@@ -12,20 +12,34 @@ export const CUSTOMIZATION_LEVEL_OPTIONS = [
 /**
  * Minimum customization level required to show each settings/walkthrough section.
  * Level 3 is reserved (no sections yet).
+ * Texture + Clipping/Corners stay catalogued here for 0.1.1 but are suspended
+ * via {@link DEFERRED_SECTION_IDS} for release 0.1.0 (see RELEASE-GOALS.md).
  * @type {Readonly<Record<string, CustomizationLevel>>}
  */
 export const SECTION_CUSTOMIZATION_LEVEL = {
   tone: 1,
   color: 1,
-  texture: 1,
+  texture: 1, // deferred 0.1.0 → return 0.1.1
   filter: 1,
   fonts: 1,
   effects: 1,
   preview: 2,
-  shape: 2,
+  shape: 2, // Clipping / Corners — deferred 0.1.0 → return 0.1.1
   navigation: 2,
   'font-browser': 2,
 };
+
+/**
+ * Settings / walkthrough / page-paint sections suspended for 0.1.0.
+ * Remove an id here (and keep its customization level) to restore it in 0.1.1.
+ * @type {ReadonlySet<string>}
+ */
+export const DEFERRED_SECTION_IDS = new Set(['texture', 'shape']);
+
+/** @param {string} sectionId */
+export function isDeferredSection(sectionId) {
+  return DEFERRED_SECTION_IDS.has(sectionId);
+}
 
 /** Sections with an On/Off switch whose enablement is remembered across level drops. */
 const SECTIONS_WITH_ENABLE_MEMORY = new Set([
@@ -40,17 +54,19 @@ const SECTIONS_WITH_ENABLE_MEMORY = new Set([
 
 /**
  * Walkthrough tab order: Level 1, then Level 2 in Settings order.
+ * Texture and Clipping/Corners remain listed for 0.1.1 restore order;
+ * {@link visibleWalkthroughSlides} hides them while deferred.
  * @type {ReadonlyArray<{ id: string, label: string, level: CustomizationLevel }>}
  */
 export const WALKTHROUGH_SLIDES = [
   { id: 'tone', label: 'Tone', level: 1 },
   { id: 'color', label: 'Color Scheme', level: 1 },
-  { id: 'texture', label: 'Texture', level: 1 },
+  { id: 'texture', label: 'Texture', level: 1 }, // deferred 0.1.0
   { id: 'filter', label: 'Chroming Media', level: 1 },
   { id: 'fonts', label: 'Typography', level: 1 },
   { id: 'effects', label: 'Effects', level: 1 },
   { id: 'preview', label: 'Theme Preview', level: 2 },
-  { id: 'shape', label: 'Clipping / Corners', level: 2 },
+  { id: 'shape', label: 'Clipping / Corners', level: 2 }, // deferred 0.1.0
   { id: 'navigation', label: 'Navigation', level: 2 },
   { id: 'font-browser', label: 'Font browser', level: 2 },
 ];
@@ -113,6 +129,7 @@ export function sectionCustomizationLevel(sectionId) {
  * @param {CustomizationLevel|number} level
  */
 export function sectionVisibleAtLevel(sectionId, level) {
+  if (isDeferredSection(sectionId)) return false;
   return sectionCustomizationLevel(sectionId) <= level;
 }
 
@@ -138,7 +155,9 @@ export function filterSectionsByCustomizationLevel(sections, level) {
  * @param {CustomizationLevel|number} level
  */
 export function visibleWalkthroughSlides(level) {
-  return WALKTHROUGH_SLIDES.filter((slide) => slide.level <= level);
+  return WALKTHROUGH_SLIDES.filter(
+    (slide) => !isDeferredSection(slide.id) && slide.level <= level
+  );
 }
 
 /**
@@ -183,6 +202,7 @@ export function patchForCustomizationLevel(fromLevel, toLevel, global) {
   };
 
   for (const id of SECTIONS_WITH_ENABLE_MEMORY) {
+    if (isDeferredSection(id)) continue;
     const minLevel = sectionCustomizationLevel(id);
     const wasVisible = minLevel <= from;
     const willBeVisible = minLevel <= to;

@@ -239,6 +239,8 @@ const SECTION_ART = {
 /**
  * Accordion order: Theme Preview first, then Tone → Color Scheme → Texture →
  * Media → Typography → Clipping/Corners → Effects → Navigation → Font browser.
+ * Texture + Clipping/Corners stay in this list for restore order but are
+ * filtered out while deferred (0.1.0 → return 0.1.1; see RELEASE-GOALS.md).
  *
  * Header On/Off is persisted section enablement (page effects).
  * Expand/collapse is local UI state only — never the same bit.
@@ -249,14 +251,14 @@ const SECTIONS = [
   { id: 'preview', label: 'Theme Preview', tags: ['gmixer-theme-preview-panel'] },
   { id: 'tone', label: 'Tone', tags: ['gmixer-color-panel'] },
   { id: 'color', label: 'Color Scheme', tags: ['gmixer-color-panel'] },
-  { id: 'texture', label: 'Texture', tags: ['gmixer-texture-panel'] },
+  { id: 'texture', label: 'Texture', tags: ['gmixer-texture-panel'] }, // deferred 0.1.0
   { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'fonts', label: 'Typography', tags: ['gmixer-fonts-panel'] },
   {
     id: 'shape',
     label: 'Clipping / Corners',
     tags: ['gmixer-clipping-panel', 'gmixer-corners-panel'],
-  },
+  }, // deferred 0.1.0
   { id: 'effects', label: 'Effects', tags: ['gmixer-effects-panel'] },
   { id: 'navigation', label: 'Navigation', tags: ['gmixer-navigation-panel'] },
   { id: 'font-browser', label: 'Font browser', tags: ['gmixer-font-browser'] },
