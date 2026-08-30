@@ -133,6 +133,16 @@ export function createDefaultState() {
         cursor: { enabled: false, style: 'default' },
         backgroundMotion: { enabled: false },
       },
+      // Surface texture shell (Stage 1: UI/state only — no page paint yet).
+      texture: {
+        mode: /** @type {'none' | 'noise' | 'grid'} */ ('none'),
+        xDistance: 12,
+        yDistance: 12,
+        gridRotation: 0,
+        gridStyle: /** @type {'diamond-x' | 'diamond-y' | 'rect-dots' | 'square-dots'} */ (
+          'square-dots'
+        ),
+      },
       navigation: {
         enabled: false, // master opt-in switch — off by default
         clickElement: true,
@@ -148,6 +158,7 @@ export function createDefaultState() {
         tone: true,
         filter: false,
         color: false,
+        texture: false,
         fonts: false,
         shape: false,
         effects: false,
@@ -165,7 +176,7 @@ export function createDefaultState() {
         settingsFocus: /** @type {SettingsFocus} */ ('theme'),
         // After onboarding, Alt+M / toolbar open this shell.
         preferredShell: /** @type {PreferredShell} */ ('side-panel'),
-        // 1 = Tone…Effects; 2 = + Preview/Clipping/Nav/Font browser; 3 reserved.
+        // 1 = Tone…Effects (incl. Texture); 2 = + Preview/Clipping/Nav/Font browser; 3 reserved.
         customizationLevel: /** @type {CustomizationLevel} */ (1),
         // On/Off remembered for sections forced off when level drops beneath them.
         customizationLevelSectionMemory: /** @type {Record<string, boolean>} */ ({}),

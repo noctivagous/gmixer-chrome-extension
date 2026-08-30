@@ -15,6 +15,7 @@ const SECTIONS = [
   { id: 'preview' },
   { id: 'tone' },
   { id: 'color' },
+  { id: 'texture' },
   { id: 'filter' },
   { id: 'fonts' },
   { id: 'shape' },
@@ -40,7 +41,7 @@ describe('customization-level', () => {
   it('Level 1 shows only Tone…Effects sections', () => {
     assert.deepEqual(
       filterSectionsByCustomizationLevel(SECTIONS, 1).map((section) => section.id),
-      ['tone', 'color', 'filter', 'fonts', 'effects']
+      ['tone', 'color', 'texture', 'filter', 'fonts', 'effects']
     );
   });
 
@@ -58,10 +59,10 @@ describe('customization-level', () => {
     );
   });
 
-  it('walkthrough Level 1 is the original five tabs', () => {
+  it('walkthrough Level 1 includes Texture after Color Scheme', () => {
     assert.deepEqual(
       visibleWalkthroughSlides(1).map((slide) => slide.label),
-      ['Tone', 'Color Scheme', 'Chroming Media', 'Typography', 'Effects']
+      ['Tone', 'Color Scheme', 'Texture', 'Chroming Media', 'Typography', 'Effects']
     );
   });
 

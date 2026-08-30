@@ -24,6 +24,7 @@ const FIELD_STORAGE_AREAS = {
   clipping: 'sync',
   corners: 'sync',
   effects: 'sync',
+  texture: 'sync',
   navigation: 'sync',
   sections: 'sync',
   // Panel chrome (open, scroll, accordion expand) — local so every open tab

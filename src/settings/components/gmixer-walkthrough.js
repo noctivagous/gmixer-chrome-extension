@@ -32,6 +32,7 @@ import {
 import '../../popup/components/image-filter-panel.js';
 import '../../popup/components/fonts-panel.js';
 import '../../popup/components/effects-panel.js';
+import '../../popup/components/texture-panel.js';
 import '../../popup/components/theme-preview-panel.js';
 import '../../popup/components/clipping-panel.js';
 import '../../popup/components/corners-panel.js';
@@ -137,6 +138,14 @@ function walkthroughTabIcon(slideId) {
       <circle cx="8" cy="9" r=".6" fill="currentColor" stroke="none" />
       <circle cx="12" cy="7" r=".6" fill="currentColor" stroke="none" />
       <circle cx="16" cy="9" r=".6" fill="currentColor" stroke="none" />
+    `,
+    texture: svg`
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="16" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="16" r="1" fill="currentColor" stroke="none" />
     `,
     filter: svg`
       <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -1157,6 +1166,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
         });
         break;
       }
+      case 'texture':
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { texture: true },
+          texture: { mode: 'noise' },
+        });
+        break;
       case 'filter':
         this.updateGlobal({
           activeThemePackId: 'user-made',
@@ -1568,6 +1584,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
             <b>We chose Dark tone for you.</b>`
         : html`Welcome to gMixer, a web page themer. To start, choose the light mode for pages.<br/>
             <b>We chose Dark tone for you.</b>`,
+      texture: html`Add a surface texture layer — fine Noise, or a spaced Grid.<br/>
+        <b>We chose Noise for you.</b>`,
       filter: html`How do you want images and videos to look?<br/>
         <b>We chose accent-tinted images/videos for you.</b>`,
       fonts: html`Choose the typefaces that fit your style.<br/>
@@ -1595,6 +1613,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
         return this._renderSlide1();
       case 'color':
         return this._renderSlide2();
+      case 'texture':
+        return this._renderTextureSlide();
       case 'filter':
         return this._renderSlide3();
       case 'fonts':
@@ -1612,6 +1632,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
       default:
         return html``;
     }
+  }
+
+  _renderTextureSlide() {
+    return html`
+      <gmixer-texture-panel
+        @change=${(event) => this._activateSection('texture', event)}
+      ></gmixer-texture-panel>
+    `;
   }
 
   _renderSlide1() {

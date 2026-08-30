@@ -17,6 +17,7 @@ export const CUSTOMIZATION_LEVEL_OPTIONS = [
 export const SECTION_CUSTOMIZATION_LEVEL = {
   tone: 1,
   color: 1,
+  texture: 1,
   filter: 1,
   fonts: 1,
   effects: 1,
@@ -29,6 +30,7 @@ export const SECTION_CUSTOMIZATION_LEVEL = {
 /** Sections with an On/Off switch whose enablement is remembered across level drops. */
 const SECTIONS_WITH_ENABLE_MEMORY = new Set([
   'color',
+  'texture',
   'filter',
   'fonts',
   'shape',
@@ -37,12 +39,13 @@ const SECTIONS_WITH_ENABLE_MEMORY = new Set([
 ]);
 
 /**
- * Walkthrough tab order: Level 1 (current five), then Level 2 in Settings order.
+ * Walkthrough tab order: Level 1, then Level 2 in Settings order.
  * @type {ReadonlyArray<{ id: string, label: string, level: CustomizationLevel }>}
  */
 export const WALKTHROUGH_SLIDES = [
   { id: 'tone', label: 'Tone', level: 1 },
   { id: 'color', label: 'Color Scheme', level: 1 },
+  { id: 'texture', label: 'Texture', level: 1 },
   { id: 'filter', label: 'Chroming Media', level: 1 },
   { id: 'fonts', label: 'Typography', level: 1 },
   { id: 'effects', label: 'Effects', level: 1 },

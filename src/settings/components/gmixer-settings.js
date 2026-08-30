@@ -15,6 +15,7 @@ import '../../popup/components/image-filter-panel.js';
 import '../../popup/components/clipping-panel.js';
 import '../../popup/components/corners-panel.js';
 import '../../popup/components/effects-panel.js';
+import '../../popup/components/texture-panel.js';
 import '../../popup/components/navigation-panel.js';
 import '../../popup/components/site-toggle.js';
 import { THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
@@ -98,6 +99,15 @@ const NAV_ICONS = {
       d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"
     />
   `),
+  // dotted surface / texture
+  texture: navIcon(svg`
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="16" r="1" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="16" r="1" fill="currentColor" stroke="none" />
+  `),
   // type (Aa)
   fonts: navIcon(svg`
     <path d="M4 7V4h16v3" />
@@ -176,6 +186,18 @@ const SECTION_ART = {
       <path d="M48 18h26M48 36h18M48 54h26" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
     </svg>
   `,
+  texture: html`
+    <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
+      <rect x="36" y="12" width="148" height="48" rx="6" fill="currentColor" opacity=".12" />
+      <circle cx="56" cy="28" r="2.5" fill="currentColor" opacity=".55" />
+      <circle cx="76" cy="40" r="2.5" fill="currentColor" opacity=".55" />
+      <circle cx="96" cy="28" r="2.5" fill="currentColor" opacity=".55" />
+      <circle cx="116" cy="40" r="2.5" fill="currentColor" opacity=".55" />
+      <circle cx="136" cy="28" r="2.5" fill="currentColor" opacity=".55" />
+      <circle cx="156" cy="40" r="2.5" fill="currentColor" opacity=".55" />
+      <path d="M56 52h28M96 52h20M128 52h36" stroke="currentColor" stroke-linecap="round" stroke-width="3" />
+    </svg>
+  `,
   fonts: html`
     <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
       <text x="42" y="50" fill="currentColor" font-family="Georgia,serif" font-size="48" font-weight="700">Aa</text>
@@ -215,8 +237,8 @@ const SECTION_ART = {
 };
 
 /**
- * Accordion order: Theme Preview first, then Tone → Color Scheme → Media →
- * Typography → Clipping/Corners → Effects → Navigation → Font browser.
+ * Accordion order: Theme Preview first, then Tone → Color Scheme → Texture →
+ * Media → Typography → Clipping/Corners → Effects → Navigation → Font browser.
  *
  * Header On/Off is persisted section enablement (page effects).
  * Expand/collapse is local UI state only — never the same bit.
@@ -227,6 +249,7 @@ const SECTIONS = [
   { id: 'preview', label: 'Theme Preview', tags: ['gmixer-theme-preview-panel'] },
   { id: 'tone', label: 'Tone', tags: ['gmixer-color-panel'] },
   { id: 'color', label: 'Color Scheme', tags: ['gmixer-color-panel'] },
+  { id: 'texture', label: 'Texture', tags: ['gmixer-texture-panel'] },
   { id: 'filter', label: 'Media', tags: ['gmixer-image-filter-panel'] },
   { id: 'fonts', label: 'Typography', tags: ['gmixer-fonts-panel'] },
   {
@@ -1170,6 +1193,7 @@ export class GmixerSettings extends StoreBoundElement {
       filter: 'Style images, video, and background media',
       tone: 'Light | Gray | Dark surface direction',
       color: 'Pipeline: scheme → hue → S/L; drag surfaces onto swatches',
+      texture: 'Noise or grid surface texture (spacing + rotation)',
       fonts: 'Separate roles for hierarchy and UI',
       shape: 'Clip paths, radius, and corner geometry',
       effects: 'Per-category glow, pan & scan, flash, and page motion',
@@ -1365,6 +1389,8 @@ export class GmixerSettings extends StoreBoundElement {
         return html`<gmixer-corners-panel></gmixer-corners-panel>`;
       case 'gmixer-effects-panel':
         return html`<gmixer-effects-panel></gmixer-effects-panel>`;
+      case 'gmixer-texture-panel':
+        return html`<gmixer-texture-panel></gmixer-texture-panel>`;
       case 'gmixer-navigation-panel':
         return html`<gmixer-navigation-panel></gmixer-navigation-panel>`;
       case 'gmixer-font-browser':
