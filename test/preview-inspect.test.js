@@ -43,12 +43,11 @@ describe('preview-inspect', () => {
       outer
     );
     const hit = resolvePreviewTarget(title, root);
-    assert.deepEqual(hit, {
-      roleId: 'accent',
-      fontSlot: 'headings.h1',
-      media: null,
-      label: 'Accent',
-    });
+    assert.equal(hit.roleId, 'accent');
+    assert.equal(hit.fontSlot, 'headings.h1');
+    assert.equal(hit.media, null);
+    assert.equal(hit.label, 'Accent');
+    assert.equal(hit.el, title);
   });
 
   it('resolves media targets without a color role', () => {

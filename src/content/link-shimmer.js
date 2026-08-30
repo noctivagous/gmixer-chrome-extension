@@ -5,6 +5,7 @@
  */
 
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
+import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { isLinkShimmerEnabled } from '../config/effects-catalog.js';
 import { buildPalette } from '../lib/color-theory.js';
 import {
@@ -20,6 +21,7 @@ export const OVERLAY_CLASS = 'gmixer-link-shimmer-overlay';
 
 function effectsSectionOn(resolved) {
   if (!sectionAllowedByFocus(resolved?.ui?.settingsFocus, 'effects')) return false;
+  if (!sectionAllowedByCustomizationLevel(resolved?.ui, 'effects')) return false;
   return resolved?.sections?.effects === true;
 }
 

@@ -223,7 +223,17 @@ export async function ensureWalkthroughPopover() {
   return el;
 }
 
+export async function closeWalkthroughPopover() {
+  const el = document.getElementById(WALKTHROUGH_POPOVER_ID);
+  if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) {
+    el.hidePopover();
+  }
+}
+
 export async function openWalkthroughPopover() {
+  if (isPopoverOpen()) {
+    await closeSettingsPopover();
+  }
   const el = await ensureWalkthroughPopover();
   const iframe = el.querySelector('iframe.gmixer-ui-frame');
   const reset = () => {
@@ -238,6 +248,76 @@ export async function openWalkthroughPopover() {
   }
   focusFirstIn(el);
   return el;
+}
+
+/** @param {'side-panel' | 'walkthrough-modal'} shell */
+async function persistPreferredShell(shell) {
+  try {
+    await store.ready;
+    const current = store.getState()?.global?.ui?.preferredShell;
+    if (current === shell) return;
+    await store.update({ ui: { preferredShell: shell } });
+  } catch {
+    // Stale extension context after reload — ignore.
+  }
+}
+
+async function markWalkthroughCompleted() {
+  try {
+    await store.ready;
+    if (store.getState()?.global?.ui?.walkthroughCompleted) return;
+    await store.update({ ui: { walkthroughCompleted: true } });
+  } catch {
+    // Stale extension context after reload — ignore.
+  }
+}
+
+/** @returns {'side-panel' | 'walkthrough-modal'} */
+function preferredShellFromStore() {
+  const shell = store.getState()?.global?.ui?.preferredShell;
+  return shell === 'walkthrough-modal' ? 'walkthrough-modal' : 'side-panel';
+}
+
+function walkthroughCompletedFromStore() {
+  return !!store.getState()?.global?.ui?.walkthroughCompleted;
+}
+
+/**
+ * Persist preference and open that shell, closing the other.
+ * @param {'side-panel' | 'walkthrough-modal'} shell
+ */
+export async function switchToShell(shell) {
+  await persistPreferredShell(shell);
+  if (shell === 'walkthrough-modal') {
+    await openWalkthroughPopover();
+    return;
+  }
+  await closeWalkthroughPopover();
+  await openSettingsPopover();
+}
+
+/** Alt+M / toolbar: honor preferred shell after onboarding. */
+export async function togglePreferredShell() {
+  if (!walkthroughCompletedFromStore()) {
+    return toggleSettingsPopover();
+  }
+
+  if (isWalkthroughOpen()) {
+    await closeWalkthroughPopover();
+    return false;
+  }
+  if (isPopoverOpen()) {
+    await closeSettingsPopover();
+    return false;
+  }
+
+  const shell = preferredShellFromStore();
+  if (shell === 'walkthrough-modal') {
+    await openWalkthroughPopover();
+    return true;
+  }
+  await openSettingsPopover();
+  return true;
 }
 
 /**
@@ -267,6 +347,9 @@ async function initializeWalkthrough() {
  */
 async function applySettingsOpenDom(open) {
   if (open) {
+    if (isWalkthroughOpen()) {
+      await closeWalkthroughPopover();
+    }
     const el = await ensureSettingsPopover();
     if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
       el.showPopover();
@@ -306,6 +389,9 @@ function syncPopoverFromStore(state) {
 }
 
 export async function openSettingsPopover() {
+  if (isWalkthroughOpen()) {
+    await closeWalkthroughPopover();
+  }
   await applySettingsOpenDom(true);
   await persistSettingsOpen(true);
   return document.getElementById(SETTINGS_POPOVER_ID);
@@ -414,10 +500,8 @@ async function onKeyDown(e) {
   if (e.key === 'Escape') {
     if (isWalkthroughOpen()) {
       e.preventDefault();
-      const walkthrough = document.getElementById(WALKTHROUGH_POPOVER_ID);
-      if (walkthrough && typeof walkthrough.hidePopover === 'function') {
-        walkthrough.hidePopover();
-      }
+      await markWalkthroughCompleted();
+      await closeWalkthroughPopover();
       return;
     }
     if (isPopoverOpen()) {
@@ -443,7 +527,7 @@ async function onKeyDown(e) {
   if (key === 'm') {
     e.preventDefault();
     e.stopPropagation();
-    await toggleSettingsPopover();
+    await togglePreferredShell();
     return;
   }
   if (key === 'n') {
@@ -455,13 +539,13 @@ async function onKeyDown(e) {
 
 function onRuntimeMessage(message, _sender, sendResponse) {
   if (message?.type === MSG_TOGGLE_SETTINGS) {
-    toggleSettingsPopover()
+    togglePreferredShell()
       .then((open) => sendResponse({ ok: true, open }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
   }
   if (message?.type === MSG_OPEN_SETTINGS) {
-    openSettingsPopover()
+    switchToShell('side-panel')
       .then(() => sendResponse({ ok: true, open: true }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
@@ -473,7 +557,7 @@ function onRuntimeMessage(message, _sender, sendResponse) {
     return true;
   }
   if (message?.type === MSG_OPEN_WALKTHROUGH) {
-    openWalkthroughPopover()
+    switchToShell('walkthrough-modal')
       .then(() => sendResponse({ ok: true }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
@@ -481,12 +565,22 @@ function onRuntimeMessage(message, _sender, sendResponse) {
 }
 
 function onUiFrameMessage(event) {
-  if (event.data?.source !== 'gmixer-ui' || event.data?.type !== 'close') return;
+  if (event.data?.source !== 'gmixer-ui') return;
+
+  if (event.data.type === 'switch-shell') {
+    const shell =
+      event.data.shell === 'walkthrough-modal' ? 'walkthrough-modal' : 'side-panel';
+    void switchToShell(shell);
+    return;
+  }
+
+  if (event.data.type !== 'close') return;
   const settings = document.getElementById(SETTINGS_POPOVER_ID);
   const walkthrough = document.getElementById(WALKTHROUGH_POPOVER_ID);
   const fromSettings = settings?.querySelector('iframe')?.contentWindow === event.source;
   const fromWalkthrough = walkthrough?.querySelector('iframe')?.contentWindow === event.source;
   if (fromWalkthrough) {
+    void markWalkthroughCompleted();
     walkthrough?.hidePopover?.();
     return;
   }

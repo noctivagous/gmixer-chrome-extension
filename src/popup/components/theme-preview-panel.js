@@ -531,15 +531,18 @@ export class ThemePreviewPanel extends StoreBoundElement {
     this._tooltipX = point.x + 12;
     this._tooltipY = point.y + 14;
     this._hoverTarget = this._targetFromEvent(event);
+    const hoverEl = this._hoverTarget?.el || null;
     emitHoverLink({
       kind: 'color-role',
       id: chipRoleForPreview(this._hoverTarget?.roleId),
       source: 'preview',
+      el: this._hoverTarget?.roleId ? hoverEl : null,
     });
     emitHoverLink({
       kind: 'font-slot',
       id: this._hoverTarget?.fontSlot || null,
       source: 'preview',
+      el: this._hoverTarget?.fontSlot ? hoverEl : null,
     });
   }
 

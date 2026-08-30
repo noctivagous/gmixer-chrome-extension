@@ -9,6 +9,8 @@ export const SCHEMA_VERSION = 1;
 /** @typedef {'light' | 'gray' | 'dark'} ThemeMode */
 /** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
 /** @typedef {'preserve' | 'harmonize' | 'restyle'} IdentityMode */
+/** @typedef {'side-panel' | 'walkthrough-modal'} PreferredShell */
+/** @typedef {1 | 2 | 3} CustomizationLevel */
 
 /**
  * Default state for a fresh install. Ships "good out of the box" per the
@@ -161,6 +163,12 @@ export function createDefaultState() {
         // Which accordion sections the settings panel shows:
         // theme = all, tone = Tone only, media = Media only.
         settingsFocus: /** @type {SettingsFocus} */ ('theme'),
+        // After onboarding, Alt+M / toolbar open this shell.
+        preferredShell: /** @type {PreferredShell} */ ('side-panel'),
+        // 1 = Tone…Effects; 2 = + Preview/Clipping/Nav/Font browser; 3 reserved.
+        customizationLevel: /** @type {CustomizationLevel} */ (1),
+        // On/Off remembered for sections forced off when level drops beneath them.
+        customizationLevelSectionMemory: /** @type {Record<string, boolean>} */ ({}),
         walkthroughInitialized: false,
         walkthroughCompleted: false,
       },

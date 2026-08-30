@@ -6,7 +6,12 @@ export const HOVER_LINK_EVENT = 'gmixer-hover-link';
 /** @typedef {'control'|'preview'} HoverLinkSource */
 
 /**
- * @param {{ kind: string, id: string|null, source: HoverLinkSource }} detail
+ * @param {{
+ *   kind: string,
+ *   id: string|null,
+ *   source: HoverLinkSource,
+ *   el?: Element|null,
+ * }} detail
  */
 export function emitHoverLink(detail) {
   window.dispatchEvent(
@@ -15,6 +20,8 @@ export function emitHoverLink(detail) {
         kind: detail.kind,
         id: detail.id || null,
         source: detail.source,
+        // Specific Live Preview node when several share a role/font slot.
+        el: detail.el || null,
       },
     })
   );
@@ -135,11 +142,195 @@ export function linkCurve(from, to) {
   };
 }
 
-function usableRect(el) {
+/** @typedef {{ left: number, top: number, right: number, bottom: number, width: number, height: number }} LinkRect */
+
+/**
+ * @param {Pick<DOMRect, 'left'|'top'|'right'|'bottom'|'width'|'height'>} rect
+ * @returns {LinkRect}
+ */
+export function asLinkRect(rect) {
+  return {
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/**
+ * @param {LinkRect} a
+ * @param {LinkRect} b
+ * @returns {LinkRect|null}
+ */
+export function intersectRects(a, b) {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (right - left < 1 || bottom - top < 1) return null;
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+/**
+ * When a target is fully scrolled/clipped out of a container, pin a stub rect
+ * to the clip edge so the arrow still points “up there” / “down there”.
+ *
+ * @param {LinkRect} elRect
+ * @param {LinkRect} clipRect
+ * @returns {LinkRect}
+ */
+export function clippedEdgeStub(elRect, clipRect) {
+  const EDGE = 2;
+  const midX = elRect.left + elRect.width / 2;
+  const midY = elRect.top + elRect.height / 2;
+  const x = Math.min(Math.max(midX, clipRect.left), clipRect.right);
+  const y = Math.min(Math.max(midY, clipRect.top), clipRect.bottom);
+
+  if (elRect.bottom <= clipRect.top) {
+    return {
+      left: x - EDGE,
+      top: clipRect.top,
+      right: x + EDGE,
+      bottom: clipRect.top + EDGE,
+      width: EDGE * 2,
+      height: EDGE,
+    };
+  }
+  if (elRect.top >= clipRect.bottom) {
+    return {
+      left: x - EDGE,
+      top: clipRect.bottom - EDGE,
+      right: x + EDGE,
+      bottom: clipRect.bottom,
+      width: EDGE * 2,
+      height: EDGE,
+    };
+  }
+  if (elRect.right <= clipRect.left) {
+    return {
+      left: clipRect.left,
+      top: y - EDGE,
+      right: clipRect.left + EDGE,
+      bottom: y + EDGE,
+      width: EDGE,
+      height: EDGE * 2,
+    };
+  }
+  if (elRect.left >= clipRect.right) {
+    return {
+      left: clipRect.right - EDGE,
+      top: y - EDGE,
+      right: clipRect.right,
+      bottom: y + EDGE,
+      width: EDGE,
+      height: EDGE * 2,
+    };
+  }
+  // Degenerate overlap (sub-pixel): fall back to clip center stub.
+  return {
+    left: x - EDGE,
+    top: y - EDGE,
+    right: x + EDGE,
+    bottom: y + EDGE,
+    width: EDGE * 2,
+    height: EDGE * 2,
+  };
+}
+
+/**
+ * Intersect `elRect` with viewport + clip rects. If fully clipped, return an
+ * edge stub on the nearest clip boundary (top/bottom/left/right).
+ *
+ * @param {LinkRect} elRect
+ * @param {LinkRect[]} clipRects
+ * @param {LinkRect} [viewport]
+ * @returns {LinkRect|null}
+ */
+export function clampRectToVisible(elRect, clipRects, viewport) {
+  if (!elRect || (elRect.width < 1 && elRect.height < 1)) return null;
+
+  let clip = viewport
+    ? asLinkRect(viewport)
+    : {
+        left: 0,
+        top: 0,
+        right: typeof window !== 'undefined' ? window.innerWidth : 10000,
+        bottom: typeof window !== 'undefined' ? window.innerHeight : 10000,
+        width: typeof window !== 'undefined' ? window.innerWidth : 10000,
+        height: typeof window !== 'undefined' ? window.innerHeight : 10000,
+      };
+
+  for (const next of clipRects || []) {
+    const hit = intersectRects(clip, asLinkRect(next));
+    if (!hit) {
+      // Nested clips with no overlap — treat as fully clipped against prior clip.
+      return clippedEdgeStub(elRect, clip);
+    }
+    clip = hit;
+  }
+
+  const visible = intersectRects(elRect, clip);
+  if (visible) return visible;
+  return clippedEdgeStub(elRect, clip);
+}
+
+/**
+ * Collect overflow/clip ancestor rects (crosses open shadow boundaries).
+ * @param {Element} el
+ * @returns {LinkRect[]}
+ */
+export function clipRectsForElement(el) {
+  /** @type {LinkRect[]} */
+  const clips = [];
+  if (!el || typeof getComputedStyle !== 'function') return clips;
+
+  /** @type {Element|null} */
+  let node = el.parentElement;
+  while (node) {
+    let style;
+    try {
+      style = getComputedStyle(node);
+    } catch {
+      break;
+    }
+    const ox = style.overflowX;
+    const oy = style.overflowY;
+    const clipsX = ox === 'auto' || ox === 'scroll' || ox === 'hidden' || ox === 'clip';
+    const clipsY = oy === 'auto' || oy === 'scroll' || oy === 'hidden' || oy === 'clip';
+    if (clipsX || clipsY) {
+      clips.push(asLinkRect(node.getBoundingClientRect()));
+    }
+    if (node.parentElement) {
+      node = node.parentElement;
+      continue;
+    }
+    const root = node.getRootNode();
+    node = root instanceof ShadowRoot ? root.host : null;
+  }
+  return clips;
+}
+
+/**
+ * Visible (or edge-stub) rect for arrow targeting. Updates naturally as
+ * ancestors scroll because callers re-read layout each animation frame.
+ * @param {Element|null|undefined} el
+ * @returns {LinkRect|null}
+ */
+export function visibleLinkRect(el) {
   if (!el || typeof el.getBoundingClientRect !== 'function') return null;
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1) return null;
-  return rect;
+  const rect = asLinkRect(el.getBoundingClientRect());
+  if (rect.width < 1 && rect.height < 1) return null;
+  const viewport = {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight,
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+  return clampRectToVisible(rect, clipRectsForElement(el), viewport);
 }
 
 let overlaySeq = 0;
@@ -166,7 +357,11 @@ export class HoverLinkOverlay {
     this._linkId = null;
     /** @type {HoverLinkSource|null} */
     this._source = null;
+    /** @type {Element|null} Specific preview node when source is preview. */
+    this._anchorEl = null;
     this._raf = 0;
+    /** @type {HTMLElement|null} */
+    this._host = null;
     this._svg = null;
     this._path = null;
     this._onEvent = this._onEvent.bind(this);
@@ -175,18 +370,20 @@ export class HoverLinkOverlay {
   }
 
   _onEvent(event) {
-    const { kind, id, source } = event.detail || {};
+    const { kind, id, source, el } = event.detail || {};
     if (kind !== this.kind) return;
-    this.setLink(id || null, source || 'preview');
+    this.setLink(id || null, source || 'preview', el || null);
   }
 
   /**
    * @param {string|null} id
    * @param {HoverLinkSource} source
+   * @param {Element|null} [el]
    */
-  setLink(id, source) {
+  setLink(id, source, el = null) {
     this._linkId = id;
     this._source = id ? source : null;
+    this._anchorEl = id && source === 'preview' ? el : null;
     if (id) this._start();
     else this._stop();
   }
@@ -194,7 +391,8 @@ export class HoverLinkOverlay {
   destroy() {
     window.removeEventListener(HOVER_LINK_EVENT, this._onEvent);
     this._stop();
-    this._svg?.remove();
+    this._host?.remove();
+    this._host = null;
     this._svg = null;
     this._path = null;
   }
@@ -202,12 +400,35 @@ export class HoverLinkOverlay {
   _ensureSvg() {
     if (this._svg) return this._svg;
     const NS = 'http://www.w3.org/2000/svg';
+    // HTMLElement popover host (SVGElement does not support Popover API).
+    // Top layer keeps the arrow above Live Preview in settings/walkthrough.
+    const host = document.createElement('div');
+    host.setAttribute('popover', 'manual');
+    host.setAttribute('data-gmixer-hover-link', this.kind);
+    host.setAttribute(
+      'style',
+      [
+        'position:fixed',
+        'inset:0',
+        'width:100%',
+        'height:100%',
+        'margin:0',
+        'padding:0',
+        'border:none',
+        'background:transparent',
+        'pointer-events:none',
+        'overflow:visible',
+        // Fallback when Popover API is unavailable.
+        'z-index:2147483647',
+      ].join(';')
+    );
+    host.setAttribute('aria-hidden', 'true');
+
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute(
       'style',
-      'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147483000;overflow:visible'
+      'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none'
     );
-    svg.setAttribute('aria-hidden', 'true');
     const defs = document.createElementNS(NS, 'defs');
     const marker = document.createElementNS(NS, 'marker');
     marker.setAttribute('id', this._markerId);
@@ -231,11 +452,46 @@ export class HoverLinkOverlay {
     path.setAttribute('opacity', '0.92');
     svg.appendChild(defs);
     svg.appendChild(path);
-    svg.hidden = true;
-    document.body.appendChild(svg);
+    host.appendChild(svg);
+    document.body.appendChild(host);
+    this._host = host;
     this._svg = svg;
     this._path = path;
+    this._hideOverlay();
     return svg;
+  }
+
+  _supportsPopover() {
+    return typeof this._host?.showPopover === 'function';
+  }
+
+  _showOverlay() {
+    this._ensureSvg();
+    const host = this._host;
+    if (!host) return;
+    if (this._supportsPopover()) {
+      try {
+        if (!host.matches(':popover-open')) host.showPopover();
+        return;
+      } catch {
+        // Fall through to visibility fallback.
+      }
+    }
+    host.style.visibility = 'visible';
+  }
+
+  _hideOverlay() {
+    const host = this._host;
+    if (!host) return;
+    if (this._supportsPopover()) {
+      try {
+        if (host.matches(':popover-open')) host.hidePopover();
+        return;
+      } catch {
+        // Fall through to visibility fallback.
+      }
+    }
+    host.style.visibility = 'hidden';
   }
 
   _start() {
@@ -251,28 +507,40 @@ export class HoverLinkOverlay {
   _stop() {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
-    if (this._svg) this._svg.hidden = true;
+    this._anchorEl = null;
+    this._hideOverlay();
+  }
+
+  _previewEl(id) {
+    const anchor = this._anchorEl;
+    if (this._source === 'preview' && anchor && anchor.isConnected !== false) {
+      return anchor;
+    }
+    return this.findPreview(id);
   }
 
   _paint() {
-    const svg = this._ensureSvg();
+    this._ensureSvg();
     const path = this._path;
     const id = this._linkId;
     if (!path || !id || this.isPaused()) {
-      svg.hidden = true;
+      this._hideOverlay();
       return;
     }
     const control = this.findControl(id);
-    const preview = this.findPreview(id);
+    const preview = this._previewEl(id);
     const fromEl = this._source === 'preview' ? preview : control;
     const toEl = this._source === 'preview' ? control : preview;
-    const from = usableRect(fromEl);
-    const to = usableRect(toEl);
+    // Clamp to overflow/clip ancestors so Typography (and other) targets that
+    // scroll out of Live Preview still get an edge indicator; rAF re-paints
+    // as the container scrolls.
+    const from = visibleLinkRect(fromEl);
+    const to = visibleLinkRect(toEl);
     if (!from || !to) {
-      svg.hidden = true;
+      this._hideOverlay();
       return;
     }
     path.setAttribute('d', linkCurve(from, to).d);
-    svg.hidden = false;
+    this._showOverlay();
   }
 }

@@ -5,7 +5,19 @@ import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theor
 import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { defineElement } from '../../lib/define-element.js';
-import { closeHostPopover } from '../close-host-popover.js';
+import { closeHostPopover, requestShellSwitch } from '../close-host-popover.js';
+import {
+  shellSegmentControlStyles,
+  renderShellSegments,
+} from '../shell-segment-control.js';
+import {
+  WALKTHROUGH_SLIDES,
+  customizationLevelSelectStyles,
+  effectiveCustomizationLevel,
+  patchForCustomizationLevel,
+  renderCustomizationLevelSelect,
+  visibleWalkthroughSlides,
+} from '../customization-level.js';
 import { GRID_CSS_VARS } from '../tokens.js';
 
 import '../../popup/components/color-panel.js';
@@ -21,6 +33,10 @@ import '../../popup/components/image-filter-panel.js';
 import '../../popup/components/fonts-panel.js';
 import '../../popup/components/effects-panel.js';
 import '../../popup/components/theme-preview-panel.js';
+import '../../popup/components/clipping-panel.js';
+import '../../popup/components/corners-panel.js';
+import '../../popup/components/navigation-panel.js';
+import './font-browser.js';
 
 /** @param {number} angleDeg 0 = top, clockwise */
 function schemeDot(angleDeg, fill, radius = 7) {
@@ -108,34 +124,57 @@ function schemeCategoryIcon(schemeId) {
   `;
 }
 
-/** @param {number} index */
-function walkthroughTabIcon(index) {
-  const icons = [
-    svg`
+/** @param {string} slideId */
+function walkthroughTabIcon(slideId) {
+  /** @type {Record<string, import('lit').SVGTemplateResult>} */
+  const icons = {
+    tone: svg`
       <circle cx="12" cy="12" r="8" />
       <path d="M12 4v16" />
     `,
-    svg`
+    color: svg`
       <path d="M12 3C7 3 3 7 3 12s4 9 9 9c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1a1.6 1.6 0 0 1 1.6-1.6h2c3.1 0 5.6-2.5 5.6-5.6C22 6.4 17.5 3 12 3Z" />
       <circle cx="8" cy="9" r=".6" fill="currentColor" stroke="none" />
       <circle cx="12" cy="7" r=".6" fill="currentColor" stroke="none" />
       <circle cx="16" cy="9" r=".6" fill="currentColor" stroke="none" />
     `,
-    svg`
+    filter: svg`
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <circle cx="8.5" cy="9" r="1.5" />
       <path d="m4 17 4.5-4 3.5 3 3-3 5 4" />
     `,
-    svg`
+    fonts: svg`
       <path d="M5 6V4h14v2" />
       <path d="M12 4v16" />
       <path d="M8 20h8" />
     `,
-    svg`
+    effects: svg`
       <path d="m12 3 1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4L12 3Z" />
       <path d="m19 16 .6 2.4L22 19l-2.4.6L19 22l-.6-2.4L16 19l2.4-.6L19 16Z" />
     `,
-  ];
+    preview: svg`
+      <rect width="18" height="14" x="3" y="5" rx="2" />
+      <path d="M7 5V3h10v2" />
+      <path d="M7 15h4" />
+      <path d="M7 11h10" />
+    `,
+    shape: svg`
+      <path d="M6 6h8l4 4v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" />
+      <path d="M14 6v4h4" />
+    `,
+    navigation: svg`
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v3" />
+      <path d="M12 18v3" />
+      <path d="M3 12h3" />
+      <path d="M18 12h3" />
+    `,
+    'font-browser': svg`
+      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" />
+      <path d="M8 7h6" />
+      <path d="M8 11h8" />
+    `,
+  };
   return html`
     <svg
       class="tab-icon"
@@ -150,7 +189,7 @@ function walkthroughTabIcon(index) {
       aria-hidden="true"
       focusable="false"
     >
-      ${icons[index] || icons[0]}
+      ${icons[slideId] || icons.tone}
     </svg>
   `;
 }
@@ -179,6 +218,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   static styles = [
     colorSchemePickerStyles,
+    shellSegmentControlStyles,
+    customizationLevelSelectStyles,
     css`
     :host {
       all: initial;
@@ -248,6 +289,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
       border-bottom: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
     }
 
+    .titlebar.revisit {
+      grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr);
+      gap: 12px;
+    }
+
     .titlebar .brand {
       grid-column: 2;
       margin: 0;
@@ -255,6 +301,44 @@ export class GmixerWalkthrough extends StoreBoundElement {
       font-weight: 700;
       letter-spacing: -0.01em;
       text-align: center;
+    }
+
+    .titlebar .shell-segments {
+      grid-column: 1;
+      justify-self: start;
+      max-width: 280px;
+      width: 100%;
+    }
+
+    .titlebar .titlebar-trailing {
+      grid-column: 3;
+      display: inline-flex;
+      align-items: center;
+      justify-self: end;
+      gap: 10px;
+    }
+
+    .titlebar .shortcut {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--gm-muted, rgba(242, 238, 252, 0.65));
+      white-space: nowrap;
+    }
+
+    .titlebar kbd {
+      display: inline-block;
+      min-width: 22px;
+      padding: 0 6px;
+      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.15));
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      font: 11px/20px ui-monospace, monospace;
+      text-align: center;
+      color: var(--gm-text, #f2eefc);
     }
 
     .titlebar .close {
@@ -272,17 +356,59 @@ export class GmixerWalkthrough extends StoreBoundElement {
       line-height: 1;
     }
 
+    .titlebar.revisit .close {
+      grid-column: auto;
+      justify-self: auto;
+    }
+
     .titlebar .close:hover,
     .titlebar .close:focus-visible {
       color: var(--gm-text, #f2eefc);
     }
 
+    @media (max-width: 720px) {
+      .titlebar.revisit {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto;
+      }
+
+      .titlebar.revisit .shell-segments {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        max-width: none;
+      }
+
+      .titlebar.revisit .brand {
+        grid-column: 1;
+        text-align: left;
+      }
+
+      .titlebar.revisit .titlebar-trailing {
+        grid-column: 2;
+      }
+    }
+
+    .tabs-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 16px;
+      margin: 16px var(--gm-space-3, 24px) 0;
+    }
+
     .tabs {
       display: flex;
       flex-wrap: wrap;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 8px;
-      margin: 16px var(--gm-space-3, 24px) 0;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .tabs-row .customization-level-picker {
+      flex: 0 0 auto;
+      margin-left: auto;
     }
 
     .step-description {
@@ -843,25 +969,90 @@ export class GmixerWalkthrough extends StoreBoundElement {
     super();
     this.currentSlide = 0;
     this.showCompletion = false;
-    this._activatedSlides = new Set([0]);
+    this._activatedSlides = new Set(['tone']);
+  }
+
+  /**
+   * @param {Map<string, unknown>} changed
+   */
+  updated(changed) {
+    super.updated?.(changed);
+    this._clampSlideToVisible();
+  }
+
+  _isRevisit() {
+    return !!this.state?.global?.ui?.walkthroughCompleted;
+  }
+
+  /** @returns {import('../../state/schema.js').CustomizationLevel} */
+  _customizationLevel() {
+    return effectiveCustomizationLevel(this.state?.global?.ui);
+  }
+
+  _visibleSlides() {
+    return visibleWalkthroughSlides(this._customizationLevel());
+  }
+
+  /** Absolute indexes into WALKTHROUGH_SLIDES that are visible at the current level. */
+  _visibleIndexes() {
+    const level = this._customizationLevel();
+    /** @type {number[]} */
+    const indexes = [];
+    WALKTHROUGH_SLIDES.forEach((slide, index) => {
+      if (slide.level <= level) indexes.push(index);
+    });
+    return indexes;
+  }
+
+  _slideMeta(index = this.currentSlide) {
+    return WALKTHROUGH_SLIDES[index] || WALKTHROUGH_SLIDES[0];
+  }
+
+  _clampSlideToVisible() {
+    const visible = this._visibleIndexes();
+    if (!visible.length) return;
+    if (visible.includes(this.currentSlide)) return;
+    const previous = [...visible].reverse().find((index) => index < this.currentSlide);
+    this.currentSlide = previous ?? visible[0];
+  }
+
+  /**
+   * @param {import('../../state/schema.js').CustomizationLevel} level
+   */
+  _setCustomizationLevel(level) {
+    const global = this.state?.global;
+    if (!global) return;
+    const from = effectiveCustomizationLevel(global.ui);
+    if (from === level) return;
+    this.updateGlobal(patchForCustomizationLevel(from, level, global));
   }
 
   _next() {
-    if (this.currentSlide < 4) {
-      this._selectSlide(this.currentSlide + 1);
-    } else {
-      this._finish();
+    const visible = this._visibleIndexes();
+    const position = visible.indexOf(this.currentSlide);
+    if (position < 0) {
+      this._selectSlide(visible[0] ?? 0);
+      return;
     }
+    if (position < visible.length - 1) {
+      this._selectSlide(visible[position + 1]);
+      return;
+    }
+    this._finish();
   }
 
   _prev() {
-    if (this.currentSlide > 0) {
-      this.currentSlide--;
+    const visible = this._visibleIndexes();
+    const position = visible.indexOf(this.currentSlide);
+    if (position > 0) {
+      this.currentSlide = visible[position - 1];
     }
   }
 
   _selectSlide(index) {
-    this._applySlideDefaults(index);
+    if (!this._isRevisit()) {
+      this._applySlideDefaults(index);
+    }
     this.currentSlide = index;
     this.updateComplete.then(() => {
       this.renderRoot.querySelector(`#walkthrough-slide-${index}`)?.focus();
@@ -871,7 +1062,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
   _onTabKeyDown(event, index) {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     event.preventDefault();
-    const next = event.key === 'ArrowRight' ? (index + 1) % 5 : (index + 4) % 5;
+    const visible = this._visibleIndexes();
+    const position = visible.indexOf(index);
+    if (position < 0) return;
+    const nextPosition =
+      event.key === 'ArrowRight'
+        ? (position + 1) % visible.length
+        : (position - 1 + visible.length) % visible.length;
+    const next = visible[nextPosition];
     this._selectSlide(next);
     this.updateComplete.then(() => {
       this.renderRoot.querySelector(`.tab[aria-controls="walkthrough-slide-${next}"]`)?.focus();
@@ -883,7 +1081,12 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   _finish() {
+    const revisit = this._isRevisit();
     this.updateGlobal({ ui: { walkthroughCompleted: true } });
+    if (revisit) {
+      closeHostPopover();
+      return;
+    }
     this.showCompletion = true;
     this.updateComplete.then(() => {
       this.renderRoot.querySelector('.completion-dialog button')?.focus();
@@ -898,6 +1101,18 @@ export class GmixerWalkthrough extends StoreBoundElement {
   _dismissWalkthrough() {
     this.updateGlobal({ ui: { walkthroughCompleted: true } });
     closeHostPopover();
+  }
+
+  /**
+   * @param {import('../../state/schema.js').PreferredShell} shell
+   */
+  _setPreferredShell(shell) {
+    if (shell === 'walkthrough-modal') {
+      this.updateGlobal({ ui: { preferredShell: 'walkthrough-modal' } });
+      return;
+    }
+    this.updateGlobal({ ui: { preferredShell: 'side-panel' } });
+    requestShellSwitch('side-panel');
   }
 
   _activateSection(id, event) {
@@ -917,15 +1132,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
       sections: { [id]: true },
     };
     if (id === 'filter') patch.imageFilter = { enabled: true };
+    if (id === 'navigation') patch.navigation = { enabled: true };
     this.updateGlobal(patch);
   }
 
   _applySlideDefaults(index) {
-    if (this._activatedSlides.has(index)) return;
-    this._activatedSlides.add(index);
+    const slideId = WALKTHROUGH_SLIDES[index]?.id;
+    if (!slideId || this._activatedSlides.has(slideId)) return;
+    this._activatedSlides.add(slideId);
 
-    switch (index) {
-      case 1: {
+    switch (slideId) {
+      case 'color': {
         const baseColor = this._colorSchemeBaseForTone();
         const mode = this.state?.global?.themeMode || 'dark';
         this.updateGlobal({
@@ -940,7 +1157,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
         });
         break;
       }
-      case 2:
+      case 'filter':
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { filter: true },
@@ -952,7 +1169,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
           },
         });
         break;
-      case 3:
+      case 'fonts':
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { fonts: true },
@@ -970,7 +1187,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
           },
         });
         break;
-      case 4:
+      case 'effects':
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { effects: true },
@@ -980,6 +1197,19 @@ export class GmixerWalkthrough extends StoreBoundElement {
               navigation: { effect: 'glow' },
             },
           },
+        });
+        break;
+      case 'shape':
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { shape: true },
+        });
+        break;
+      case 'navigation':
+        this.updateGlobal({
+          activeThemePackId: 'user-made',
+          sections: { navigation: true },
+          navigation: { enabled: true },
         });
         break;
       default:
@@ -1181,6 +1411,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
   }
 
   render() {
+    // First-time Finish sets walkthroughCompleted before the completion dialog;
+    // keep showing that dialog until OK rather than flipping into revisit chrome.
     if (this.showCompletion) {
       return html`
         <section
@@ -1198,28 +1430,78 @@ export class GmixerWalkthrough extends StoreBoundElement {
       `;
     }
 
+    const revisit = this._isRevisit();
+    const customizationLevel = this._customizationLevel();
+    const visibleIndexes = this._visibleIndexes();
+    const visiblePosition = visibleIndexes.indexOf(this.currentSlide);
+    const isFirstVisible = visiblePosition <= 0;
+    const isLastVisible = visiblePosition === visibleIndexes.length - 1;
+    const nextIndex = !isLastVisible ? visibleIndexes[visiblePosition + 1] : -1;
+    const nextMeta = nextIndex >= 0 ? this._slideMeta(nextIndex) : null;
     return html`
       <div class="header">
-        <div class="titlebar">
-          <h2 class="brand">Welcome to gMixer</h2>
-          <button type="button" class="close" aria-label="Close walkthrough" @click=${this._close}>×</button>
+        <div class="titlebar ${revisit ? 'revisit' : ''}">
+          ${revisit
+            ? renderShellSegments({
+                value: 'walkthrough-modal',
+                onSelect: (shell) => this._setPreferredShell(shell),
+              })
+            : null}
+          <h2 class="brand">${revisit ? 'gMixer' : 'Welcome to gMixer'}</h2>
+          ${revisit
+            ? html`
+                <div class="titlebar-trailing">
+                  <span
+                    class="shortcut"
+                    title="Toggle editor (also remappable in extension shortcuts)"
+                  >
+                    <kbd>Alt</kbd>+<kbd>M</kbd>
+                  </span>
+                  <button
+                    type="button"
+                    class="close"
+                    aria-label="Close walkthrough"
+                    @click=${this._close}
+                  >
+                    ×
+                  </button>
+                </div>
+              `
+            : html`
+                <button
+                  type="button"
+                  class="close"
+                  aria-label="Close walkthrough"
+                  @click=${this._close}
+                >
+                  ×
+                </button>
+              `}
         </div>
-        <div class="tabs" role="tablist" aria-label="Walkthrough steps">
-          ${[0, 1, 2, 3, 4].map(
-            (i) => html`
-              <button
-                type="button"
-                class="tab"
-                role="tab"
-                aria-label=${`Step ${i + 1}: ${this._getTitle(i)}`}
-                aria-selected=${i === this.currentSlide}
-                aria-controls=${`walkthrough-slide-${i}`}
-                tabindex=${i === this.currentSlide ? '0' : '-1'}
-                @click=${() => this._selectSlide(i)}
-                @keydown=${(event) => this._onTabKeyDown(event, i)}
-              >${walkthroughTabIcon(i)}<span>${this._getTabLabel(i)}</span></button>
-            `
-          )}
+        <div class="tabs-row">
+          <div class="tabs" role="tablist" aria-label="Walkthrough steps">
+            ${visibleIndexes.map((i, step) => {
+              const meta = this._slideMeta(i);
+              return html`
+                <button
+                  type="button"
+                  class="tab"
+                  role="tab"
+                  aria-label=${`Step ${step + 1}: ${meta.label}`}
+                  aria-selected=${i === this.currentSlide}
+                  aria-controls=${`walkthrough-slide-${i}`}
+                  tabindex=${i === this.currentSlide ? '0' : '-1'}
+                  @click=${() => this._selectSlide(i)}
+                  @keydown=${(event) => this._onTabKeyDown(event, i)}
+                >${walkthroughTabIcon(meta.id)}<span>${meta.label}</span></button>
+              `;
+            })}
+          </div>
+          ${renderCustomizationLevelSelect({
+            value: customizationLevel,
+            id: 'walkthrough-customization-level',
+            onChange: (level) => this._setCustomizationLevel(level),
+          })}
         </div>
         <p class="step-description">${this._getDescription()}</p>
       </div>
@@ -1245,70 +1527,88 @@ export class GmixerWalkthrough extends StoreBoundElement {
       <div class="footer">
         <button
           class="nav"
-          ?disabled=${this.currentSlide === 0}
+          ?disabled=${isFirstVisible}
           @click=${this._prev}
         >
           Back
         </button>
         <button class="nav primary next" @click=${this._next}>
-          ${this.currentSlide === 4
-            ? 'Finish'
-            : html`${walkthroughTabIcon(this.currentSlide + 1)}
-                <span>Next: ${this._getTabLabel(this.currentSlide + 1)}</span>`}
+          ${isLastVisible
+            ? revisit
+              ? 'Done'
+              : 'Finish'
+            : html`${walkthroughTabIcon(nextMeta.id)}
+                <span>Next: ${nextMeta.label}</span>`}
         </button>
       </div>
     `;
   }
 
   _getTitle(index = this.currentSlide) {
-    const titles = [
-      'Tone',
-      'Color Scheme',
-      'Chroming Media',
-      'Typography',
-      'Effects',
-    ];
-    return titles[index];
+    return this._slideMeta(index).label;
   }
 
   _getTabLabel(index = this.currentSlide) {
-    const labels = ['Tone', 'Color Scheme', 'Chroming Media', 'Typography', 'Effects'];
-    return labels[index] || this._getTitle(index);
+    return this._getTitle(index);
   }
 
   _getDescription(index = this.currentSlide) {
-    if (index === 1) {
+    const slideId = this._slideMeta(index).id;
+    if (slideId === 'color') {
       return this._isColorSchemeEnabled()
         ? html`How do you want it to look? Scheme, then hue, then saturation and lightness. Surfaces are pinned to swatches — drag a label to move them.<br/>
             <b>We chose a Triadic color scheme for you.</b>`
         : html`Keep it neutral. Pick a gray base for your theme, or switch to Color for relationships.`;
     }
-    const descriptions = [
-      html`Welcome to gMixer, a web page themer. To start, choose the light mode for pages.<br/>
-        <b>We chose Dark tone for you.</b>`,
-      html``,
-      html`How do you want images and videos to look?<br/>
+    const revisit = this._isRevisit();
+    /** @type {Record<string, import('lit').TemplateResult>} */
+    const descriptions = {
+      tone: revisit
+        ? html`Choose the light mode for pages.<br/>
+            <b>We chose Dark tone for you.</b>`
+        : html`Welcome to gMixer, a web page themer. To start, choose the light mode for pages.<br/>
+            <b>We chose Dark tone for you.</b>`,
+      filter: html`How do you want images and videos to look?<br/>
         <b>We chose accent-tinted images/videos for you.</b>`,
-      html`Choose the typefaces that fit your style.<br/>
+      fonts: html`Choose the typefaces that fit your style.<br/>
         <b>We set up some typefaces for you</b>`,
-      html`Finally, add some visual effects to the page.<br/>
-        <b>We made images and navigation glow.</b>`,
-    ];
-    return descriptions[index] || html``;
+      effects: revisit
+        ? html`Add visual effects to the page.<br/>
+            <b>We made images and navigation glow.</b>`
+        : html`Finally, add some visual effects to the page.<br/>
+            <b>We made images and navigation glow.</b>`,
+      preview: html`Preview how your theme reads on a sample page.<br/>
+        <b>Live Preview updates as you customize.</b>`,
+      shape: html`Clip images and round corners to match your style.<br/>
+        <b>Shape controls stay off until you opt in.</b>`,
+      navigation: html`Navigate pages with the keyboard outline and hotkeys.<br/>
+        <b>Press F to click, D to go back, R to go forward.</b>`,
+      'font-browser': html`Browse the full type catalog and assign fonts to roles.<br/>
+        <b>Open any face to preview it in context.</b>`,
+    };
+    return descriptions[slideId] || html``;
   }
 
   _renderSlide() {
-    switch (this.currentSlide) {
-      case 0:
+    switch (this._slideMeta().id) {
+      case 'tone':
         return this._renderSlide1();
-      case 1:
+      case 'color':
         return this._renderSlide2();
-      case 2:
+      case 'filter':
         return this._renderSlide3();
-      case 3:
+      case 'fonts':
         return this._renderSlide4();
-      case 4:
+      case 'effects':
         return this._renderSlide5();
+      case 'preview':
+        return this._renderPreviewSlide();
+      case 'shape':
+        return this._renderShapeSlide();
+      case 'navigation':
+        return this._renderNavigationSlide();
+      case 'font-browser':
+        return this._renderFontBrowserSlide();
       default:
         return html``;
     }
@@ -1516,6 +1816,33 @@ export class GmixerWalkthrough extends StoreBoundElement {
         @change=${(event) => this._activateSection('effects', event)}
       ></gmixer-effects-panel>
     `;
+  }
+
+  _renderPreviewSlide() {
+    return html`<gmixer-theme-preview-panel></gmixer-theme-preview-panel>`;
+  }
+
+  _renderShapeSlide() {
+    return html`
+      <gmixer-clipping-panel
+        @change=${(event) => this._activateSection('shape', event)}
+      ></gmixer-clipping-panel>
+      <gmixer-corners-panel
+        @change=${(event) => this._activateSection('shape', event)}
+      ></gmixer-corners-panel>
+    `;
+  }
+
+  _renderNavigationSlide() {
+    return html`
+      <gmixer-navigation-panel
+        @change=${(event) => this._activateSection('navigation', event)}
+      ></gmixer-navigation-panel>
+    `;
+  }
+
+  _renderFontBrowserSlide() {
+    return html`<gmixer-font-browser></gmixer-font-browser>`;
   }
 }
 

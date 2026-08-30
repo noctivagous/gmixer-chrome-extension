@@ -1,4 +1,4 @@
-import { html, css, unsafeCSS } from 'lit';
+import { html, css, svg, unsafeCSS } from 'lit';
 import { StoreBoundElement } from '../../popup/components/store-bound-element.js';
 import { store } from '../../state/store.js';
 import { buildPalette, hexToHsl, hslToHex } from '../../lib/color-theory.js';
@@ -20,9 +20,20 @@ import '../../popup/components/site-toggle.js';
 import { THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
 import './font-browser.js';
 import { defineElement } from '../../lib/define-element.js';
-import { closeHostPopover } from '../close-host-popover.js';
+import { closeHostPopover, requestShellSwitch } from '../close-host-popover.js';
 import { GRID_CSS_VARS } from '../tokens.js';
-import { MSG_OPEN_WALKTHROUGH } from '../../messaging/messages.js';
+import {
+  shellSegmentControlStyles,
+  renderShellSegments,
+} from '../shell-segment-control.js';
+import {
+  customizationLevelSelectStyles,
+  effectiveCustomizationLevel,
+  filterSectionsByCustomizationLevel,
+  patchForCustomizationLevel,
+  renderCustomizationLevelSelect,
+  sectionVisibleAtLevel,
+} from '../customization-level.js';
 import {
   SETTINGS_FOCUS_OPTIONS,
   preferredOpenSectionForFocus,
@@ -33,16 +44,17 @@ import {
 /** @typedef {{ id: string, label: string, tag: string } | { type: 'divider' }} NavItem */
 
 /**
- * Wrap Lucide-style 24×24 stroke markup in a sized decorative SVG.
- * @param {import('lit').TemplateResult|import('lit').TemplateResult[]} children
+ * Wrap Lucide-style 24×24 stroke markup in a 40×40 header icon.
+ * Children must be `svg` templates so paths stay in the SVG namespace.
+ * @param {import('lit').SVGTemplateResult|import('lit').SVGTemplateResult[]} children
  */
 function navIcon(children) {
   return html`
     <svg
       class="icon"
       viewBox="0 0 24 24"
-      width="16"
-      height="16"
+      width="40"
+      height="40"
       fill="none"
       stroke="currentColor"
       stroke-width="1.75"
@@ -59,7 +71,7 @@ function navIcon(children) {
 /** @type {Record<string, import('lit').TemplateResult>} */
 const NAV_ICONS = {
   // palette
-  theme: navIcon(html`
+  theme: navIcon(svg`
     <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" stroke="none" />
     <circle cx="17.5" cy="10.5" r="0.5" fill="currentColor" stroke="none" />
     <circle cx="8.5" cy="7.5" r="0.5" fill="currentColor" stroke="none" />
@@ -69,43 +81,43 @@ const NAV_ICONS = {
     />
   `),
   // layout / preview card
-  preview: navIcon(html`
+  preview: navIcon(svg`
     <rect width="18" height="14" x="3" y="5" rx="2" />
     <path d="M7 5V3h10v2" />
     <path d="M7 15h4" />
     <path d="M7 11h10" />
   `),
   // half-light / half-dark circle
-  tone: navIcon(html`
+  tone: navIcon(svg`
     <circle cx="12" cy="12" r="8" />
     <path d="M12 4v16" />
   `),
   // droplet
-  color: navIcon(html`
+  color: navIcon(svg`
     <path
       d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"
     />
   `),
   // type (Aa)
-  fonts: navIcon(html`
+  fonts: navIcon(svg`
     <path d="M4 7V4h16v3" />
     <path d="M9 20h6" />
     <path d="M12 4v16" />
   `),
-  // image + funnel hybrid: image
-  filter: navIcon(html`
+  // image
+  filter: navIcon(svg`
     <rect width="18" height="18" x="3" y="3" rx="2" />
     <circle cx="9" cy="9" r="2" />
     <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
   `),
   // crop + rounded corner — Clipping / Corners
-  shape: navIcon(html`
+  shape: navIcon(svg`
     <path d="M6 2v14a2 2 0 0 0 2 2h14" />
     <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     <path d="M21 3a12 12 0 0 0-12 12" />
   `),
   // sparkles
-  effects: navIcon(html`
+  effects: navIcon(svg`
     <path
       d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
     />
@@ -115,12 +127,12 @@ const NAV_ICONS = {
     <path d="M5 18H3" />
   `),
   // mouse-pointer
-  navigation: navIcon(html`
+  navigation: navIcon(svg`
     <path d="M12.586 12.586 19 19" />
     <path d="M3.688 3.037a.497.497 0 0 0-.651.604l2.094 9.065a.5.5 0 0 0 .294.334l5.797 2.232a.5.5 0 0 0 .651-.604L9.779 5.54a.5.5 0 0 0-.294-.334z" />
   `),
   // book
-  'font-browser': navIcon(html`
+  'font-browser': navIcon(svg`
     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
   `),
@@ -232,7 +244,10 @@ const SECTIONS = [
  * Baseline grid: 8px module / 24px line (see settings/tokens.js).
  */
 export class GmixerSettings extends StoreBoundElement {
-  static styles = css`
+  static styles = [
+    shellSegmentControlStyles,
+    customizationLevelSelectStyles,
+    css`
     :host {
       all: initial;
       ${unsafeCSS(GRID_CSS_VARS)}
@@ -395,25 +410,30 @@ export class GmixerSettings extends StoreBoundElement {
       line-height: 1.5;
     }
 
-    .revisit-walkthrough {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    .shell-picker {
+      max-width: 48rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 8px 16px;
       margin: 0 0 var(--gm-space-3, 24px);
-      padding: 6px 12px;
-      border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.15));
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--gm-text, #f2eefc);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 150ms ease;
     }
 
-    .revisit-walkthrough:hover {
-      background: rgba(139, 92, 246, 0.15);
-      border-color: rgba(139, 92, 246, 0.4);
+    .shell-picker-main {
+      display: grid;
+      gap: 4px;
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+
+    .shell-picker-label {
+      font-size: 11px;
+      opacity: 0.78;
+    }
+
+    .shell-picker .customization-level-picker {
+      flex: 0 1 auto;
+      padding-bottom: 1px;
     }
 
     .accordion {
@@ -670,9 +690,9 @@ export class GmixerSettings extends StoreBoundElement {
 
     .section-toggle .icon {
       display: block;
-      flex: 0 0 18px;
-      width: 18px;
-      height: 18px;
+      flex: 0 0 40px;
+      width: 40px;
+      height: 40px;
       color: #a78bfa;
       opacity: 1;
     }
@@ -777,7 +797,8 @@ export class GmixerSettings extends StoreBoundElement {
         display: none;
       }
     }
-  `;
+  `,
+  ];
 
   constructor() {
     super();
@@ -864,10 +885,38 @@ export class GmixerSettings extends StoreBoundElement {
     this.updateGlobal(patchForSettingsFocus(focus));
   }
 
-  _revisitWalkthrough() {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ type: MSG_OPEN_WALKTHROUGH });
+  /**
+   * @param {import('../../state/schema.js').PreferredShell} shell
+   */
+  _setPreferredShell(shell) {
+    if (shell === 'side-panel') {
+      this.updateGlobal({ ui: { preferredShell: 'side-panel' } });
+      return;
     }
+    this.updateGlobal({ ui: { preferredShell: 'walkthrough-modal' } });
+    requestShellSwitch('walkthrough-modal');
+  }
+
+  /**
+   * @param {import('../../state/schema.js').CustomizationLevel} level
+   */
+  _setCustomizationLevel(level) {
+    const global = this.state?.global;
+    if (!global) return;
+    const from = effectiveCustomizationLevel(global.ui);
+    if (from === level) return;
+    const patch = patchForCustomizationLevel(from, level, global);
+    const open = global.ui?.openSection;
+    if (open && !sectionVisibleAtLevel(open, level)) {
+      const focus = this._settingsFocus();
+      const visible = filterSectionsByCustomizationLevel(
+        visibleSectionsForFocus(SECTIONS, focus),
+        level
+      );
+      /** @type {Record<string, unknown>} */ (patch.ui).openSection =
+        preferredOpenSectionForFocus(focus) || visible[0]?.id || null;
+    }
+    this.updateGlobal(patch);
   }
 
   /** @returns {import('../../state/schema.js').SettingsFocus} */
@@ -877,10 +926,30 @@ export class GmixerSettings extends StoreBoundElement {
     return 'theme';
   }
 
+  /** @returns {import('../../state/schema.js').PreferredShell} */
+  _preferredShell() {
+    return this.state?.global?.ui?.preferredShell === 'walkthrough-modal'
+      ? 'walkthrough-modal'
+      : 'side-panel';
+  }
+
+  /** @returns {import('../../state/schema.js').CustomizationLevel} */
+  _customizationLevel() {
+    return effectiveCustomizationLevel(this.state?.global?.ui);
+  }
+
+  /** @returns {typeof SECTIONS} */
+  _visibleSections() {
+    const focusSections = visibleSectionsForFocus(SECTIONS, this._settingsFocus());
+    return filterSectionsByCustomizationLevel(focusSections, this._customizationLevel());
+  }
+
   render() {
     const activeId = this.state?.global?.activeThemePackId;
     const settingsFocus = this._settingsFocus();
-    const visibleSections = visibleSectionsForFocus(SECTIONS, settingsFocus);
+    const preferredShell = this._preferredShell();
+    const customizationLevel = this._customizationLevel();
+    const visibleSections = this._visibleSections();
     const openSection = this._openSectionId();
     return html`
       <header class="titlebar">
@@ -912,9 +981,21 @@ export class GmixerSettings extends StoreBoundElement {
       <main class="body">
         ${settingsFocus === 'theme'
           ? html`
-              <button type="button" class="revisit-walkthrough" @click=${this._revisitWalkthrough}>
-                <span>✦</span> Revisit walkthrough
-              </button>
+              <div class="shell-picker">
+                <div class="shell-picker-main">
+                  <span class="shell-picker-label" id="shell-picker-label">Editor</span>
+                  ${renderShellSegments({
+                    value: preferredShell,
+                    labelledBy: 'shell-picker-label',
+                    onSelect: (shell) => this._setPreferredShell(shell),
+                  })}
+                </div>
+                ${renderCustomizationLevelSelect({
+                  value: customizationLevel,
+                  id: 'settings-customization-level',
+                  onChange: (level) => this._setCustomizationLevel(level),
+                })}
+              </div>
               <div class="theme-pack-picker">
                 <label for="theme-pack">Theme pack</label>
                 <select
@@ -1009,9 +1090,9 @@ export class GmixerSettings extends StoreBoundElement {
   _openSectionId() {
     const open = this.state?.global?.ui?.openSection;
     if (open === undefined || open === null) return null;
-    const visible = visibleSectionsForFocus(SECTIONS, this._settingsFocus());
+    const visible = this._visibleSections();
     if (!visible.some((section) => section.id === open)) {
-      return preferredOpenSectionForFocus(this._settingsFocus());
+      return preferredOpenSectionForFocus(this._settingsFocus()) || visible[0]?.id || null;
     }
     return open;
   }

@@ -42,10 +42,13 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     compact: { type: Boolean, reflect: true },
     _dragRole: { state: true },
     _linkRole: { state: true },
+    /** @type {{ roleId: string, label: string, hex: string, x: number, y: number }|null} */
+    _chipTip: { state: true },
   };
 
   static styles = css`
     :host {
+      position: relative;
       display: grid;
       gap: var(--gm-space-2, 16px);
       width: 100%;
@@ -140,6 +143,9 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     .swatch-cell[data-drop-ok='true'] {
       box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
     }
+    :host([data-dragging='true']) .swatch-cell {
+      cursor: copy;
+    }
     .swatch-chips {
       display: flex;
       flex-wrap: wrap;
@@ -147,6 +153,9 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       gap: 2px;
       width: 100%;
       min-width: 0;
+      min-height: 100%;
+      height: 100%;
+      pointer-events: none;
     }
     .role-chip {
       margin: 0;
@@ -162,6 +171,9 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      pointer-events: auto;
+      touch-action: none;
+      user-select: none;
     }
     .role-chip:active,
     .role-chip[data-dragging='true'] {
@@ -174,6 +186,32 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     }
     .role-chip[data-linked='true'] {
       box-shadow: 0 0 0 1px #fff, 0 0 10px var(--gm-accent, #7c3aed);
+    }
+    .chip-tooltip {
+      position: absolute;
+      z-index: 30;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: min(280px, calc(100% - 16px));
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(20, 16, 28, 0.94);
+      color: #f2eefc;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+    .chip-tooltip-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      flex: 0 0 auto;
     }
     .scale-label {
       min-width: 3.5rem;
@@ -200,9 +238,13 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     this.monochrome = false;
     this.activeSchemeOnly = false;
     this._dragRole = null;
+    this._dropKey = null;
     this._linkRole = null;
+    this._chipTip = null;
     this._hoverLink = null;
     this._onRoleHover = this._onRoleHover.bind(this);
+    this._onWindowPointerMove = this._onChipPointerMove.bind(this);
+    this._onWindowPointerUp = this._onChipPointerUp.bind(this);
   }
 
   connectedCallback() {
@@ -219,11 +261,35 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener(HOVER_LINK_EVENT, this._onRoleHover);
+    this._unbindDragListeners();
+    this._clearDropOk();
     this._hoverLink?.destroy();
     this._hoverLink = null;
   }
 
+  _bindDragListeners() {
+    window.addEventListener('pointermove', this._onWindowPointerMove, true);
+    window.addEventListener('pointerup', this._onWindowPointerUp, true);
+    window.addEventListener('pointercancel', this._onWindowPointerUp, true);
+  }
+
+  _unbindDragListeners() {
+    window.removeEventListener('pointermove', this._onWindowPointerMove, true);
+    window.removeEventListener('pointerup', this._onWindowPointerUp, true);
+    window.removeEventListener('pointercancel', this._onWindowPointerUp, true);
+  }
+
   updated() {
+    if (this._dragRole) this.setAttribute('data-dragging', 'true');
+    else this.removeAttribute('data-dragging');
+    // Lit re-renders wipe imperative data-drop-ok; re-apply while dragging.
+    this._clearDropOk();
+    if (this._dragRole && this._dropKey) {
+      this.renderRoot
+        ?.querySelector?.(`[data-swatch-cell="${CSS.escape(this._dropKey)}"]`)
+        ?.setAttribute('data-drop-ok', 'true');
+    }
+
     const global = this.state?.global;
     const color = global?.color;
     if (!color || global?.sections?.color !== true) return;
@@ -263,6 +329,7 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
             reassign it. Hue and saturation/lightness recolor the boxes in place.
           </p>`}
       ${schemes.map((scheme) => this._renderScheme(scheme, color))}
+      ${this._renderChipTooltip()}
     `;
   }
 
@@ -340,15 +407,14 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
         data-role=${role.id}
         data-dragging=${this._dragRole === role.id}
         data-linked=${this._linkRole === role.id}
-        draggable="true"
         style="color:${chipInk(hex)}"
-        title=${`Move ${role.label}`}
         aria-label=${`Move ${role.label}`}
-        @pointerenter=${() => this._hoverChip(role.id, true)}
-        @pointerleave=${() => this._hoverChip(role.id, false)}
+        @pointerenter=${(event) => this._hoverChip(event, role, hex, true)}
+        @pointerleave=${(event) => this._hoverChip(event, role, hex, false)}
         @pointerdown=${(event) => this._onChipPointerDown(event, role.id)}
-        @pointerup=${this._onChipPointerUp}
-        @pointercancel=${this._onChipPointerUp}
+        @pointermove=${(event) => {
+          if (!this._dragRole) this._onChipPointerMove(event);
+        }}
         @keydown=${(event) => this._onChipKeyDown(event, role.id)}
       >
         ${role.short}
@@ -356,14 +422,43 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     `;
   }
 
-  _hoverChip(roleId, on) {
+  _renderChipTooltip() {
+    const tip = this._chipTip;
+    if (!tip || this._dragRole) return null;
+    const { left, top } = this._clampTip(tip.x, tip.y);
+    return html`
+      <div class="chip-tooltip" role="status" style="left:${left}px;top:${top}px">
+        <span class="chip-tooltip-swatch" style="background:${tip.hex}"></span>
+        <span>${tip.label}</span>
+      </div>
+    `;
+  }
+
+  _clampTip(x, y, width = 180, height = 28) {
+    const rw = this.clientWidth || 320;
+    const rh = this.clientHeight || 240;
+    const left = Math.max(8, Math.min(x, rw - width - 8));
+    const top = Math.max(8, Math.min(y, rh - height - 8));
+    return { left, top };
+  }
+
+  _hoverChip(event, role, hex, on) {
     if (this._dragRole) return;
     if (on) {
-      this._linkRole = roleId;
-      emitHoverLink({ kind: 'color-role', id: roleId, source: 'control' });
+      this._linkRole = role.id;
+      const rect = this.getBoundingClientRect();
+      this._chipTip = {
+        roleId: role.id,
+        label: role.label,
+        hex,
+        x: event.clientX - rect.left + 12,
+        y: event.clientY - rect.top + 14,
+      };
+      emitHoverLink({ kind: 'color-role', id: role.id, source: 'control' });
       return;
     }
-    if (this._linkRole === roleId) {
+    if (this._chipTip?.roleId === role.id) this._chipTip = null;
+    if (this._linkRole === role.id) {
       this._linkRole = null;
       emitHoverLink({ kind: 'color-role', id: null, source: 'control' });
     }
@@ -375,23 +470,98 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     this._linkRole = event.detail.id || null;
   }
 
+  _clearDropOk() {
+    this.renderRoot?.querySelectorAll?.('[data-drop-ok="true"]').forEach((el) => {
+      el.removeAttribute('data-drop-ok');
+    });
+  }
+
+  _setDropTarget(cell) {
+    const key = cell?.dataset?.swatchCell || null;
+    if (key === this._dropKey) {
+      if (cell && cell.getAttribute('data-drop-ok') !== 'true') {
+        this._clearDropOk();
+        cell.setAttribute('data-drop-ok', 'true');
+      }
+      return;
+    }
+    this._dropKey = key;
+    this._clearDropOk();
+    cell?.setAttribute('data-drop-ok', 'true');
+  }
+
+  /**
+   * Resolve the swatch under the pointer. Prefer elementFromPoint, then fall
+   * back to bounding-box hit testing so empty cells and covered targets still
+   * count as drop areas.
+   */
+  _cellFromPoint(clientX, clientY) {
+    const node = pierceElementFromPoint(clientX, clientY);
+    const pierced = node?.closest?.('[data-swatch-cell]');
+    if (pierced && this.renderRoot?.contains?.(pierced)) return pierced;
+
+    const cells = this.renderRoot?.querySelectorAll?.('.swatch-cell') || [];
+    for (const candidate of cells) {
+      const rect = candidate.getBoundingClientRect();
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   _onChipPointerDown(event, roleId) {
     if (event.button != null && event.button !== 0) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (this._dragRole) return;
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Inactive/synthetic pointers may reject capture; window listeners still drive the drag.
+    }
+    this._chipTip = null;
     this._dragRole = roleId;
     this._linkRole = null;
     emitHoverLink({ kind: 'color-role', id: null, source: 'control' });
+    this._bindDragListeners();
+    this._setDropTarget(this._cellFromPoint(event.clientX, event.clientY));
+  }
+
+  _onChipPointerMove(event) {
+    if (this._dragRole) {
+      this._setDropTarget(this._cellFromPoint(event.clientX, event.clientY));
+      return;
+    }
+    if (!this._chipTip) return;
+    const rect = this.getBoundingClientRect();
+    this._chipTip = {
+      ...this._chipTip,
+      x: event.clientX - rect.left + 12,
+      y: event.clientY - rect.top + 14,
+    };
   }
 
   _onChipPointerUp(event) {
     const roleId = this._dragRole;
-    this._dragRole = null;
     if (!roleId) return;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    const cell = this._cellFromPoint(event.clientX, event.clientY);
+    this._unbindDragListeners();
+    this._dragRole = null;
+    this._dropKey = null;
+    this._clearDropOk();
+    const target = event.currentTarget;
+    if (target?.hasPointerCapture?.(event.pointerId)) {
+      try {
+        target.releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
     }
-    const node = pierceElementFromPoint(event.clientX, event.clientY);
-    const cell = node?.closest?.('[data-swatch-cell]');
     if (!cell) return;
     this._assignRole(roleId, {
       scale: cell.dataset.scale,

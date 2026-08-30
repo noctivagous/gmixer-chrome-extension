@@ -61,6 +61,7 @@ export const PREVIEW_FONT_SLOTS = {
  *   fontSlot: string|null,
  *   media: string|null,
  *   label: string,
+ *   el: Element|null,
  * }} PreviewInspectTarget
  */
 
@@ -90,7 +91,14 @@ export function resolvePreviewTarget(start, root = null) {
       const label = media
         ? PREVIEW_MEDIA_LABEL
         : previewRoleLabel(roleId) || (fontSlot ? PREVIEW_FONT_SLOTS[fontSlot]?.label : '') || 'Preview';
-      return { roleId, fontSlot, media, label };
+      return {
+        roleId,
+        fontSlot,
+        media,
+        label,
+        // Concrete node for hover-link arrows when many share a role/slot.
+        el: /** @type {Element} */ (node),
+      };
     }
 
     if (root && typeof root.contains === 'function' && !root.contains(node)) break;

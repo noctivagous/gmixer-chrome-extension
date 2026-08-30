@@ -17,6 +17,9 @@ const HEADING_TARGETS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((tag) => ({
   hint: tag === 'h1' ? 'Primary heading · display / both' : 'Heading level · display / both',
 }));
 
+/** Hidden for this release: bulk-select headings and apply one shared face. */
+const SHOW_HEADING_GROUPS = false;
+
 const TARGETS = [
   {
     key: 'paragraph',
@@ -76,16 +79,58 @@ export class FontsPanel extends StoreBoundElement {
     }
 
     .target {
-      margin-bottom: var(--gm-baseline, 24px);
-      border-radius: var(--gm-space-1, 8px);
+      margin: 0 0 var(--gm-baseline, 24px);
+      min-width: 0;
+      padding: 8px 10px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+      box-sizing: border-box;
       outline: 1px solid transparent;
-      outline-offset: 4px;
+      outline-offset: 2px;
       transition: outline-color 0.12s ease;
+    }
+
+    .target legend {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--gm-text, #f2eefc);
+      font: 650 11px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.02em;
     }
 
     .target[data-linked='true'],
     .heading-check[data-linked='true'] {
       outline-color: rgba(196, 181, 253, 0.75);
+    }
+
+    .headers-group {
+      margin: 0 0 var(--gm-baseline, 24px);
+      min-width: 0;
+      padding: 8px 10px 2px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      box-sizing: border-box;
+    }
+
+    .headers-group > legend {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--gm-text, #f2eefc);
+      font: 650 11px/1.2 system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
+    }
+
+    .headers-group > .target {
+      margin-bottom: var(--gm-space-2, 16px);
+    }
+
+    .headers-group > .target:last-of-type {
+      margin-bottom: var(--gm-space-1, 8px);
     }
 
     .heading-tools {
@@ -130,24 +175,8 @@ export class FontsPanel extends StoreBoundElement {
       min-width: 160px;
     }
 
-    .target-head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--gm-space-1, 8px);
-      margin-bottom: var(--gm-space-1, 8px);
-    }
-
-    .target-label {
-      margin: 0;
-      font-size: 12px;
-      line-height: var(--gm-baseline, 24px);
-      opacity: 0.9;
-    }
-
     .target-hint {
-      margin: 0;
+      margin: 0 0 var(--gm-space-1, 8px);
       font-size: 11px;
       line-height: var(--gm-baseline, 24px);
       opacity: 0.55;
@@ -255,10 +284,9 @@ export class FontsPanel extends StoreBoundElement {
 
     return html`
       <p class="intro">
-        Customize every heading level independently. Select two or more levels to apply one face
-        as a group; UI chrome, body, code, and captions remain separate. Each role lists faces
-        suited to it (display vs body heuristics). Enable Show all to force any typeface onto any
-        role.
+        Customize every heading level independently. UI chrome, body, code, and captions remain
+        separate. Each role lists faces suited to it (display vs body heuristics). Enable Show all
+        to force any typeface onto any role.
       </p>
       <label class="show-all">
         <input
@@ -268,7 +296,8 @@ export class FontsPanel extends StoreBoundElement {
         />
         Show all fonts (bypass display / body filter)
       </label>
-      <div class="heading-tools">
+      ${SHOW_HEADING_GROUPS
+        ? html`<div class="heading-tools">
         <p class="heading-tools-label">Heading groups — select levels, then choose a shared face</p>
         ${HEADING_TARGETS.map(
           (target) => html`
@@ -298,8 +327,12 @@ export class FontsPanel extends StoreBoundElement {
               ></gmixer-font-picker>
             `
           : html`<span class="count">Select at least two levels to create a group.</span>`}
-      </div>
-      ${HEADING_TARGETS.map((target) => this._renderTarget(target, fonts, total))}
+      </div>`
+        : null}
+      <fieldset class="headers-group">
+        <legend>headers</legend>
+        ${HEADING_TARGETS.map((target) => this._renderTarget(target, fonts, total))}
+      </fieldset>
       ${TARGETS.map((target) => this._renderTarget(target, fonts, total))}
       <p class="upload-hint">
         ${FONTS.filter((f) => f.file).length} Peter Wiegel freeware fonts
@@ -335,17 +368,15 @@ export class FontsPanel extends StoreBoundElement {
 
     const slot = fontSlotKey(target.key);
     return html`
-      <div
+      <fieldset
         class="target"
         data-gmixer-font-slot=${slot}
         data-linked=${this._linkedSlot === slot}
         @pointerenter=${() => this._hoverSlot(slot, true)}
         @pointerleave=${() => this._hoverSlot(slot, false)}
       >
-        <div class="target-head">
-          <p class="target-label">${target.label}</p>
-          <p class="target-hint">${target.hint}</p>
-        </div>
+        <legend>${target.label}</legend>
+        <p class="target-hint">${target.hint}</p>
         <gmixer-font-picker
           .target=${pickerTarget}
           .showAll=${this._showAll}
@@ -360,7 +391,7 @@ export class FontsPanel extends StoreBoundElement {
           <span class="count">${this._showAll ? `${total} fonts` : `${available} suited · ${total} total`}</span>
           ${reason ? html`<span class="warn" title=${reason}>Not recommended for this role</span>` : null}
         </div>
-      </div>
+      </fieldset>
     `;
   }
 

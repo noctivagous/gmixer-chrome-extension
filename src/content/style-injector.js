@@ -19,6 +19,7 @@ import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
+import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
 
 export { PALETTE_FILTER_PRESETS, resolveImageFilterPreset } from '../config/image-filter-presets.js';
@@ -1221,6 +1222,7 @@ function roleCss(
  */
 export function isSectionEnabled(resolved, id) {
   if (!sectionAllowedByFocus(resolved?.ui?.settingsFocus, id)) return false;
+  if (!sectionAllowedByCustomizationLevel(resolved?.ui, id)) return false;
   if (id === 'navigation') return !!resolved?.navigation?.enabled;
   const sections = resolved?.sections;
   if (!sections || sections[id] === undefined) {

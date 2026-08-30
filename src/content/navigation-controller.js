@@ -6,6 +6,7 @@ import { findClickableAtPoint, isTypingContext } from './clickable-detector.js';
 import { HoverOutline } from './hover-outline.js';
 import { buildPalette } from '../lib/color-theory.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
+import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 
 const KEY = {
   click: 'f',
@@ -32,7 +33,8 @@ export class NavigationController {
     const want =
       !!nav?.enabled &&
       resolved?.enabled !== false &&
-      sectionAllowedByFocus(resolved?.ui?.settingsFocus, 'navigation');
+      sectionAllowedByFocus(resolved?.ui?.settingsFocus, 'navigation') &&
+      sectionAllowedByCustomizationLevel(resolved?.ui, 'navigation');
 
     const palette = buildPalette(
       resolved?.color?.baseColor || '#7c3aed',
