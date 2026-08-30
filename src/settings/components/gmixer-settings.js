@@ -1249,14 +1249,17 @@ export class GmixerSettings extends StoreBoundElement {
     }
 
     if (id === 'filter') {
-      const preset = global?.imageFilter?.enabled ? global.imageFilter.preset : 'none';
+      const cats = global?.imageFilter?.categories;
+      const preset = global?.imageFilter?.enabled
+        ? cats?.articleImages || cats?.images || 'none'
+        : 'none';
       const monochrome = preset === 'monochrome' || preset === 'grayscale';
       return html`
         <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
           <rect x="41" y="13" width="86" height="46" rx="5" fill=${monochrome ? '#8b8b8b' : palette?.accent || '#a78bfa'} opacity=".4" />
           <circle cx="62" cy="27" r="6" fill=${monochrome ? '#d8d8d8' : '#facc15'} />
           <path d="m45 53 23-17 14 9 15-13 27 21" fill="none" stroke="currentColor" stroke-width="2" />
-          <text x="163" y="40" text-anchor="middle" fill="currentColor" font-size="8" font-weight="700">${preset === 'none' ? 'RAW' : preset.toUpperCase().slice(0, 6)}</text>
+          <text x="163" y="40" text-anchor="middle" fill="currentColor" font-size="8" font-weight="700">${preset === 'none' ? 'RAW' : String(preset).toUpperCase().slice(0, 6)}</text>
         </svg>
       `;
     }

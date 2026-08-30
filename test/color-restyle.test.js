@@ -658,8 +658,13 @@ describe('buildCss page paint', () => {
     global.activeThemePackId = 'editorial';
     global.sections.filter = true;
     global.imageFilter.enabled = true;
-    global.imageFilter.scope = 'backgrounds';
-    global.imageFilter.preset = 'monochrome';
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'none',
+      bgImages: 'monochrome',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
     const css = buildCss(global, null);
 
     assert.match(css, /\.gmixer-bgimg-overlay/);
@@ -672,12 +677,17 @@ describe('buildCss page paint', () => {
     const global = createDefaultState().global;
     global.sections.filter = true;
     global.imageFilter.enabled = true;
-    global.imageFilter.preset = 'monochrome';
     global.imageFilter.revealOnHover = true;
-    global.imageFilter.scope = 'both';
+    global.imageFilter.categories = {
+      articleImages: 'monochrome',
+      images: 'monochrome',
+      bgImages: 'monochrome',
+      videos: 'monochrome',
+      videoPlayback: 'monochrome',
+    };
     const css = buildCss(global, null);
 
-    assert.match(css, /img, video \{ filter: grayscale\(1\)/);
+    assert.match(css, /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\)/);
     assert.match(css, /img:hover, video:hover/);
     assert.match(css, /a:hover img, a:hover video/);
     assert.match(css, /filter: none !important/);
@@ -692,17 +702,28 @@ describe('buildCss page paint', () => {
     global.sections.filter = true;
     global.sections.color = true;
     global.imageFilter.enabled = true;
-    global.imageFilter.scope = 'images';
     global.color.baseColor = '#3366ff';
     global.color.scheme = 'complement';
 
-    global.imageFilter.preset = 'accent-tint';
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'accent-tint',
+      bgImages: 'none',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
     const tintCss = buildCss(global, null);
-    assert.match(tintCss, /img, video \{ filter: grayscale\(1\) sepia\(0\.55\) hue-rotate\(\d+deg\) saturate\(0\.85\)/);
+    assert.match(
+      tintCss,
+      /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\) sepia\(0\.55\) hue-rotate\(\d+deg\) saturate\(0\.85\)/
+    );
 
-    global.imageFilter.preset = 'link-wash';
+    global.imageFilter.categories.images = 'link-wash';
     const linkCss = buildCss(global, null);
-    assert.match(linkCss, /img, video \{ filter: grayscale\(1\) sepia\(1\) hue-rotate\(\d+deg\) saturate\(1\.4\)/);
+    assert.match(
+      linkCss,
+      /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\) sepia\(1\) hue-rotate\(\d+deg\) saturate\(1\.4\)/
+    );
   });
 
   it('falls palette washes back to monochrome when Color is off', () => {
@@ -711,11 +732,16 @@ describe('buildCss page paint', () => {
     global.sections.color = false;
     global.sections.tone = false;
     global.imageFilter.enabled = true;
-    global.imageFilter.preset = 'accent-tint';
-    global.imageFilter.scope = 'both';
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'accent-tint',
+      bgImages: 'accent-tint',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
     const css = buildCss(global, null);
 
-    assert.match(css, /img, video \{ filter: grayscale\(1\) contrast/);
+    assert.match(css, /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter: grayscale\(1\) contrast/);
     assert.doesNotMatch(css, /sepia\(0\.55\)/);
     assert.match(css, /mix-blend-mode: saturation/);
     assert.match(css, /background: #808080 !important/);
@@ -744,9 +770,15 @@ describe('buildCss page paint', () => {
       filter: true,
     };
     global.imageFilter.enabled = true;
-    global.imageFilter.preset = 'monochrome';
+    global.imageFilter.categories = {
+      articleImages: 'monochrome',
+      images: 'monochrome',
+      bgImages: 'none',
+      videos: 'monochrome',
+      videoPlayback: 'monochrome',
+    };
     const css = buildCss(global, null);
-    assert.match(css, /img, video \{ filter:/);
+    assert.match(css, /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter:/);
     assert.match(css, /grayscale\(1\)/);
     assert.doesNotMatch(css, /--gmixer-bg-primary:/);
     assert.doesNotMatch(css, /--gmixer-text:/);
@@ -760,7 +792,8 @@ describe('buildCss page paint', () => {
     global.imageFilter.enabled = true;
     const css = buildCss(global, null);
     assert.match(css, /--gmixer-bg-primary:/);
-    assert.doesNotMatch(css, /img, video \{ filter:/);
+    assert.doesNotMatch(css, /data-gmixer-media="article-image"/);
+    assert.doesNotMatch(css, /img:not\(\[data-gmixer-media="article-image"\]\)[\s\S]*filter:/);
   });
 });
 

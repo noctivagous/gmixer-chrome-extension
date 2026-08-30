@@ -93,10 +93,19 @@ export function createDefaultState() {
       },
       imageFilter: {
         enabled: false,
-        preset: 'none',
         customFilter: '',
-        scope: 'images', // 'images' | 'backgrounds' | 'both'
         revealOnHover: true,
+        // Primary Chroming Media rows (per-category CSS filters).
+        categories: {
+          articleImages: 'accent-tint',
+          images: 'monochrome',
+          bgImages: 'monochrome',
+          videos: 'link-wash',
+          videoPlayback: 'link-wash',
+        },
+        // Legacy fields retained for migration only (UI no longer writes them).
+        preset: 'none',
+        scope: 'images', // 'images' | 'backgrounds' | 'both'
       },
       // Empty category entries inherit the active theme pack's media slots.
       // User changes are stored here as explicit per-category overrides.
@@ -133,7 +142,7 @@ export function createDefaultState() {
         cursor: { enabled: false, style: 'default' },
         backgroundMotion: { enabled: false },
       },
-      // Surface texture shell (Stage 1: UI/state only — no page paint yet).
+      // Surface texture: global recipe + per-surface on/off (page paint later).
       texture: {
         mode: /** @type {'none' | 'noise' | 'grid'} */ ('none'),
         xDistance: 12,
@@ -142,6 +151,26 @@ export function createDefaultState() {
         gridStyle: /** @type {'diamond-x' | 'diamond-y' | 'rect-dots' | 'square-dots'} */ (
           'square-dots'
         ),
+        // Defaults: GUI button + input on; remaining surfaces opt-in.
+        surfaces: {
+          'gui.button': true,
+          'gui.input': true,
+          'gui.textarea': false,
+          'media.articleImage': false,
+          'media.videoThumb': false,
+          'accent.headingLarge': false,
+          'accent.headingMedium': false,
+          'accent.headingSmall': false,
+          'link.bare': false,
+          'link.article': false,
+          'link.heading': false,
+          'muted.kicker': false,
+          'muted.photoCaption': false,
+          'muted.asideNotes': false,
+          containers: false,
+          sheet: false,
+          canvas: false,
+        },
       },
       navigation: {
         enabled: false, // master opt-in switch — off by default

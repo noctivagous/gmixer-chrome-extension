@@ -8,6 +8,8 @@ import {
   TEXTURE_DISTANCE_MAX,
   TEXTURE_ROTATION_MIN,
   TEXTURE_ROTATION_MAX,
+  TEXTURE_SURFACES,
+  TEXTURE_SURFACE_GROUPS,
   normalizeTexture,
   texturePreviewStyle,
 } from '../../config/texture-catalog.js';
@@ -183,6 +185,39 @@ export class TexturePanel extends StoreBoundElement {
       opacity: 0.75;
       font-variant-numeric: tabular-nums;
     }
+
+    .surface-groups {
+      display: grid;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .surface-list {
+      display: grid;
+      gap: 4px;
+    }
+
+    .surface-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .surface-row input {
+      margin: 0;
+      accent-color: var(--gm-accent, #8b5cf6);
+    }
+
+    .surface-groups[data-disabled='true'] {
+      opacity: 0.45;
+    }
+
+    .surface-groups[data-disabled='true'] .surface-row {
+      cursor: not-allowed;
+    }
   `;
 
   updateGlobal(patch) {
@@ -223,6 +258,16 @@ export class TexturePanel extends StoreBoundElement {
     this._patchTexture({ mode: 'grid', [key]: Number(value) });
   }
 
+  /**
+   * @param {import('../../config/texture-catalog.js').TextureSurfaceId} id
+   * @param {boolean} enabled
+   */
+  _setSurface(id, enabled) {
+    this._patchTexture({
+      surfaces: { [id]: enabled },
+    });
+  }
+
   render() {
     const texture = normalizeTexture(this.state?.global?.texture);
     const styleLabel =
@@ -235,11 +280,12 @@ export class TexturePanel extends StoreBoundElement {
           ? 'Noise'
           : styleLabel;
     const showGridControls = texture.mode === 'grid';
+    const surfacesDisabled = texture.mode === 'none';
 
     return html`
       <p class="hint">
-        Pick one texture mode. Grid spacing and rotation are shared across grid styles. Page paint
-        comes in a later stage — this panel stores your choice.
+        Pick one texture mode, then choose which surfaces receive it. Live Preview and the page both
+        pick up enabled surfaces.
       </p>
 
       <div class="mode-segments" role="group" aria-label="Texture mode">
@@ -334,6 +380,37 @@ export class TexturePanel extends StoreBoundElement {
         : texture.mode === 'noise'
           ? html`<p class="hint">Noise uses a fine grain wash. Grid unlocks spacing and style controls.</p>`
           : html`<p class="hint">Texture is off. Choose Noise or Grid to opt in.</p>`}
+
+      <div class="surface-groups" data-disabled=${surfacesDisabled}>
+        ${TEXTURE_SURFACE_GROUPS.map((group) => {
+          const items = TEXTURE_SURFACES.filter(
+            (surface) => surface.inUi && surface.group === group
+          );
+          if (!items.length) return html``;
+          return html`
+            <fieldset class="param-fieldset">
+              <legend>Apply to · ${group}</legend>
+              <div class="surface-list" role="group" aria-label=${`Apply texture to ${group}`}>
+                ${items.map((surface) => {
+                  const inputId = `texture-surface-${surface.id.replace(/\./g, '-')}`;
+                  return html`
+                    <label class="surface-row" for=${inputId}>
+                      <input
+                        id=${inputId}
+                        type="checkbox"
+                        .checked=${texture.surfaces[surface.id] === true}
+                        ?disabled=${surfacesDisabled}
+                        @change=${(e) => this._setSurface(surface.id, e.target.checked)}
+                      />
+                      <span>${surface.label}</span>
+                    </label>
+                  `;
+                })}
+              </div>
+            </fieldset>
+          `;
+        })}
+      </div>
     `;
   }
 }

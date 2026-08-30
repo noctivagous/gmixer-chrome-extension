@@ -55,7 +55,8 @@ describe('settings-focus', () => {
     assert.equal(patch.ui.openSection, 'filter');
     assert.equal(patch.sections.filter, true);
     assert.equal(patch.imageFilter.enabled, true);
-    assert.equal(patch.imageFilter.preset, 'monochrome');
+    assert.equal(patch.imageFilter.categories.images, 'monochrome');
+    assert.equal(patch.imageFilter.categories.bgImages, 'monochrome');
     assert.equal(patch.imageFilter.revealOnHover, true);
   });
 

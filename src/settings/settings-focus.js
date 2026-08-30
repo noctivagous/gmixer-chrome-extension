@@ -71,8 +71,14 @@ export function patchForSettingsFocus(focus) {
       sections: { filter: true },
       imageFilter: {
         enabled: true,
-        preset: 'monochrome',
         revealOnHover: true,
+        categories: {
+          articleImages: 'monochrome',
+          images: 'monochrome',
+          bgImages: 'monochrome',
+          videos: 'monochrome',
+          videoPlayback: 'monochrome',
+        },
       },
     };
   }

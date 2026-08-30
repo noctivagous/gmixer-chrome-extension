@@ -504,7 +504,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       flex-direction: column;
       min-width: 0;
       min-height: 0;
-      padding: var(--gm-space-2, 16px);
+      padding: 0;
       overflow: hidden;
       border-left: 1px solid var(--gm-border, rgba(255, 255, 255, 0.1));
       background: rgba(0, 0, 0, 0.16);
@@ -1170,7 +1170,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { texture: true },
-          texture: { mode: 'noise' },
+          texture: {
+            mode: 'noise',
+            surfaces: {
+              'gui.button': true,
+              'gui.input': true,
+            },
+          },
         });
         break;
       case 'filter':
@@ -1179,9 +1185,14 @@ export class GmixerWalkthrough extends StoreBoundElement {
           sections: { filter: true },
           imageFilter: {
             enabled: true,
-            preset: 'accent-tint',
-            scope: 'both',
             revealOnHover: true,
+            categories: {
+              articleImages: 'accent-tint',
+              images: 'monochrome',
+              bgImages: 'monochrome',
+              videos: 'link-wash',
+              videoPlayback: 'link-wash',
+            },
           },
         });
         break;
@@ -1587,7 +1598,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       texture: html`Add a surface texture layer — fine Noise, or a spaced Grid.<br/>
         <b>We chose Noise for you.</b>`,
       filter: html`How do you want images and videos to look?<br/>
-        <b>We chose accent-tinted images/videos for you.</b>`,
+        <b>We set accent-tint on article images, monochrome on images/bg, and link-wash on video.</b>`,
       fonts: html`Choose the typefaces that fit your style.<br/>
         <b>We set up some typefaces for you</b>`,
       effects: revisit

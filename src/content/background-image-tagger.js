@@ -95,7 +95,12 @@ function* walkElements(root, max) {
  */
 export function shouldTagBackgroundImages(imageFilter, mediaStyles = {}, options = {}) {
   if (options.colorOn) return true;
-  const globalFilterApplies = !!imageFilter?.enabled && imageFilter.scope !== 'images';
+  const cats = imageFilter?.categories;
+  const globalFilterApplies =
+    !!imageFilter?.enabled &&
+    (cats
+      ? cats.bgImages && cats.bgImages !== 'none'
+      : imageFilter.scope !== 'images');
   const categoryFilterApplies = Object.values(mediaStyles || {}).some(
     (style) => style?.filter && !['auto', 'none', 'original'].includes(style.filter)
   );

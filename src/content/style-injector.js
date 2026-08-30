@@ -11,18 +11,26 @@ import {
   applyColorOverrides,
   resolveEffectivePalette,
 } from '../lib/effective-palette.js';
-import { resolveImageFilterPreset } from '../config/image-filter-presets.js';
+import {
+  normalizeImageFilter,
+  resolveImageFilterPreset,
+} from '../config/image-filter-presets.js';
 import { normalizeEffects } from '../config/effects-catalog.js';
 import { getFontById } from '../config/fonts.js';
 import { getThemePackById } from '../config/theme-packs.js';
 import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
+import { texturePageRules } from '../lib/texture-page-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
 
-export { PALETTE_FILTER_PRESETS, resolveImageFilterPreset } from '../config/image-filter-presets.js';
+export {
+  PALETTE_FILTER_PRESETS,
+  resolveImageFilterPreset,
+  normalizeImageFilter,
+} from '../config/image-filter-presets.js';
 
 export const STYLE_ELEMENT_ID = 'gmixer-style';
 const HOST_STYLE_ID = 'gmixer-settings-host-style';
@@ -153,35 +161,74 @@ function backgroundOverlayForPreset(preset, palette) {
   return { color: '#808080', blend: 'saturation', opacity: 0.72 };
 }
 
-function imageFilterRule(filter, palette, options = {}) {
-  if (!filter?.enabled) return '';
-  const applyToImages = filter.scope !== 'backgrounds';
-  const applyToBackgrounds = filter.scope !== 'images';
+function imageFilterRule(filterRaw, palette, options = {}) {
+  const filter = normalizeImageFilter(filterRaw);
+  if (!filter.enabled) return '';
   const colorOn = options.colorOn !== false;
-  const effectivePreset = resolveImageFilterPreset(filter.preset, colorOn);
-  const value = imageFilterPresetCss(filter.preset, palette, filter.customFilter, { colorOn });
+  const cats = filter.categories;
+  const custom = filter.customFilter;
   const rules = [];
 
-  if (applyToImages) {
-    // Filter the visible replaced elements — not <source>, which never paints.
-    rules.push(`img, video { filter: ${value} !important; }`);
-    if (filter.revealOnHover) {
-      rules.push(`img:hover, video:hover,
-picture:hover img, picture:hover video,
-a:hover img, a:hover video,
-figure:hover img, figure:hover video {
-  filter: none !important;
+  const cssFor = (preset) =>
+    preset && preset !== 'none'
+      ? imageFilterPresetCss(preset, palette, custom, { colorOn })
+      : '';
+
+  const articleCss = cssFor(cats.articleImages);
+  const imagesCss = cssFor(cats.images);
+  const videosCss = cssFor(cats.videos);
+  const playbackCss = cssFor(cats.videoPlayback);
+  const bgPreset = resolveImageFilterPreset(cats.bgImages, colorOn);
+
+  // Specific before general: article images override unclassified images.
+  if (articleCss && articleCss !== 'none') {
+    rules.push(`[data-gmixer-media="article-image"],
+picture:has([data-gmixer-media="article-image"]) img {
+  filter: ${articleCss} !important;
 }`);
-    }
   }
 
-  if (!applyToBackgrounds) return rules.join('\n');
+  if (imagesCss && imagesCss !== 'none') {
+    rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="logo"]),
+picture:not(:has([data-gmixer-media="article-image"])) img:not([data-gmixer-media="logo"]) {
+  filter: ${imagesCss} !important;
+}`);
+  }
 
-  // Never put filter/background declarations on the element that owns the
-  // page's background-image: that also filters its text and can replace the
-  // site's image. A separate layer blends over the original image instead.
-  const overlay = backgroundOverlayForPreset(effectivePreset, palette);
-  rules.push(`
+  // `:paused` / `:playing` are not supported in Chrome stylesheets and drop
+  // the whole rule from the CSSOM. Play/pause is stamped as
+  // data-gmixer-video-state by video-playback-state.js.
+  if (videosCss && videosCss !== 'none') {
+    rules.push(`video[data-gmixer-video-state="paused"],
+video[data-gmixer-media="video-thumbnail"][data-gmixer-video-state="paused"],
+[data-gmixer-media="video-thumbnail"]:not(video) {
+  filter: ${videosCss} !important;
+}`);
+  }
+
+  if (playbackCss && playbackCss !== 'none') {
+    rules.push(`video[data-gmixer-video-state="playing"] {
+  filter: ${playbackCss} !important;
+}`);
+  }
+
+  if (filter.revealOnHover && (articleCss || imagesCss || videosCss || playbackCss)) {
+    rules.push(`img:hover, video:hover,
+picture:hover img, picture:hover video,
+a:hover img, a:hover video,
+figure:hover img, figure:hover video,
+[data-gmixer-media="article-image"]:hover,
+[data-gmixer-media="video-thumbnail"]:hover {
+  filter: none !important;
+}`);
+  }
+
+  if (cats.bgImages && cats.bgImages !== 'none') {
+    // Never put filter/background declarations on the element that owns the
+    // page's background-image: that also filters its text and can replace the
+    // site's image. A separate layer blends over the original image instead.
+    const overlay = backgroundOverlayForPreset(bgPreset, palette);
+    rules.push(`
     [${BACKGROUND_IMAGE_ATTR}] {
       position: relative !important;
       isolation: isolate !important;
@@ -205,6 +252,7 @@ figure:hover img, figure:hover video {
         : ''
     }
   `);
+  }
 
   return rules.filter(Boolean).join('\n');
 }
@@ -228,9 +276,14 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
         .join(', ');
       const declarations = [];
       const rules = [];
-      if (style?.filter && style.filter !== 'auto' && style.filter !== 'original') {
+      // Auto / original / missing → fall through to primary Chroming Media rows.
+      // Explicit Level 3 overrides (including none) win via later rules.
+      const roleFilter = style?.filter;
+      if (roleFilter === 'none') {
+        rules.push(`${filterSelector} { filter: none !important; }`);
+      } else if (roleFilter && roleFilter !== 'auto' && roleFilter !== 'original') {
         rules.push(
-          `${filterSelector} { filter: ${imageFilterPresetCss(style.filter, palette, '', { colorOn })} !important; }`
+          `${filterSelector} { filter: ${imageFilterPresetCss(roleFilter, palette, '', { colorOn })} !important; }`
         );
       }
       if (style?.outline === 'accent') {
@@ -239,7 +292,13 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
       if (declarations.length) {
         rules.push(`${selector} { ${declarations.join(' ')} }`);
       }
-      if (revealOnHover && style?.filter && style.filter !== 'auto' && style.filter !== 'original') {
+      if (
+        revealOnHover &&
+        roleFilter &&
+        roleFilter !== 'auto' &&
+        roleFilter !== 'original' &&
+        roleFilter !== 'none'
+      ) {
         rules.push(`${filterSelector}:hover { filter: none !important; }`);
       }
       return rules.join('\n');
@@ -1243,6 +1302,7 @@ export function buildCss(resolved, pageSample = null) {
   const paintMedia = isSectionEnabled(resolved, 'filter');
   const paintShape = isSectionEnabled(resolved, 'shape');
   const paintEffects = isSectionEnabled(resolved, 'effects');
+  const paintTexture = isSectionEnabled(resolved, 'texture');
   // Tone uses the theme palette at full strength with structural header/nav
   // fills so Light|Gray|Dark is not muddied by page sampling / brand preserve.
   const identityMode = toneFocus
@@ -1302,7 +1362,7 @@ export function buildCss(resolved, pageSample = null) {
           resolved.activeThemePackId,
           resolved.mediaStyles,
           blended,
-          resolved.imageFilter?.revealOnHover,
+          normalizeImageFilter(resolved.imageFilter).revealOnHover,
           { colorOn }
         )
       : '',
@@ -1318,6 +1378,8 @@ export function buildCss(resolved, pageSample = null) {
           navLink: roleResolved('navLink') || roleResolved('link'),
         })
       : '',
+    // Texture after tone/effects so background-image / text-clip wins on targets.
+    paintTexture ? texturePageRules(resolved.texture) : '',
   ]
     .filter(Boolean)
     .join('\n\n');

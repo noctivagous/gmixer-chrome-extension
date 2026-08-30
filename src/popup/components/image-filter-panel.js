@@ -2,35 +2,16 @@ import { html, css } from 'lit';
 import { StoreBoundElement } from './store-bound-element.js';
 import { getThemePackById } from '../../config/theme-packs.js';
 import { defineElement } from '../../lib/define-element.js';
-import { PALETTE_FILTER_PRESETS } from '../../config/image-filter-presets.js';
+import {
+  PALETTE_FILTER_PRESETS,
+  IMAGE_FILTER_PRESETS,
+  DETAILED_CATEGORY_PRESETS,
+  MEDIA_FILTER_CATEGORIES,
+  normalizeImageFilter,
+  resolveAutoMediaRoleFilter,
+} from '../../config/image-filter-presets.js';
+import { effectiveCustomizationLevel } from '../../settings/customization-level.js';
 
-const PRESETS = [
-  { id: 'grayscale', label: 'grayscale' },
-  { id: 'sepia', label: 'sepia' },
-  { id: 'invert', label: 'invert' },
-  { id: 'monochrome', label: 'monochrome' },
-  { id: 'duotone', label: 'duotone', requiresColor: true },
-  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
-  { id: 'link-wash', label: 'link wash', requiresColor: true },
-  { id: 'custom', label: 'custom' },
-];
-
-const CATEGORY_PRESETS = [
-  { id: 'auto', label: 'auto' },
-  { id: 'none', label: 'none' },
-  { id: 'monochrome', label: 'monochrome' },
-  { id: 'grayscale', label: 'grayscale' },
-  { id: 'sepia', label: 'sepia' },
-  { id: 'duotone', label: 'duotone', requiresColor: true },
-  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
-  { id: 'link-wash', label: 'link wash', requiresColor: true },
-];
-
-const SCOPES = [
-  { id: 'images', label: 'Images/video only' },
-  { id: 'backgrounds', label: 'Background images only' },
-  { id: 'both', label: 'Both' },
-];
 const MEDIA_ROLES = [
   ['articleImage', 'Article images'],
   ['videoThumbnail', 'Video thumbnails'],
@@ -75,20 +56,23 @@ export class ImageFilterPanel extends StoreBoundElement {
       display: flex;
       align-items: center;
       gap: 6px;
+      margin-top: 10px;
     }
-    .apply-filter-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .apply-filter-row label {
-      flex: 0 0 auto;
+    .toggle-row label {
       margin: 0;
-      white-space: nowrap;
     }
-    .apply-filter-row select {
-      flex: 1;
-      min-width: 0;
+    .category-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .category-row span {
+      font-size: 12px;
+    }
+    .category-row select {
+      width: 100%;
     }
     .media-categories {
       margin: 16px 0 0;
@@ -147,133 +131,162 @@ export class ImageFilterPanel extends StoreBoundElement {
     }
   `;
 
+  /**
+   * @param {Partial<import('../../config/image-filter-presets.js').ImageFilterSettings>} patch
+   */
+  _patchFilter(patch) {
+    this.updateGlobal({
+      activeThemePackId: 'user-made',
+      sections: { filter: true },
+      imageFilter: { enabled: true, ...patch },
+    });
+  }
+
+  /**
+   * @param {import('../../config/image-filter-presets.js').MediaFilterCategoryId} id
+   * @param {string} preset
+   */
+  _setCategory(id, preset) {
+    this._patchFilter({
+      categories: { [id]: preset },
+    });
+  }
+
   render() {
-    const filter = this.state?.global?.imageFilter;
-    if (!filter) return html``;
+    const raw = this.state?.global?.imageFilter;
+    if (!raw && raw !== undefined && !this.state?.global) return html``;
+    const filter = normalizeImageFilter(raw);
     const global = this.state.global;
     const pack = getThemePackById(global.activeThemePackId);
     const overrides = global.mediaStyles || {};
     const colorOn = colorSectionOn(global);
-    const presetOptions = visiblePresets(PRESETS, colorOn, filter.preset);
+    const level = effectiveCustomizationLevel(global.ui);
+    const showDetailed = level >= 3;
+    const usesCustom = Object.values(filter.categories).includes('custom');
 
     return html`
-      <label>Preset</label>
-      <select @change=${(e) => this.updateGlobal({ imageFilter: { preset: e.target.value } })}>
-        ${presetOptions.map(
-          (preset) => html`<option value=${preset.id} ?selected=${preset.id === filter.preset}>
-            ${preset.label}
-          </option>`
-        )}
-      </select>
-      ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
+      <p class="hint">
+        Choose a CSS filter per media kind. Article images override general images on classified
+        nodes.
+      </p>
+      ${!colorOn
         ? html`<p class="hint">
-            Color is off — this palette wash paints as monochrome until Color is enabled.
+            Color is off — accent tint, link wash, and duotone paint as monochrome until Color is
+            enabled.
           </p>`
-        : !colorOn
-          ? html`<p class="hint">Turn on Color to unlock accent tint, link wash, and duotone.</p>`
-          : html``}
+        : html``}
 
-      <div class="apply-filter-row">
-        <input
-          id="image-filter-enabled"
-          type="checkbox"
-          .checked=${filter.enabled}
-          @change=${(event) => {
-            const enabled = event.target.checked;
-            /** @type {Record<string, unknown>} */
-            const imageFilter = { enabled };
-            // Blank-slate default is preset "none"; turning the filter on
-            // without a visible preset still looks like a no-op.
-            if (enabled && (!filter.preset || filter.preset === 'none')) {
-              imageFilter.preset = 'monochrome';
-            }
-            this.updateGlobal({ imageFilter });
-          }}
-        />
-        <label for="image-filter-scope">Apply filter to</label>
-        <select
-          id="image-filter-scope"
-          .value=${filter.scope || 'images'}
-          @change=${(event) => {
-            this.updateGlobal({ imageFilter: { scope: event.target.value } });
-          }}
-        >
-          ${SCOPES.map(
-            (scope) => html`<option value=${scope.id}>${scope.label}</option>`
-          )}
-        </select>
-      </div>
+      ${MEDIA_FILTER_CATEGORIES.map((category) => {
+        const current = filter.categories[category.id];
+        const options = visiblePresets(IMAGE_FILTER_PRESETS, colorOn, current);
+        return html`
+          <div class="category-row">
+            <span>${category.label}:</span>
+            <select
+              aria-label=${`${category.label} filter`}
+              @change=${(e) => this._setCategory(category.id, e.target.value)}
+            >
+              ${options.map(
+                (preset) => html`
+                  <option value=${preset.id} ?selected=${preset.id === current}>
+                    ${preset.label}
+                  </option>
+                `
+              )}
+            </select>
+          </div>
+        `;
+      })}
+
       <div class="toggle-row">
         <input
+          id="image-filter-reveal"
           type="checkbox"
           .checked=${filter.revealOnHover === true}
-          @change=${(e) =>
-            this.updateGlobal({ imageFilter: { revealOnHover: e.target.checked } })}
+          @change=${(e) => this._patchFilter({ revealOnHover: e.target.checked })}
         />
-        <label style="margin:0">Hover shows media unfiltered</label>
+        <label for="image-filter-reveal">Hover shows media unfiltered</label>
       </div>
 
-      ${filter.preset === 'custom'
+      ${usesCustom
         ? html`
             <label>Custom filter()</label>
             <input
               type="text"
               placeholder="e.g. grayscale(1) contrast(1.1)"
               .value=${filter.customFilter}
-              @input=${(e) => this.updateGlobal({ imageFilter: { customFilter: e.target.value } })}
+              @input=${(e) => this._patchFilter({ customFilter: e.target.value })}
             />
           `
         : html``}
 
-      <details class="media-categories">
-        <summary>Recognized media categories</summary>
-        <div class="category-body">
-          <p class="hint">
-            Category overrides win over the global filter. “Auto” follows the global setting.
-          </p>
-          ${MEDIA_ROLES.map(([role, label]) => {
-            const current = {
-              filter: 'auto',
-              outline: 'none',
-              ...(pack?.media?.[role] || {}),
-              ...(overrides[role] || {}),
-            };
-            const categoryOptions = visiblePresets(CATEGORY_PRESETS, colorOn, current.filter);
-            return html`
-              <div class="category">
-                <span>${label}</span>
-                <select
-                  aria-label=${`${label} filter`}
-                  @change=${(e) =>
-                    this.updateGlobal({ mediaStyles: { [role]: { filter: e.target.value } } })}
-                >
-                  ${categoryOptions.map(
-                    (preset) =>
-                      html`<option value=${preset.id} ?selected=${preset.id === current.filter}>
-                        ${preset.label}
-                      </option>`
-                  )}
-                </select>
+      ${showDetailed
+        ? html`
+            <details class="media-categories">
+              <summary>Detailed Media Categories</summary>
+              <div class="category-body">
+                <p class="hint">
+                  Category overrides win over the primary rows. “Auto” follows the matching primary
+                  Chroming Media row.
+                </p>
+                ${MEDIA_ROLES.map(([role, label]) => {
+                  const current = {
+                    filter: 'auto',
+                    outline: 'none',
+                    ...(pack?.media?.[role] || {}),
+                    ...(overrides[role] || {}),
+                  };
+                  const categoryOptions = visiblePresets(
+                    DETAILED_CATEGORY_PRESETS,
+                    colorOn,
+                    current.filter
+                  );
+                  const autoResolved = resolveAutoMediaRoleFilter(role, filter.categories);
+                  return html`
+                    <div class="category">
+                      <span>${label}</span>
+                      <select
+                        aria-label=${`${label} filter`}
+                        @change=${(e) =>
+                          this.updateGlobal({
+                            mediaStyles: { [role]: { filter: e.target.value } },
+                          })}
+                      >
+                        ${categoryOptions.map(
+                          (preset) => html`
+                            <option value=${preset.id} ?selected=${preset.id === current.filter}>
+                              ${preset.id === 'auto'
+                                ? `auto (${autoResolved})`
+                                : preset.label}
+                            </option>
+                          `
+                        )}
+                      </select>
+                    </div>
+                    <div class="category">
+                      <span>${label} outline</span>
+                      <select
+                        aria-label=${`${label} outline`}
+                        @change=${(e) =>
+                          this.updateGlobal({
+                            mediaStyles: { [role]: { outline: e.target.value } },
+                          })}
+                      >
+                        ${['none', 'accent'].map(
+                          (outline) => html`
+                            <option value=${outline} ?selected=${outline === current.outline}>
+                              ${outline}
+                            </option>
+                          `
+                        )}
+                      </select>
+                    </div>
+                  `;
+                })}
               </div>
-              <div class="category">
-                <span>${label} outline</span>
-                <select
-                  aria-label=${`${label} outline`}
-                  @change=${(e) =>
-                    this.updateGlobal({ mediaStyles: { [role]: { outline: e.target.value } } })}
-                >
-                  ${['none', 'accent'].map(
-                    (outline) =>
-                      html`<option value=${outline} ?selected=${outline === current.outline}>
-                        ${outline}
-                      </option>`
-                  )}
-                </select>
-              </div>
-            `;
-          })}
-        </div>
-      </details>
+            </details>
+          `
+        : html``}
     `;
   }
 
@@ -283,7 +296,7 @@ export class ImageFilterPanel extends StoreBoundElement {
       new CustomEvent('change', {
         bubbles: true,
         composed: true,
-        detail: { filterEnabled: patch.imageFilter?.enabled },
+        detail: { filterEnabled: patch.imageFilter?.enabled !== false },
       })
     );
   }

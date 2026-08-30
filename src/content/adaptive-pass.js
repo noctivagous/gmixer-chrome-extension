@@ -18,6 +18,10 @@ import {
 } from './background-image-tagger.js';
 import { removeStyle } from './style-injector.js';
 import { collectOpenShadowRoots } from './open-trees.js';
+import {
+  syncVideoPlaybackState,
+  stopVideoPlaybackState,
+} from './video-playback-state.js';
 
 /**
  * @typedef {object} AdaptivePassResult
@@ -41,13 +45,18 @@ export function runAdaptivePass(resolved) {
   removeBackgroundImageOverlays();
   const classification = classifyPage();
   stampLogoAlpha();
+  syncVideoPlaybackState(document);
   // Classification marks ads before the sample walk so identity scoring can
   // reject sponsor/creative colors that are unrelated to the site's brand.
   const sample = samplePageRoles();
 
   const colorOn = resolved?.sections?.color !== false;
+  const bgCategory = resolved?.imageFilter?.categories?.bgImages;
   const filterOverlays =
-    !!resolved?.imageFilter?.enabled && resolved.imageFilter.scope !== 'images';
+    !!resolved?.imageFilter?.enabled &&
+    (bgCategory
+      ? bgCategory !== 'none'
+      : resolved.imageFilter.scope !== 'images');
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles, { colorOn })) {
     const tagOpts = { createOverlays: filterOverlays };
     tagBackgroundImageElements(document.body, tagOpts);
@@ -70,9 +79,14 @@ export function runAdaptivePass(resolved) {
 function runNativeSubtreePass(root, resolved) {
   const classification = classifySubtree(root, { skipClassified: true });
   stampLogoAlpha(root);
+  syncVideoPlaybackState(root);
   const colorOn = resolved?.sections?.color !== false;
+  const bgCategory = resolved?.imageFilter?.categories?.bgImages;
   const filterOverlays =
-    !!resolved?.imageFilter?.enabled && resolved.imageFilter.scope !== 'images';
+    !!resolved?.imageFilter?.enabled &&
+    (bgCategory
+      ? bgCategory !== 'none'
+      : resolved.imageFilter.scope !== 'images');
   if (shouldTagBackgroundImages(resolved.imageFilter, resolved.mediaStyles, { colorOn })) {
     const tagOpts = { createOverlays: filterOverlays };
     tagBackgroundImageElements(root, tagOpts);
@@ -99,6 +113,7 @@ export function runAdaptiveSubtreePasses(roots, resolved) {
 /** Tear down adaptive DOM annotations when gMixer is disabled for the host. */
 export function clearAdaptivePass() {
   removeBackgroundImageOverlays();
+  stopVideoPlaybackState();
   // Link shimmer is owned by content-end (stopLinkShimmer) so we do not import
   // it here and create a cycle with style-injector consumers.
 }

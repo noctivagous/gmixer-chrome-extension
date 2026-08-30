@@ -6,8 +6,13 @@ import { getFontById } from '../../config/fonts.js';
 import { createDefaultState } from '../../state/schema.js';
 import { effectiveRoleColors, roleColors } from './palette-swatches.js';
 import { buildPreviewEffectsCss, previewEffectsActive } from '../../lib/preview-effects-css.js';
+import { buildPreviewTextureCss, previewTextureActive } from '../../lib/preview-texture-css.js';
 import { imageFilterPresetCss } from '../../content/style-injector.js';
-import { PALETTE_FILTER_PRESETS } from '../../config/image-filter-presets.js';
+import {
+  PALETTE_FILTER_PRESETS,
+  normalizeImageFilter,
+  IMAGE_FILTER_PRESETS,
+} from '../../config/image-filter-presets.js';
 import { defineElement } from '../../lib/define-element.js';
 import {
   PREVIEW_FONT_SLOTS,
@@ -33,18 +38,6 @@ function fontFamily(fontId) {
   return getFontById(fontId)?.family || 'system-ui, sans-serif';
 }
 
-const MEDIA_FILTER_PRESETS = [
-  { id: 'none', label: 'none' },
-  { id: 'grayscale', label: 'grayscale' },
-  { id: 'sepia', label: 'sepia' },
-  { id: 'invert', label: 'invert' },
-  { id: 'monochrome', label: 'monochrome' },
-  { id: 'duotone', label: 'duotone', requiresColor: true },
-  { id: 'accent-tint', label: 'accent tint', requiresColor: true },
-  { id: 'link-wash', label: 'link wash', requiresColor: true },
-  { id: 'custom', label: 'custom' },
-];
-
 /** Colorful inline sample used in theme blurbs (no external asset). */
 const SAMPLE_IMAGE_SVG = encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" width="160" height="120">
@@ -65,6 +58,25 @@ const SAMPLE_IMAGE_SVG = encodeURIComponent(`
 `.trim());
 
 const SAMPLE_IMAGE_SRC = `data:image/svg+xml,${SAMPLE_IMAGE_SVG}`;
+
+/** Decorative SVG wash behind Live Preview nav (bg-images Chroming Media target). */
+const NAV_BG_SVG = encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 56" width="320" height="56" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="navSky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="55%" stop-color="#3d5a80"/>
+      <stop offset="100%" stop-color="#98c1d9"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="56" fill="url(#navSky)"/>
+  <path d="M0 40 L36 22 L64 34 L98 14 L140 30 L178 18 L220 32 L260 20 L320 36 V56 H0 Z" fill="#243b55" opacity=".9"/>
+  <path d="M0 46 L48 34 L90 42 L130 28 L180 40 L230 30 L280 38 L320 34 V56 H0 Z" fill="#1b2a41" opacity=".85"/>
+  <circle cx="268" cy="14" r="7" fill="#ffe08a" opacity=".85"/>
+</svg>
+`.trim());
+
+const NAV_BG_SRC = `data:image/svg+xml,${NAV_BG_SVG}`;
 
 /**
  * Live theme pack preview (type, surfaces, sample media).
@@ -162,13 +174,30 @@ export class ThemePreviewPanel extends StoreBoundElement {
       margin: 0;
     }
     .blurb-nav {
+      position: relative;
+      isolation: isolate;
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       margin: 0 0 2px;
-      padding: 4px 0 8px;
+      padding: 10px 10px 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px 6px 0 0;
       font-size: 11px;
+      background-size: cover;
+      background-position: center;
+      overflow: hidden;
+    }
+    .blurb-nav-bg-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .blurb-nav > .blurb-nav-link {
+      position: relative;
+      z-index: 1;
     }
     .blurb-nav-link,
     .blurb-link {
@@ -178,6 +207,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
     .blurb-nav-link {
       font-size: 11px;
       font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
     }
     .blurb-code {
       display: inline-block;
@@ -188,8 +218,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
     .blurb-figure {
       margin: 0;
       display: grid;
-      gap: 4px;
-      width: 120px;
+      gap: 6px;
+      width: 140px;
+    }
+    .blurb-media-row {
+      display: contents;
     }
     .blurb-image-wrap {
       display: block;
@@ -291,7 +324,8 @@ export class ThemePreviewPanel extends StoreBoundElement {
       opacity: 0.72;
       pointer-events: none;
     }
-    .blurb-field {
+    .blurb-field,
+    .blurb-textarea {
       width: 100%;
       margin: 0;
       padding: 6px 8px;
@@ -304,6 +338,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
       box-sizing: border-box;
       pointer-events: auto;
     }
+    .blurb-textarea {
+      min-height: 44px;
+      resize: none;
+    }
     .blurb-button {
       justify-self: start;
       margin: 0;
@@ -315,6 +353,77 @@ export class ThemePreviewPanel extends StoreBoundElement {
       font-size: 11px;
       font-weight: 600;
       line-height: 1.3;
+    }
+    .blurb-heading-small {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.3;
+      letter-spacing: 0.02em;
+    }
+    .blurb-article-link,
+    .blurb-heading-link {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: default;
+    }
+    .blurb-media-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .blurb-video-thumb {
+      position: relative;
+      overflow: hidden;
+      border-radius: 4px;
+      aspect-ratio: 4 / 3;
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .blurb-video-thumb::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 30% 35%, rgba(148, 163, 184, 0.35), transparent 45%),
+        linear-gradient(160deg, rgba(56, 189, 248, 0.2), transparent 55%);
+    }
+    .blurb-video-thumb-badge {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+    }
+    .blurb-video-thumb-badge::after {
+      content: '';
+      position: absolute;
+      left: 11px;
+      top: 8px;
+      border-style: solid;
+      border-width: 6px 0 6px 10px;
+      border-color: transparent transparent transparent rgba(255, 255, 255, 0.9);
+    }
+    .blurb-video-label {
+      position: absolute;
+      left: 6px;
+      bottom: 5px;
+      margin: 0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(0, 0, 0, 0.45);
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      pointer-events: none;
     }
     [data-gmixer-preview-role],
     [data-gmixer-preview-media] {
@@ -625,18 +734,25 @@ export class ThemePreviewPanel extends StoreBoundElement {
   }
 
   /**
-   * @param {Partial<{enabled: boolean, preset: string}>} patch
+   * @param {Partial<{enabled: boolean, categories?: object, revealOnHover?: boolean}>} patch
    */
   _setImageFilter(patch) {
     const next = { imageFilter: { ...patch } };
     if (patch.enabled === true) {
       next.sections = { filter: true };
-      const current = this.state?.global?.imageFilter;
-      if ((!current?.preset || current.preset === 'none') && !patch.preset) {
-        next.imageFilter.preset = 'monochrome';
-      }
     }
     this.updateGlobal(next);
+  }
+
+  /**
+   * @param {'articleImages'|'images'|'bgImages'|'videos'|'videoPlayback'} categoryId
+   * @param {string} preset
+   */
+  _setMediaCategoryFilter(categoryId, preset) {
+    this._setImageFilter({
+      enabled: true,
+      categories: { [categoryId]: preset },
+    });
   }
 
   /**
@@ -705,11 +821,18 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const fontSlot = pinned.fontSlot ? PREVIEW_FONT_SLOTS[pinned.fontSlot] : null;
     const fonts = this.state?.global?.fonts;
     const fontId = fontSlot ? fontIdForPreviewSlot(fonts, pinned.fontSlot) : '';
-    const filter = this.state?.global?.imageFilter || {};
+    const filter = normalizeImageFilter(this.state?.global?.imageFilter);
     const colorOn = this.state?.global?.sections?.color !== false;
     const filterOn = this.state?.global?.sections?.filter === true && filter.enabled;
-    const presetOptions = MEDIA_FILTER_PRESETS.filter(
-      (preset) => !preset.requiresColor || colorOn || preset.id === filter.preset
+    const inspectCategory =
+      pinned.media === 'video-thumb' || pinned.media === 'video'
+        ? 'videos'
+        : pinned.media === 'bg-image'
+          ? 'bgImages'
+          : 'articleImages';
+    const inspectPreset = filter.categories[inspectCategory] || 'none';
+    const presetOptions = IMAGE_FILTER_PRESETS.filter(
+      (preset) => !preset.requiresColor || colorOn || preset.id === inspectPreset
     );
 
     return html`
@@ -770,7 +893,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
               `
             : null}
 
-          ${pinned.media === 'image'
+          ${pinned.media
             ? html`
                 <div class="inspect-row stack">
                   <label class="toggle-row">
@@ -779,28 +902,22 @@ export class ThemePreviewPanel extends StoreBoundElement {
                       .checked=${filterOn}
                       @change=${(e) => this._setImageFilter({ enabled: e.target.checked })}
                     />
-                    Apply image filter
+                    Apply Chroming Media
                   </label>
                   <select
-                    aria-label="Image filter preset"
-                    .value=${filter.preset || 'none'}
-                    @change=${(e) => {
-                      const preset = e.target.value;
-                      this._setImageFilter({
-                        preset,
-                        enabled: preset !== 'none',
-                      });
-                    }}
+                    aria-label="Media filter preset"
+                    .value=${inspectPreset}
+                    @change=${(e) => this._setMediaCategoryFilter(inspectCategory, e.target.value)}
                   >
                     ${presetOptions.map(
                       (preset) => html`
-                        <option value=${preset.id} ?selected=${preset.id === (filter.preset || 'none')}>
+                        <option value=${preset.id} ?selected=${preset.id === inspectPreset}>
                           ${preset.label}
                         </option>
                       `
                     )}
                   </select>
-                  ${!colorOn && PALETTE_FILTER_PRESETS.has(filter.preset)
+                  ${!colorOn && PALETTE_FILTER_PRESETS.has(inspectPreset)
                     ? html`<p class="inspect-label">Palette wash needs Color on</p>`
                     : null}
                 </div>
@@ -834,28 +951,38 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const captionFamily = fontFamily(fonts.captions?.fontId);
     const uiFamily = fontFamily(fonts.ui?.fontId || fonts.paragraph?.fontId);
     const codeFamily = fontFamily(fonts.code?.fontId);
-    const filterState = global?.imageFilter;
+    const filterState = normalizeImageFilter(global?.imageFilter);
     const filterSectionOn = global?.sections?.filter === true;
     const colorOn = global?.sections?.color === true;
-    // Match page paint: Media section + imageFilter.enabled, and only when
-    // scope includes images (the sample is an <img>, not a background).
-    const applyPreviewFilter =
-      filterSectionOn &&
-      filterState?.enabled &&
-      filterState.scope !== 'backgrounds' &&
-      filterState.preset &&
-      filterState.preset !== 'none';
-    const packFallbackFilter =
-      !applyPreviewFilter && pack.media?.defaultFilter && pack.media.defaultFilter !== 'none'
-        ? pack.media.defaultFilter
-        : !applyPreviewFilter && pack.patch?.imageFilter?.enabled
-          ? pack.patch.imageFilter.preset
-          : 'none';
-    const mediaFilter = applyPreviewFilter ? filterState.preset : packFallbackFilter;
-    const mediaFilterCss =
-      mediaFilter && mediaFilter !== 'none'
-        ? imageFilterPresetCss(mediaFilter, colors, filterState?.customFilter || '', { colorOn })
-        : 'none';
+    const chromingOn = filterSectionOn && filterState.enabled;
+    const cats = filterState.categories;
+    const cssForCategory = (categoryId) => {
+      if (!chromingOn) return 'none';
+      const preset = cats[categoryId];
+      if (!preset || preset === 'none') return 'none';
+      return imageFilterPresetCss(preset, colors, filterState.customFilter || '', { colorOn });
+    };
+    const articleFilterCss = cssForCategory('articleImages');
+    const videosFilterCss = cssForCategory('videos');
+    const bgFilterPreset = chromingOn ? cats.bgImages : 'none';
+    const bgOverlay =
+      bgFilterPreset && bgFilterPreset !== 'none'
+        ? (() => {
+            const resolved = bgFilterPreset;
+            if (resolved === 'invert') return { color: '#ffffff', blend: 'difference', opacity: 1 };
+            if (resolved === 'duotone' || resolved === 'sepia') {
+              return { color: colors.accent, blend: 'color', opacity: 0.72 };
+            }
+            if (resolved === 'accent-tint') {
+              return { color: colors.accent, blend: 'color', opacity: 0.45 };
+            }
+            if (resolved === 'link-wash') {
+              return { color: colors.link || colors.accent, blend: 'color', opacity: 0.72 };
+            }
+            return { color: '#808080', blend: 'saturation', opacity: 0.72 };
+          })()
+        : null;
+    const revealOnHover = filterState.revealOnHover;
     const effectsOn = previewEffectsActive(global);
     const previewEffectsCss = effectsOn
       ? buildPreviewEffectsCss(global.effects, {
@@ -863,6 +990,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
           link: colors.link,
           navLink: colors.navLink,
         })
+      : '';
+    const textureOn = previewTextureActive(global);
+    const previewTextureCss = textureOn
+      ? buildPreviewTextureCss(global.texture)
       : '';
     const useRotatingCube =
       effectsOn && global.effects?.categories?.images?.effect === 'rotating-cube';
@@ -877,16 +1008,33 @@ export class ThemePreviewPanel extends StoreBoundElement {
         width="160"
         height="120"
         data-gmixer-preview-media="image"
-        data-filter=${mediaFilter === 'none' ? '' : mediaFilter}
-        style=${mediaFilterCss !== 'none' ? `filter: ${mediaFilterCss}` : ''}
+        data-gmixer-media="article-image"
+        data-filter=${articleFilterCss === 'none' ? '' : cats.articleImages}
+        style=${articleFilterCss !== 'none' ? `filter: ${articleFilterCss}` : ''}
         draggable="false"
       />
     `;
+
+    const previewHoverClear = revealOnHover
+      ? html`<style>
+          .theme-preview .blurb-image-wrap:hover img,
+          .theme-preview .blurb-video-thumb:hover {
+            filter: none !important;
+          }
+          .theme-preview .blurb-nav:hover .blurb-nav-bg-overlay {
+            opacity: 0 !important;
+          }
+        </style>`
+      : null;
 
     return html`
       ${previewEffectsCss
         ? html`<style>${previewEffectsCss}</style>`
         : null}
+      ${previewTextureCss
+        ? html`<style>${previewTextureCss}</style>`
+        : null}
+      ${previewHoverClear}
       <div class="theme-preview">
         ${this.hidePackName ? null : html`<strong class="pack-name">${pack.label}</strong>`}
         <div
@@ -903,9 +1051,25 @@ export class ThemePreviewPanel extends StoreBoundElement {
           @click=${this._onPreviewClick}
         >
           <p
-            class="blurb-nav"
-            style="font-family: ${uiFamily}; border-color: ${colors.border}"
+            class=${`blurb-nav ${hl({ media: 'bg-image' })}`.trim()}
+            data-gmixer-preview-media="bg-image"
+            data-gmixer-bgimg
+            style="
+              font-family: ${uiFamily};
+              border-color: ${colors.border};
+              background-image: url('${NAV_BG_SRC}');
+            "
           >
+            ${bgOverlay
+              ? html`<span
+                  class="blurb-nav-bg-overlay gmixer-bgimg-overlay"
+                  style="
+                    background: ${bgOverlay.color};
+                    opacity: ${bgOverlay.opacity};
+                    mix-blend-mode: ${bgOverlay.blend};
+                  "
+                ></span>`
+              : null}
             <span
               class=${`blurb-nav-link ${hl({ roleId: 'navLink', fontSlot: 'ui' })}`.trim()}
               data-gmixer-preview-role="navLink"
@@ -934,6 +1098,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 class=${`blurb-kicker ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
                 data-gmixer-preview-role="muted"
                 data-gmixer-preview-font="captions"
+                data-gmixer-texture="muted.kicker"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Caption / kicker
@@ -942,17 +1107,32 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 class=${`blurb-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
                 data-gmixer-preview-role="accent"
                 data-gmixer-preview-font="headings.h1"
+                data-gmixer-texture="accent.headingLarge"
                 style="font-family: ${headerFamily}; color: ${colors.accent}"
               >
-                ${pack.label} headline
+                <span
+                  class="blurb-heading-link"
+                  data-gmixer-texture="link.heading"
+                  >${pack.label} headline</span
+                >
               </p>
               <p
                 class=${`blurb-subhead ${hl({ roleId: 'link', fontSlot: 'headings.h2' })}`.trim()}
                 data-gmixer-preview-role="link"
                 data-gmixer-preview-font="headings.h2"
+                data-gmixer-texture="accent.headingMedium"
                 style="font-family: ${subheadFamily}; color: ${colors.link}"
               >
                 Subheading for section hierarchy
+              </p>
+              <p
+                class=${`blurb-heading-small ${hl({ roleId: 'accent', fontSlot: 'headings.h2' })}`.trim()}
+                data-gmixer-preview-role="accent"
+                data-gmixer-preview-font="headings.h2"
+                data-gmixer-texture="accent.headingSmall"
+                style="font-family: ${subheadFamily}; color: ${colors.accent}"
+              >
+                Small heading detail
               </p>
               <p
                 class=${`blurb-body ${hl({ roleId: 'text', fontSlot: 'paragraph' })}`.trim()}
@@ -966,6 +1146,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 class=${`blurb-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
                 data-gmixer-preview-role="muted"
                 data-gmixer-preview-font="captions"
+                data-gmixer-texture="muted.asideNotes"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Caption text for asides, timestamps, and supporting notes.
@@ -975,6 +1156,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                   class=${`blurb-link ${hl({ roleId: 'link', fontSlot: 'paragraph' })}`.trim()}
                   data-gmixer-preview-role="link"
                   data-gmixer-preview-font="paragraph"
+                  data-gmixer-texture="link.bare"
                   style="font-family: ${bodyFamily}; color: ${colors.link}"
                   >Sample link</span
                 >
@@ -993,7 +1175,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
               </p>
             </div>
             <figure class="blurb-figure">
-              <span class="blurb-image-wrap">
+              <span
+                class="blurb-image-wrap"
+                data-gmixer-texture="media.articleImage"
+              >
                 ${useRotatingCube
                   ? html`
                       <span class="blurb-cube-scene">
@@ -1011,10 +1196,22 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 class=${`blurb-image-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
                 data-gmixer-preview-role="muted"
                 data-gmixer-preview-font="captions"
+                data-gmixer-texture="muted.photoCaption"
                 style="font-family: ${captionFamily}; color: ${colors.muted}"
               >
                 Sample photo caption
               </figcaption>
+              <div
+                class=${`blurb-video-thumb ${hl({ media: 'video-thumb' })}`.trim()}
+                data-gmixer-texture="media.videoThumb"
+                data-gmixer-preview-media="video-thumb"
+                data-gmixer-media="video-thumbnail"
+                style=${videosFilterCss !== 'none' ? `filter: ${videosFilterCss}` : ''}
+                aria-hidden="true"
+              >
+                <span class="blurb-video-thumb-badge"></span>
+                <p class="blurb-video-label">Paused</p>
+              </div>
             </figure>
           </div>
           <div class="blurb-surfaces">
@@ -1034,9 +1231,15 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 class=${`blurb-card-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
                 data-gmixer-preview-role="accent"
                 data-gmixer-preview-font="headings.h1"
+                data-gmixer-texture="accent.headingMedium"
                 style="font-family: ${headerFamily}; color: ${colors.accent}"
               >
-                Card title
+                <span
+                  class="blurb-article-link"
+                  data-gmixer-texture="link.article"
+                  style="color: ${colors.link}"
+                  >Card title</span
+                >
               </p>
               <p
                 class=${`blurb-card-body ${hl({ roleId: 'text', fontSlot: 'paragraph' })}`.trim()}
@@ -1067,6 +1270,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 value="Text input"
                 data-gmixer-preview-role="surfaceGui"
                 data-gmixer-preview-font="ui"
+                data-gmixer-texture="gui.input"
                 style="
                   font-family: ${uiFamily};
                   background: ${colors.surfaceGui};
@@ -1075,12 +1279,28 @@ export class ThemePreviewPanel extends StoreBoundElement {
                   outline-color: ${colors.focus};
                 "
               />
+              <textarea
+                class=${`blurb-textarea ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
+                readonly
+                tabindex="-1"
+                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-font="ui"
+                data-gmixer-texture="gui.textarea"
+                style="
+                  font-family: ${uiFamily};
+                  background: ${colors.surfaceGui};
+                  border-color: ${colors.border};
+                  color: ${colors.text};
+                  outline-color: ${colors.focus};
+                "
+              >Text area</textarea>
               <button
                 type="button"
                 class=${`blurb-button ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
                 tabindex="-1"
                 data-gmixer-preview-role="surfaceGui"
                 data-gmixer-preview-font="ui"
+                data-gmixer-texture="gui.button"
                 style="
                   font-family: ${uiFamily};
                   background: ${colors.surfaceGui};
