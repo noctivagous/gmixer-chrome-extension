@@ -23,6 +23,11 @@ import {
   runAdaptiveSubtreePasses,
   clearAdaptivePass,
 } from './adaptive-pass.js';
+import {
+  assignToneSteps,
+  seedPageSheets,
+  stampOpaquePaintTargets,
+} from './page-classifier.js';
 import { collectOpenShadowRoots } from './open-trees.js';
 import { waitForPageSettle } from './page-settle.js';
 import { syncLinkShimmer, stopLinkShimmer } from './link-shimmer.js';
@@ -171,7 +176,24 @@ async function main() {
   });
   const stopFlyoutAnalysis = startFlyoutController((roots) => {
     const resolved = store.getResolvedStateForHost(hostname);
-    if (active && resolved.enabled !== false) stampVisibleFlyouts(roots);
+    if (!(active && resolved.enabled !== false)) return;
+    stampVisibleFlyouts(roots);
+    // Collapsed rails (Instagram) often expand a static sheet via hover /
+    // inline style — not an absolute flyout panel. Re-seed opaque sheets
+    // under the interaction host so white fills get surface paint.
+    for (const root of roots || []) {
+      let host = root;
+      for (let i = 0; i < 8 && host; i += 1) {
+        const rect = host.getBoundingClientRect?.();
+        if (rect && rect.height >= 240 && rect.width >= 120) {
+          seedPageSheets(host);
+          stampOpaquePaintTargets(host);
+          assignToneSteps(host);
+          break;
+        }
+        host = host.parentElement;
+      }
+    }
   });
 
   let reapplyTimer = 0;

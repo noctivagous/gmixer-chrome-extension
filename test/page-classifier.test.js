@@ -445,6 +445,30 @@ describe('page-classifier', () => {
     }
   });
 
+  it('does not classify small nav wordmark sprites as background-image media', () => {
+    // Breitbart #bn-premium-navt-fightclub: CSS text sprite in the header nav.
+    const previous = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundImage: 'url("data:image/png;base64,xxx")',
+      backgroundSize: '17px auto',
+      backgroundColor: 'transparent',
+    });
+    const fightClub = el('li', { id: 'bn-premium-navt-fightclub' });
+    fightClub.getBoundingClientRect = () => ({
+      width: 114,
+      height: 45,
+      top: 0,
+      left: 115,
+      right: 229,
+      bottom: 45,
+    });
+    try {
+      assert.equal(classifyElement(fightClub), null);
+    } finally {
+      globalThis.getComputedStyle = previous;
+    }
+  });
+
   it('does not classify Slashdot-style story title/byline spans as articles', () => {
     const title = el('span', { class: 'story-title' });
     const byline = el('span', { class: 'story-byline' });
@@ -955,6 +979,85 @@ describe('page-classifier', () => {
       assert.equal(sponsor.getAttribute(ROLE_ATTR), 'surface');
       assert.equal(podcasts.getAttribute(ROLE_ATTR), 'surface');
       assert.equal(stage.getAttribute(ROLE_ATTR), null);
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds half-image list rows (Breitbart Most Popular) as sheets, not media chrome', () => {
+    // Image occupies ~50% width beside headline text — must not look like a poster stage.
+    const thumb = {
+      tagName: 'IMG',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 155,
+        height: 115,
+        top: 431,
+        left: 1092,
+        right: 1247,
+        bottom: 546,
+      }),
+    };
+    const row = {
+      tagName: 'LI',
+      nodeType: 1,
+      children: [thumb],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 310,
+        height: 115,
+        top: 431,
+        left: 937,
+        right: 1247,
+        bottom: 546,
+      }),
+      querySelector: (selector) => {
+        if (String(selector).includes('img')) return thumb;
+        return null;
+      },
+      _bg: 'rgb(238, 238, 238)',
+    };
+    thumb.parentElement = row;
+
+    const list = {
+      tagName: 'UL',
+      nodeType: 1,
+      children: [row],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 310,
+        height: 1150,
+        top: 431,
+        left: 937,
+        right: 1247,
+        bottom: 1581,
+      }),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      _bg: 'rgb(255, 255, 255)',
+    };
+    row.parentElement = list;
+    list.setAttribute(ROLE_ATTR, 'surface');
+
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1400, innerHeight: 900 };
+    globalThis.document = { body: list, documentElement: list };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+    });
+
+    try {
+      const promoted = promotePaintedSurfaces(list);
+      assert.ok(promoted >= 1);
+      assert.equal(row.getAttribute(ROLE_ATTR), 'surface');
+      assert.match(row.getAttribute('data-gmixer-reasons') || '', /opaque surface/);
     } finally {
       globalThis.document = previousDoc;
       globalThis.window = previousWin;

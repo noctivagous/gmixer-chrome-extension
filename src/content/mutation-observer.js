@@ -113,8 +113,15 @@ export function startMutationObserver(handlers) {
       'hidden',
       'open',
       'popover',
+      // Instagram collapsed nav expands via inline width + background-color.
+      // Keep this gated in the callback — raw style traffic is huge.
+      'style',
     ],
   };
+
+  /** Inline style expands that reveal opaque chrome (not scroll/transform churn). */
+  const STYLE_SHEET_RE =
+    /(?:^|;)\s*(?:background(?:-color)?|width|min-width|max-width)\s*:/i;
 
   const observer = new MutationObserver((mutations) => {
     if (stopped) return;
@@ -122,6 +129,10 @@ export function startMutationObserver(handlers) {
       if (mutation.type === 'attributes') {
         const target = mutation.target;
         if (!target || target.nodeType !== Node.ELEMENT_NODE || isGmixerNode(target)) continue;
+        if (mutation.attributeName === 'style') {
+          const styleText = /** @type {Element} */ (target).getAttribute?.('style') || '';
+          if (!STYLE_SHEET_RE.test(styleText)) continue;
+        }
         pendingRoots.add(/** @type {Element} */ (target));
         if (target.parentElement) pendingRoots.add(target.parentElement);
         schedule();

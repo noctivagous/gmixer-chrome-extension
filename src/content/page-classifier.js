@@ -10,6 +10,7 @@
 //
 import { MAX_CLASSIFIER_SCAN } from './scan-limits.js';
 import { collectOpenShadowRoots, isGmixerUiElement, isShadowRoot } from './open-trees.js';
+import { isDecorativeChromeBackground } from './background-image-tagger.js';
 
 export const ROLE_ATTR = 'data-gmixer-role';
 export const MEDIA_ATTR = 'data-gmixer-media';
@@ -386,7 +387,9 @@ function isEdgeChromeOverMedia(overlayRect, mediaRect) {
 
 /**
  * True when `elRect` is essentially a media frame/stage (poster wrapper,
- * badge layer), not a content sheet that merely embeds a small thumbnail.
+ * badge layer), not a content sheet that merely embeds a thumbnail.
+ * Half-and-half article rows (Breitbart “Most Popular”: image | headline)
+ * must stay paint targets — only reject when media dominates the box.
  * @param {{ width?: number, height?: number }} elRect
  * @param {{ width?: number, height?: number }} mediaRect
  */
@@ -398,12 +401,13 @@ function isMediaSizedFrame(elRect, mediaRect) {
   const ea = ew * eh;
   const ma = mw * mh;
   if (ea < 1 || ma < 1) return false;
-  // Media fills most of this box — chrome around the media, not a card.
-  if (ma / ea >= 0.45) return true;
-  // Near-matching dimensions (thin letterboxing still counts as a stage).
-  return (
-    Math.min(ew, mw) / Math.max(ew, mw) >= 0.7 && Math.min(eh, mh) / Math.max(eh, mh) >= 0.7
-  );
+  const widthRatio = Math.min(ew, mw) / Math.max(ew, mw);
+  const heightRatio = Math.min(eh, mh) / Math.max(eh, mh);
+  // True poster/stage: media matches the frame on both axes (letterboxing ok).
+  if (widthRatio >= 0.72 && heightRatio >= 0.72) return true;
+  // Media still owns nearly all of the area (wide short control strips, etc.).
+  if (ma / ea >= 0.78) return true;
+  return false;
 }
 
 function coversOrStripsMedia(el, rect) {
@@ -557,7 +561,12 @@ export function classifyElement(el) {
     if (typeof getComputedStyle === 'function') {
       const style = getComputedStyle(el);
       const bgImage = style.backgroundImage || '';
-      if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
+      if (
+        bgImage &&
+        bgImage !== 'none' &&
+        bgImage.includes('url(') &&
+        !isDecorativeChromeBackground(el, style)
+      ) {
         const value = {
           media: 'background-image',
           confidence: 0.78,
@@ -996,9 +1005,9 @@ function isLargePaintedSheet(el) {
   ) {
     return true;
   }
-  // Mid-width opaque cards / search shells.
+  // Mid-width opaque cards / search shells / expanding nav rails (IG ~238px).
   if (
-    rect.width >= 240 &&
+    rect.width >= 220 &&
     rect.width <= 480 &&
     rect.height >= 40 &&
     rect.width * rect.height >= 14000

@@ -55,6 +55,77 @@ describe('mutation-observer', () => {
     assert.equal(cascadeCount, 1);
   });
 
+  it('forwards style mutations that expand chrome sheets, ignores transform churn', async () => {
+    let callback;
+    /** @type {object|null} */
+    let observeOpts = null;
+    globalThis.Node = { ELEMENT_NODE: 1 };
+    globalThis.document = { documentElement: {} };
+    globalThis.MutationObserver = class {
+      constructor(next) {
+        callback = next;
+      }
+      observe(_root, opts) {
+        observeOpts = opts;
+      }
+      disconnect() {}
+    };
+
+    /** @type {Element[]} */
+    let seen = [];
+    startMutationObserver({
+      onSubtree(roots) {
+        seen = roots;
+      },
+      onCascadeThreat() {},
+    });
+
+    assert.ok(observeOpts?.attributeFilter?.includes('style'));
+
+    const rail = {
+      nodeType: 1,
+      id: '',
+      tagName: 'DIV',
+      classList: { contains: () => false },
+      closest: () => null,
+      parentElement: null,
+      getAttribute: (name) =>
+        name === 'style' ? 'width: 238px; background-color: rgb(255, 255, 255);' : null,
+    };
+
+    callback([
+      {
+        type: 'attributes',
+        attributeName: 'style',
+        target: rail,
+        addedNodes: [],
+      },
+    ]);
+    await Promise.resolve();
+    assert.equal(seen.includes(rail), true);
+
+    seen = [];
+    const animated = {
+      nodeType: 1,
+      id: '',
+      tagName: 'DIV',
+      classList: { contains: () => false },
+      closest: () => null,
+      parentElement: null,
+      getAttribute: (name) => (name === 'style' ? 'transform: translateY(-8px);' : null),
+    };
+    callback([
+      {
+        type: 'attributes',
+        attributeName: 'style',
+        target: animated,
+        addedNodes: [],
+      },
+    ]);
+    await Promise.resolve();
+    assert.equal(seen.length, 0);
+  });
+
   it('forwards newly added content roots to onSubtree for reclassification', async () => {
     let callback;
     globalThis.Node = { ELEMENT_NODE: 1 };

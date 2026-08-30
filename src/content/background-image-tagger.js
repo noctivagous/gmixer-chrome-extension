@@ -49,6 +49,34 @@ const SKIP_PHRASING = new Set([
 ]);
 
 /**
+ * Nav/header wordmarks and icon sprites (Breitbart “Fight Club”, premium badges)
+ * use CSS `background-image` like photos, but chroming overlays make them look
+ * highlighted. Skip those; keep real hero/card photo sheets.
+ *
+ * @param {Element} el
+ * @param {CSSStyleDeclaration} [style]
+ * @returns {boolean}
+ */
+export function isDecorativeChromeBackground(el, style) {
+  if (!el || el.nodeType !== 1) return false;
+  if (typeof el.getBoundingClientRect !== 'function') return false;
+  const rect = el.getBoundingClientRect();
+  const w = rect.width || 0;
+  const h = rect.height || 0;
+  // Hidden duplicates (dropdown clones) and tiny badges.
+  if (w < 1 || h < 1) return true;
+  if (w <= 280 && h <= 72) return true;
+  if (w * h < 16000 && h <= 96) return true;
+
+  const resolved =
+    style || (typeof getComputedStyle === 'function' ? getComputedStyle(el) : null);
+  const size = resolved?.backgroundSize || '';
+  const px = size.match(/^(\d+(?:\.\d+)?)px\b/i);
+  if (px && Number(px[1]) <= 48) return true;
+  return false;
+}
+
+/**
  * Walk elements under `root` without materializing the full `querySelectorAll('*')`
  * NodeList on huge injected subtrees. Stops after `max` nodes.
  * @param {ParentNode} root
@@ -134,8 +162,15 @@ export function tagBackgroundImageElements(root = document.body, options = {}) {
     }
     scanned++;
 
-    // Already tagged from a prior pass: skip getComputedStyle. Incremental
-    // mutations must not re-read the whole tree.
+    const style = getComputedStyle(el);
+    if (isDecorativeChromeBackground(el, style)) {
+      if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) toUntag.push(el);
+      continue;
+    }
+
+    // Already tagged from a prior pass: skip re-checking url(). Incremental
+    // mutations must not re-read the whole tree — decorative check above still
+    // runs so chrome sprites can be cleared after a heuristic tighten.
     if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) {
       if (createOverlays && !el.querySelector(`:scope > .${BACKGROUND_IMAGE_OVERLAY_CLASS}`)) {
         toTag.push(el);
@@ -143,7 +178,7 @@ export function tagBackgroundImageElements(root = document.body, options = {}) {
       continue;
     }
 
-    const bg = getComputedStyle(el).backgroundImage;
+    const bg = style.backgroundImage;
     const hasImage = !!bg && bg !== 'none' && bg.includes('url(');
     if (hasImage) toTag.push(el);
     else if (el.hasAttribute(BACKGROUND_IMAGE_ATTR)) toUntag.push(el);
