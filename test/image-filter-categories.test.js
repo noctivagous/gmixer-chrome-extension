@@ -103,7 +103,11 @@ describe('chroming media page paint', () => {
     };
     const css = buildCss(global, null);
     assert.match(css, /data-gmixer-media="article-image"/);
-    assert.match(css, /img:not\(\[data-gmixer-media="article-image"\]\)/);
+    assert.match(
+      css,
+      /img:not\(\[data-gmixer-media="article-image"\]\):not\(\[data-gmixer-media="logo"\]\):not\(\[data-gmixer-media="video-thumbnail"\]\)/
+    );
+    assert.match(css, /img\[data-gmixer-media="video-thumbnail"\]/);
     assert.match(css, /data-gmixer-video-state="paused"/);
     assert.match(css, /data-gmixer-video-state="playing"/);
     assert.doesNotMatch(css, /video:paused/);

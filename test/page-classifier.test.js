@@ -76,12 +76,59 @@ describe('page-classifier', () => {
     assert.equal(CLASSIFIER_CONFIDENCE_THRESHOLD, 0.7);
   });
 
+  it('stamps a linked video poster as video-thumbnail from URL + link class', () => {
+    const img = el('img', { class: 'image__dam-img' });
+    const link = el(
+      'a',
+      {
+        class: 'container__link container__link--type-vertical-video',
+        href: 'https://www.cnn.com/2026/08/29/world/video/example-digvid',
+      },
+      [img]
+    );
+    img.parentElement = link;
+    img.closest = (selector) => {
+      if (selector.startsWith('a[href]') || selector === 'a[href]') return link;
+      if (selector.includes('article')) return null;
+      if (selector.includes('card') || selector.includes('li') || selector.includes('figure')) {
+        return null;
+      }
+      return null;
+    };
+    link.getAttribute = (name) => {
+      if (name === 'href') return 'https://www.cnn.com/2026/08/29/world/video/example-digvid';
+      if (name === 'class') return 'container__link container__link--type-vertical-video';
+      return null;
+    };
+    const classified = classifyElement(img);
+    assert.equal(classified?.media, 'video-thumbnail');
+    assert.ok(classified.reasons.some((r) => /video URL|video\/thumbnail/i.test(r)));
+  });
+
+  it('prefers video-thumbnail over article-image when video cues are present', () => {
+    const img = el('img', { class: 'video-thumbnail__image' });
+    const article = el('article', {}, [img]);
+    img.parentElement = article;
+    img.closest = (selector) => {
+      if (selector.includes('article')) return article;
+      if (selector.startsWith('a[href]')) return null;
+      if (selector.includes('card') || selector.includes('thumb')) return null;
+      return null;
+    };
+    const classified = classifyElement(img);
+    assert.equal(classified?.media, 'video-thumbnail');
+  });
+
   it('stamps semantic article/main roles and article-image media', () => {
     const img = el('img');
     const article = el('article', {}, [img]);
     img._inArticle = true;
     img.parentElement = article;
-    img.closest = (selector) => (selector.includes('article') ? article : null);
+    img.closest = (selector) => {
+      if (selector.includes('article')) return article;
+      if (selector.startsWith('a[href]')) return null;
+      return null;
+    };
     const root = el('div', {}, [el('main'), article]);
 
     // Make querySelectorAll on root find descendants by walking.

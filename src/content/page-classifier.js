@@ -137,6 +137,23 @@ const SURFACE_SKIP_TAGS = new Set([
 
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
 const MEDIA_CHROME_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS']);
+/** Class/id tokens that mark poster frames and video listing thumbs. */
+const VIDEO_THUMB_TOKENS = [
+  'video',
+  'videos',
+  'thumbnail',
+  'thumb',
+  'poster',
+  'play',
+  'player',
+  'clip',
+  'watch',
+  'duration',
+  'videoresource',
+];
+/** Href shapes that usually mean “this media opens a video”. */
+const VIDEO_HREF_RE =
+  /\/videos?(?:\/|$)|\/watch(?:\?|\/|$)|[?&](?:v|video|vid)=|\/\/(?:www\.)?(?:youtu(?:\.be|be\.com)|vimeo\.com|rumble\.com)\b/i;
 const OVERLAY_PANEL_TAGS = new Set(['DIV', 'SECTION', 'UL', 'OL', 'NAV', 'ASIDE', 'DIALOG', 'MENU']);
 const TOKEN_RE = /[\s_-]+/;
 const SURFACE_PROMOTE_MAX_DEPTH = 3;
@@ -469,20 +486,44 @@ export function classifyElement(el) {
   }
 
   if (MEDIA_TAGS.has(tag)) {
+    // Video cues often live on the wrapping link/card (CNN vertical-video
+    // links, Rumble thumb shells), not on the <img> class itself.
     const parentTokens = tokensFor(el.parentElement);
+    const link = el.closest?.('a[href]');
+    const linkTokens = tokensFor(link);
+    const card = el.closest?.(
+      '[data-gmixer-role="card"], [class*="card"], [class*="teaser"], [class*="thumb"], li, figure'
+    );
+    const cardTokens = tokensFor(card);
     const ancestor = el.closest?.('article, [role="article"], .article, .post, .entry-content');
     const ancestorTokens = tokensFor(ancestor);
-    const allTokens = [...tokens, ...parentTokens, ...ancestorTokens];
+    const allTokens = [
+      ...tokens,
+      ...parentTokens,
+      ...linkTokens,
+      ...cardTokens,
+      ...ancestorTokens,
+    ];
+    const href = link?.getAttribute?.('href') || '';
+    const hrefIsVideo = VIDEO_HREF_RE.test(href);
+    const namedVideoThumb = hasToken(allTokens, VIDEO_THUMB_TOKENS);
     const reasons = [];
     let confidence = 0;
+    let videoThumbCue = tag === 'VIDEO';
 
     if (tag === 'VIDEO') {
       confidence = 0.96;
       reasons.push('video element');
     }
-    if (hasToken(allTokens, ['video', 'thumbnail', 'thumb', 'poster', 'play'])) {
+    if (namedVideoThumb) {
       confidence = Math.max(confidence, 0.88);
       reasons.push('video/thumbnail/play naming cue');
+      videoThumbCue = true;
+    }
+    if (hrefIsVideo) {
+      confidence = Math.max(confidence, 0.9);
+      reasons.push('video URL shape');
+      videoThumbCue = true;
     }
     if (tag === 'IMG' && ancestor) {
       confidence = Math.max(confidence, 0.86);
@@ -503,7 +544,10 @@ export function classifyElement(el) {
       return value;
     }
     if (confidence >= CLASSIFIER_CONFIDENCE_THRESHOLD) {
-      const value = { media: ancestor ? 'article-image' : 'video-thumbnail', confidence, reasons };
+      // Video cues win over article nesting — otherwise every in-article
+      // poster becomes article-image and picks up the Images filter.
+      const media = videoThumbCue || tag === 'VIDEO' ? 'video-thumbnail' : 'article-image';
+      const value = { media, confidence, reasons };
       classificationCache.set(el, { key, value });
       return value;
     }

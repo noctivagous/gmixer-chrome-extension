@@ -189,8 +189,10 @@ picture:has([data-gmixer-media="article-image"]) img {
   }
 
   if (imagesCss && imagesCss !== 'none') {
-    rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="logo"]),
-picture:not(:has([data-gmixer-media="article-image"])) img:not([data-gmixer-media="logo"]) {
+    // Exclude stamped video thumbs / avatars so the Images row cannot beat
+    // the Videos row on specificity (img:not(...) is stronger than a bare attr).
+    rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]),
+picture:not(:has([data-gmixer-media="article-image"])):not(:has([data-gmixer-media="video-thumbnail"])) img:not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]) {
   filter: ${imagesCss} !important;
 }`);
   }
@@ -201,7 +203,9 @@ picture:not(:has([data-gmixer-media="article-image"])) img:not([data-gmixer-medi
   if (videosCss && videosCss !== 'none') {
     rules.push(`video[data-gmixer-video-state="paused"],
 video[data-gmixer-media="video-thumbnail"][data-gmixer-video-state="paused"],
-[data-gmixer-media="video-thumbnail"]:not(video) {
+img[data-gmixer-media="video-thumbnail"],
+picture:has([data-gmixer-media="video-thumbnail"]) img,
+[data-gmixer-media="video-thumbnail"]:not(video):not(img) {
   filter: ${videosCss} !important;
 }`);
   }
