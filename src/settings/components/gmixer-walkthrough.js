@@ -251,11 +251,10 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     :host([showcompletion]) {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: min(440px, 100%);
+      height: fit-content;
+      max-width: 100%;
+      overflow: hidden;
     }
 
     .completion-dialog {
@@ -263,7 +262,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       gap: 20px;
       padding: 28px;
       text-align: center;
-      width: min(440px, 100%);
+      width: 100%;
       box-sizing: border-box;
     }
 
@@ -1102,8 +1101,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
     this.showCompletion = true;
     notifyHostLayout('completion');
     this.updateComplete.then(() => {
-      const dialog = this.renderRoot.querySelector('.completion-dialog');
-      const rect = dialog?.getBoundingClientRect();
+      const rect = this.getBoundingClientRect();
       if (rect?.width && rect?.height) {
         notifyHostLayout('completion', { width: rect.width, height: rect.height });
       }

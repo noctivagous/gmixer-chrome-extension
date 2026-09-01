@@ -28,6 +28,7 @@ import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
 import { removeEarlyCanvasStyle } from './early-canvas.js';
+import { NAV_HIT_ATTR } from './clickable-detector.js';
 
 export {
   PALETTE_FILTER_PRESETS,
@@ -380,7 +381,26 @@ const HEADING_LINK_SELECTORS = [
   'h6 a',
   '[role="heading"] a',
 ];
-const EFFECTS_NAV_SELECTORS = [...CHROME_LINK_SELECTORS, 'button', '[role="button"]'].join(', ');
+const CHROME_HOST_SELECTORS = [
+  'header',
+  'footer',
+  'nav',
+  '[role="banner"]',
+  '[role="contentinfo"]',
+  '[role="navigation"]',
+  '[data-gmixer-role="header"]',
+  '[data-gmixer-role="footer"]',
+  '[data-gmixer-role="navigation"]',
+];
+const NAV_GLOW_IN_CHROME = ['[role="link"]', '[role="menuitem"]', '[aria-haspopup]']
+  .flatMap((extra) => CHROME_HOST_SELECTORS.map((host) => `${host} ${extra}`));
+const EFFECTS_NAV_SELECTORS = [
+  ...CHROME_LINK_SELECTORS,
+  'button',
+  '[role="button"]',
+  ...NAV_GLOW_IN_CHROME,
+  `[${NAV_HIT_ATTR}]`,
+].join(', ');
 const EFFECTS_BODY_LINK_CANCEL_SELECTORS = [...CHROME_LINK_SELECTORS, ...HEADING_LINK_SELECTORS].join(
   ', '
 );
@@ -639,7 +659,7 @@ a { animation: gmixer-flash-link 3s linear infinite; }`);
 
   if (navEffect === 'glow') {
     const animated = categories.navigation.glow?.animated !== false;
-    rules.push(unclipGlow('a, button, [role="button"]', { includeParents: false }));
+    rules.push(unclipGlow(EFFECTS_NAV_SELECTORS, { includeParents: false }));
     rules.push(`${EFFECTS_NAV_SELECTORS} { text-shadow: 0 0 8px ${navGlowColor}; }`);
     if (animated) {
       rules.push(
@@ -1680,9 +1700,9 @@ export function injectStyle(css) {
   // over the page's own stylesheets even if they load after us.
   parent.appendChild(styleEl);
   // Keep the early sheet overlay until removeStyle() (native sampling /
-  // disable). Static CSS does not paint `body > section` until classification
-  // stamps `[data-gmixer-native-l]`; stripping early here is what left
-  // Slashdot's white section showing behind already-themed article text.
+  // disable). Static CSS does not paint classified sheets until
+  // `[data-gmixer-native-l]` exists; stripping early here left native-white
+  // landmarks showing behind already-themed article text.
   adoptThemeSheet(css);
   // Theme re-append would otherwise sit after the popover host reset and
   // restyle [popover]/[role="dialog"] chrome. Keep gMixer UI last.

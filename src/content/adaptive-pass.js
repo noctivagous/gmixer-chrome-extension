@@ -22,6 +22,7 @@ import {
   syncVideoPlaybackState,
   stopVideoPlaybackState,
 } from './video-playback-state.js';
+import { clearNavPointerTargets, stampNavPointerTargets } from './clickable-detector.js';
 
 /**
  * @typedef {object} AdaptivePassResult
@@ -45,6 +46,7 @@ export function runAdaptivePass(resolved) {
   removeBackgroundImageOverlays();
   const classification = classifyPage();
   stampLogoAlpha();
+  stampNavPointerTargets(document);
   syncVideoPlaybackState(document);
   // Classification marks ads before the sample walk so identity scoring can
   // reject sponsor/creative colors that are unrelated to the site's brand.
@@ -79,6 +81,7 @@ export function runAdaptivePass(resolved) {
 function runNativeSubtreePass(root, resolved) {
   const classification = classifySubtree(root, { skipClassified: true });
   stampLogoAlpha(root);
+  stampNavPointerTargets(root);
   syncVideoPlaybackState(root);
   const colorOn = resolved?.sections?.color !== false;
   const bgCategory = resolved?.imageFilter?.categories?.bgImages;
@@ -113,6 +116,7 @@ export function runAdaptiveSubtreePasses(roots, resolved) {
 /** Tear down adaptive DOM annotations when gMixer is disabled for the host. */
 export function clearAdaptivePass() {
   removeBackgroundImageOverlays();
+  clearNavPointerTargets();
   stopVideoPlaybackState();
   // Link shimmer is owned by content-end (stopLinkShimmer) so we do not import
   // it here and create a cycle with style-injector consumers.

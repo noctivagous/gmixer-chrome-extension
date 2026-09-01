@@ -5,8 +5,13 @@ export const WALKTHROUGH_LAYOUT_COMPLETION = 'completion';
 
 export const WALKTHROUGH_COMPLETION_FRAME_CSS = {
   width: 'min(440px, calc(100vw - 32px))',
-  height: '240px',
+  height: '320px',
 };
+
+/** Never undersize the iframe or the inner document shows a scrollbar. */
+export function iframeBoxPx(size) {
+  return Math.max(1, Math.ceil(size));
+}
 
 /**
  * @param {'panel'|'completion'} layout
@@ -43,10 +48,14 @@ export function applyWalkthroughFrameLayout(popover, payload, iframe = null) {
   }
   if (!frame?.style) return;
   if (compact && payload.width > 0 && payload.height > 0) {
-    frame.style.width = `${Math.round(payload.width)}px`;
-    frame.style.height = `${Math.round(payload.height)}px`;
+    frame.style.width = `${iframeBoxPx(payload.width)}px`;
+    frame.style.height = `${iframeBoxPx(payload.height)}px`;
+    frame.style.maxWidth = 'none';
+    frame.style.maxHeight = 'none';
     return;
   }
   frame.style.removeProperty('width');
   frame.style.removeProperty('height');
+  frame.style.removeProperty('max-width');
+  frame.style.removeProperty('max-height');
 }

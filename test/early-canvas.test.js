@@ -147,6 +147,24 @@ describe('early canvas persistence', () => {
       classList: ['ntv-preview-img-wrapper'],
     };
     assert.equal(stableSheetSelector(generated), null);
+    globalThis.document.getElementsByClassName = (name) =>
+      name === 'firehose' ? [{}, {}] : [];
+    const bar = {
+      tagName: 'H2',
+      id: '',
+      parentElement: section,
+      classList: ['firehose', 'wnodnixw'],
+      hasAttribute: (attr) => attr === 'data-gmixer-native-l',
+    };
+    assert.equal(stableSheetSelector(bar), 'h2.firehose');
+    globalThis.document.getElementsByClassName = () => [{}, {}];
+    const ad = {
+      tagName: 'DIV',
+      id: '',
+      parentElement: section,
+      classList: ['ntv-preview-img-wrapper'],
+    };
+    assert.equal(stableSheetSelector(ad), null);
   });
 
   it('paints remembered sheets and structural mains with the early overlay', () => {
@@ -187,6 +205,7 @@ describe('early canvas persistence', () => {
       id: '',
       parentElement: body,
       classList: [],
+      hasAttribute: (attr) => attr === 'data-gmixer-native-l',
       getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }),
     };
     const main = {
@@ -224,5 +243,60 @@ describe('early canvas persistence', () => {
     );
     assert.equal(sheets[0].color, 'rgb(69, 78, 91)');
     assert.equal(sheets[1].color, '#191c21');
+  });
+
+  it('collects wide native-l heading bars ahead of leftover transparent mains', () => {
+    const body = { tagName: 'BODY' };
+    const section = {
+      tagName: 'SECTION',
+      id: '',
+      parentElement: body,
+      classList: [],
+      hasAttribute: (attr) => attr === 'data-gmixer-native-l',
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }),
+    };
+    const bar = {
+      tagName: 'H2',
+      id: '',
+      parentElement: section,
+      classList: ['firehose', 'wnodnixw'],
+      hasAttribute: (attr) => attr === 'data-gmixer-native-l',
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 33, width: 800, height: 33 }),
+    };
+    const filler = {
+      tagName: 'DIV',
+      id: 'poll-content',
+      parentElement: body,
+      classList: [],
+      hasAttribute: () => false,
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400 }),
+    };
+    globalThis.innerWidth = 800;
+    globalThis.innerHeight = 600;
+    globalThis.document = {
+      documentElement: {},
+      body,
+      querySelectorAll() {
+        return [section, filler, bar];
+      },
+      getElementsByClassName: (name) => (name === 'firehose' ? [{}, {}] : []),
+    };
+    globalThis.getComputedStyle = (el) => {
+      if (el === section) return { backgroundColor: 'rgb(69, 78, 91)', getPropertyValue: () => '' };
+      if (el === bar) return { backgroundColor: 'rgb(47, 53, 62)', getPropertyValue: () => '' };
+      if (el === globalThis.document.documentElement) {
+        return {
+          backgroundColor: 'rgb(17, 19, 22)',
+          getPropertyValue: (name) => (name === '--gmixer-bg-secondary' ? '#191c21' : ''),
+        };
+      }
+      return { backgroundColor: 'rgba(0, 0, 0, 0)', getPropertyValue: () => '' };
+    };
+    const sheets = collectEarlySheets();
+    assert.deepEqual(
+      sheets.map((sheet) => sheet.selector),
+      ['body > section', 'h2.firehose', '#poll-content']
+    );
+    assert.equal(sheets[1].color, 'rgb(47, 53, 62)');
   });
 });

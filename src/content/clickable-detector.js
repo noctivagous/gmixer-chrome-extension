@@ -2,6 +2,23 @@
 // Intentionally much smaller than KeyPilot's ElementDetector — semantic
 // clickables + cursor:pointer ancestors, no listener tracking / shadow pierce.
 
+/** Stamped on pointer-cursor nav chrome that is not already an `a`/`button`. */
+export const NAV_HIT_ATTR = 'data-gmixer-nav-hit';
+
+const NAV_CHROME_SELECTOR = [
+  'nav',
+  'header',
+  'footer',
+  '[role="navigation"]',
+  '[role="banner"]',
+  '[role="contentinfo"]',
+  '[data-gmixer-role="navigation"]',
+  '[data-gmixer-role="header"]',
+  '[data-gmixer-role="footer"]',
+].join(', ');
+
+const ALREADY_NAV_GLOW = 'a, button, [role="button"], [role="link"], [role="menuitem"]';
+
 const CLICKABLE_SELECTOR = [
   'a[href]',
   'button',
@@ -31,9 +48,14 @@ function isGmixerChrome(el) {
   return !!el.closest?.('#gmixer-hover-outline');
 }
 
-function hasExplicitPointerCursor(el) {
-  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-  if (el === document.body || el === document.documentElement) return false;
+function isDocumentRoot(el) {
+  if (typeof document === 'undefined' || !el) return false;
+  return el === document.body || el === document.documentElement;
+}
+
+export function hasExplicitPointerCursor(el) {
+  if (!el || el.nodeType !== (typeof Node !== 'undefined' ? Node.ELEMENT_NODE : 1)) return false;
+  if (isDocumentRoot(el)) return false;
 
   try {
     if (el.style?.cursor?.toLowerCase() === 'pointer') return true;
@@ -67,7 +89,7 @@ function hasExplicitPointerCursor(el) {
         parent = root.host || null;
       }
     }
-    if (!parent || parent === document.body || parent === document.documentElement) {
+    if (!parent || isDocumentRoot(parent)) {
       return true;
     }
     return getComputedStyle(parent).cursor !== 'pointer';
@@ -125,6 +147,65 @@ export function findClickableAtPoint(x, y) {
   }
 
   return cursorCandidate;
+}
+
+/**
+ * Mark pointer-cursor flyout triggers inside header/nav/footer so Effects
+ * (glow/flash) can paint them the same as `<a>` / button chrome. Skips hosts
+ * that already wrap a real link (those get glow on the `<a>`).
+ *
+ * @param {ParentNode|Element|Document} [root]
+ * @returns {number}
+ */
+export function stampNavPointerTargets(root = typeof document !== 'undefined' ? document : null) {
+  if (!root) return 0;
+  /** @type {Element[]} */
+  const scopes = [];
+  const addScope = (el) => {
+    if (el && el.nodeType === 1 && !scopes.includes(el)) scopes.push(el);
+  };
+  try {
+    if (typeof root.matches === 'function' && root.matches(NAV_CHROME_SELECTOR)) addScope(root);
+  } catch {
+    /* invalid selector in test stubs */
+  }
+  try {
+    if (typeof root.closest === 'function') {
+      const host = root.closest(NAV_CHROME_SELECTOR);
+      if (host) addScope(/** @type {Element} */ (root.nodeType === 1 ? root : host));
+    }
+  } catch {
+    /* ignore */
+  }
+  if (typeof root.querySelectorAll === 'function') {
+    for (const el of root.querySelectorAll(NAV_CHROME_SELECTOR)) addScope(el);
+  }
+  let stamped = 0;
+  for (const scope of scopes) {
+    if (typeof scope.querySelectorAll !== 'function') continue;
+    const nodes = [scope, ...scope.querySelectorAll('*')];
+    for (const el of nodes) {
+      if (isGmixerChrome(el)) continue;
+      try {
+        if (el.matches?.(ALREADY_NAV_GLOW)) continue;
+      } catch {
+        continue;
+      }
+      if (el.querySelector?.('a, button, [role="button"]')) continue;
+      if (!hasExplicitPointerCursor(el)) continue;
+      el.setAttribute(NAV_HIT_ATTR, '');
+      stamped += 1;
+    }
+  }
+  return stamped;
+}
+
+/** @param {ParentNode|Element|Document} [root] */
+export function clearNavPointerTargets(root = typeof document !== 'undefined' ? document : null) {
+  if (!root?.querySelectorAll) return;
+  for (const el of root.querySelectorAll(`[${NAV_HIT_ATTR}]`)) {
+    el.removeAttribute(NAV_HIT_ATTR);
+  }
 }
 
 /** True when the user is typing in a field — nav keys must not fire. */

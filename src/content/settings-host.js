@@ -176,6 +176,7 @@ function ensureHostStyles() {
     #${WALKTHROUGH_POPOVER_ID} iframe.gmixer-ui-frame {
       display: block;
       border: 0;
+      overflow: hidden;
       background: var(--gm-bg);
       border-radius: 12px;
       width: min(1120px, calc(90vw + 80px), calc(100vw - 32px));
@@ -188,6 +189,8 @@ function ensureHostStyles() {
     #${WALKTHROUGH_POPOVER_ID}[data-gmixer-layout="completion"] iframe.gmixer-ui-frame {
       width: ${WALKTHROUGH_COMPLETION_FRAME_CSS.width};
       height: ${WALKTHROUGH_COMPLETION_FRAME_CSS.height};
+      max-width: min(440px, calc(100vw - 32px));
+      max-height: none;
     }
   `;
   (document.head || document.documentElement).appendChild(style);

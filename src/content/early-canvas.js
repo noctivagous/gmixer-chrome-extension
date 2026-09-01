@@ -4,17 +4,17 @@
 // before the first frame. After the first themed load we remember this
 // origin's canvas colors in the page's sessionStorage/localStorage (sync)
 // and re-apply them as the first statement of a tiny document_start script.
-// That closes the white flash on same-origin navigations (Slashdot → Slashdot).
+// That closes the white flash on same-origin navigations.
 
 export const EARLY_CANVAS_STYLE_ID = 'gmixer-early-canvas';
 export const EARLY_CANVAS_STORAGE_KEY = 'gmixer.earlyCanvas.v1';
-const MAX_EARLY_SHEETS = 8;
+const MAX_EARLY_SHEETS = 10;
 
 /**
  * Structural sheets the static theme already knows about, but only paints
  * after classification stamps `[data-gmixer-native-l]`. Repeat visits can
- * paint them immediately so a white `body > section` (Slashdot) does not
- * sit behind already-themed article text.
+ * paint them immediately so a native-white landmark does not sit behind
+ * already-themed article text.
  */
 const EARLY_STRUCTURAL_SHEETS =
   'body > section, body > main, body #main, [role="main"]';
@@ -42,6 +42,7 @@ export function sanitizeColorScheme(value) {
 }
 
 const SAFE_IDENT = /^[A-Za-z][\w-]{0,40}$/;
+const SHEET_CLASS_HINT = /(^|-)(content|main|wrap|container|page|header|heading|title|banner|feed|list|bar|row)$/i;
 const SAFE_SHEET_SELECTOR =
   /^(?:body\s*>\s*[a-z][a-z0-9-]*|[a-z][a-z0-9-]*(?:\.[A-Za-z][\w-]{0,40})?|#[A-Za-z][\w-]{0,40}|\[role="(?:main|banner|contentinfo|navigation|complementary)"\])$/;
 
@@ -64,6 +65,37 @@ export function sanitizeSheetSelector(value) {
  * @param {Element} el
  * @returns {string|null}
  */
+function classCount(name) {
+  try {
+    return document.getElementsByClassName(name).length;
+  } catch {
+    return 0;
+  }
+}
+
+function preferredSheetClass(el) {
+  const classes = (el.classList ? [...el.classList] : String(el.className || '').split(/\s+/)).filter(
+    (name) => SAFE_IDENT.test(name) && !/\d{3,}/.test(name)
+  );
+  const hinted = classes.find((name) => SHEET_CLASS_HINT.test(name));
+  if (hinted) return hinted;
+  // Repeating component class (stable name plus a one-off/hashed sibling).
+  return (
+    classes.find(
+      (name) =>
+        name.length >= 4 &&
+        !/(img|image|ad|ads|preview|thumb|wrapper|sponsor)/i.test(name) &&
+        classCount(name) >= 2
+    ) || null
+  );
+}
+
+function hasNativeL(el) {
+  return typeof el.hasAttribute === 'function'
+    ? el.hasAttribute('data-gmixer-native-l')
+    : el.getAttribute?.('data-gmixer-native-l') != null;
+}
+
 export function stableSheetSelector(el) {
   if (!el || el === document.documentElement || el === document.body) return null;
   if (typeof el.id === 'string' && SAFE_IDENT.test(el.id) && !/\d{3,}/.test(el.id)) {
@@ -74,13 +106,8 @@ export function stableSheetSelector(el) {
   if (el.parentElement === document.body && /^(section|main|header|footer|aside|nav|article)$/.test(tag)) {
     return `body > ${tag}`;
   }
-  const classes = el.classList ? [...el.classList] : String(el.className || '').split(/\s+/);
-  const hinted = classes.find(
-    (name) =>
-      SAFE_IDENT.test(name) &&
-      /(^|-)(content|main|wrap|container|page)$/i.test(name)
-  );
-  if (hinted) return `${tag}.${hinted}`;
+  const sheetClass = preferredSheetClass(el);
+  if (sheetClass) return `${tag}.${sheetClass}`;
   return null;
 }
 
@@ -102,6 +129,16 @@ function coversLargeSheet(el) {
   const rect = el.getBoundingClientRect();
   const vw = globalThis.innerWidth || 0;
   const vh = globalThis.innerHeight || 0;
+  // Full-width chrome bars (section titles, feed headers) are short but opaque.
+  if (
+    hasNativeL(el) &&
+    vw > 0 &&
+    rect.width >= vw * 0.4 &&
+    rect.height >= 22 &&
+    rect.height <= 140
+  ) {
+    return true;
+  }
   if (rect.width < 160 || rect.height < 80) return false;
   if (vw > 0 && vh > 0) {
     const cover = Math.max(0, Math.min(rect.right, vw) - Math.max(rect.left, 0)) *
@@ -124,24 +161,27 @@ export function collectEarlySheets() {
   const fallback =
     sanitizeCanvasColor(getComputedStyle(root).getPropertyValue('--gmixer-bg-secondary')) ||
     sanitizeCanvasColor(getComputedStyle(root).getPropertyValue('--gmixer-bg-primary'));
-  /** @type {Map<string, string>} */
-  const bySelector = new Map();
+  /** @type {{ selector: string, color: string, native: boolean }[]} */
+  const found = [];
+  const seen = new Set();
   const nodes = document.querySelectorAll(
     '[data-gmixer-native-l], [data-gmixer-role="main"], [data-gmixer-role="surface"]'
   );
   for (const el of nodes) {
     if (!coversLargeSheet(el)) continue;
     const selector = sanitizeSheetSelector(stableSheetSelector(el));
-    if (!selector || bySelector.has(selector)) continue;
+    if (!selector || seen.has(selector)) continue;
     const cs = getComputedStyle(el);
     const painted = isOpaqueCssColor(cs.backgroundColor)
       ? sanitizeCanvasColor(cs.backgroundColor)
       : fallback;
     if (!painted) continue;
-    bySelector.set(selector, painted);
-    if (bySelector.size >= MAX_EARLY_SHEETS) break;
+    const native = hasNativeL(el) && isOpaqueCssColor(cs.backgroundColor);
+    seen.add(selector);
+    found.push({ selector, color: painted, native });
   }
-  return [...bySelector.entries()].map(([selector, color]) => ({ selector, color }));
+  found.sort((a, b) => Number(b.native) - Number(a.native));
+  return found.slice(0, MAX_EARLY_SHEETS).map(({ selector, color }) => ({ selector, color }));
 }
 
 function storageGet(store) {
@@ -274,9 +314,10 @@ export function paintEarlyCanvas(canvas = readEarlyCanvas()) {
       const selector = sanitizeSheetSelector(sheet.selector);
       const color = sanitizeCanvasColor(sheet.color);
       if (!selector || !color) return '';
+      const ink = canvas.text ? `\n  color: ${canvas.text} !important;` : '';
       return `${selector} {
   background-color: ${color} !important;
-  background-image: none !important;
+  background-image: none !important;${ink}
 }`;
     })
     .filter(Boolean)
