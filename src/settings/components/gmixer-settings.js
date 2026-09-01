@@ -8,7 +8,6 @@ import { getFontById } from '../../config/fonts.js';
 
 import '../../popup/components/theme-preview-panel.js';
 import '../../popup/components/palette-swatches.js';
-import { effectiveRoleColors } from '../../popup/components/palette-swatches.js';
 import '../../popup/components/color-panel.js';
 import '../../popup/components/fonts-panel.js';
 import '../../popup/components/image-filter-panel.js';
@@ -1313,25 +1312,9 @@ export class GmixerSettings extends StoreBoundElement {
 
   _renderPreview(id) {
     // Theme Preview hosts the full live blurb — no mini strip.
-    if (id === 'preview') return null;
+    // Color Scheme already has the hue ring / swatches; skip the duplicate strip.
+    if (id === 'preview' || id === 'color') return null;
     const g = this.state?.global;
-    const liveColors = g?.color ? effectiveRoleColors(g) : null;
-    if (id === 'color') {
-      return html`
-        <div class="section-preview">
-          ${['background', 'backgroundSecondary', 'surfaceGui', 'surfaceContainers'].map(
-            (role) => html`<span
-              class="preview-swatch"
-              style="background:${liveColors?.[role] || '#1c1826'}"
-            ></span>`
-          )}
-          <span class="preview-copy">
-            <span class="preview-title">Live palette</span>
-            <span class="preview-muted">Contrast and surfaces update as you tune them.</span>
-          </span>
-        </div>
-      `;
-    }
     if (id === 'fonts') {
       const header = getFontById(g?.fonts?.headers?.fontId)?.family || 'system-ui';
       const body = getFontById(g?.fonts?.paragraph?.fontId)?.family || 'system-ui';

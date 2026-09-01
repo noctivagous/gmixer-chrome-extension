@@ -617,6 +617,18 @@ describe('buildCss page paint', () => {
     );
   });
 
+  it('restyles covering ::before/::after fills on stamped hosts', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(
+      css,
+      /\[data-gmixer-pseudo-fill~="before"\]::before \{[\s\S]*background-color: inherit !important;/
+    );
+    assert.match(
+      css,
+      /\[data-gmixer-pseudo-fill~="after"\]::after \{[\s\S]*background-color: inherit !important;/
+    );
+  });
+
   it('paints [role="search"] landmarks as GUI field shells, including in header chrome', () => {
     const css = buildCss(withTonePaint(createDefaultState().global), null);
     assert.match(css, /body \[role="search"\]\[data-gmixer-native-l\]/);

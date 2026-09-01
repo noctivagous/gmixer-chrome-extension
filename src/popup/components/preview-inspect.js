@@ -13,6 +13,9 @@ export const PREVIEW_COLOR_ROLES = /** @type {const} */ ([
   { id: 'text', label: 'Text' },
   { id: 'muted', label: 'Muted' },
   { id: 'accent', label: 'Accent' },
+  { id: 'headingLarge', label: 'Accent:Heading-Large' },
+  { id: 'headingMedium', label: 'Accent:Heading-Medium' },
+  { id: 'headingSmall', label: 'Accent:Heading-Small' },
   { id: 'link', label: 'Link' },
   { id: 'linkHover', label: 'Link hover' },
   { id: 'navLink', label: 'Nav link' },
@@ -49,6 +52,10 @@ export function previewRoleLabel(roleId) {
 export const PREVIEW_FONT_SLOTS = {
   'headings.h1': { path: 'headings.h1', pickerTarget: 'headers', label: 'Hero / H1' },
   'headings.h2': { path: 'headings.h2', pickerTarget: 'headers', label: 'Subhead / H2' },
+  'headings.h3': { path: 'headings.h3', pickerTarget: 'headers', label: 'H3' },
+  'headings.h4': { path: 'headings.h4', pickerTarget: 'headers', label: 'H4' },
+  'headings.h5': { path: 'headings.h5', pickerTarget: 'headers', label: 'H5' },
+  'headings.h6': { path: 'headings.h6', pickerTarget: 'headers', label: 'H6' },
   paragraph: { path: 'paragraph', pickerTarget: 'paragraph', label: 'Paragraph' },
   captions: { path: 'captions', pickerTarget: 'captions', label: 'Captions' },
   ui: { path: 'ui', pickerTarget: 'ui', label: 'UI' },
@@ -135,7 +142,7 @@ export function fontIdForPreviewSlot(fonts, slotKey) {
   if (cur?.fontId) return cur.fontId;
   // Compat fallbacks for heading slots.
   if (slotKey === 'headings.h1') return fonts.headers?.fontId || 'system-body';
-  if (slotKey === 'headings.h2') {
+  if (/^headings\.h[2-6]$/.test(slotKey)) {
     return fonts.subheadings?.fontId || fonts.headers?.fontId || 'system-body';
   }
   return 'system-body';

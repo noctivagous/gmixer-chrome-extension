@@ -3,7 +3,8 @@ import { StoreBoundElement } from './store-bound-element.js';
 import { defineElement } from '../../lib/define-element.js';
 import {
   EFFECT_CATEGORIES,
-  mediaUsesGlow,
+  IMAGE_MOTION_EFFECTS,
+  isGlowLike,
   normalizeEffects,
 } from '../../config/effects-catalog.js';
 
@@ -116,17 +117,12 @@ export class EffectsPanel extends StoreBoundElement {
     const raw = this.state?.global?.effects;
     if (!raw) return html``;
     const effects = normalizeEffects(raw);
-    const showMediaGlowOptions = mediaUsesGlow(effects);
-    const showPanScanOptions = effects.categories.images.effect === 'pan-scan';
+    const showPanScanOptions = effects.categories.images.motion === 'pan-scan';
+    const imageMotion = effects.categories.images.motion || 'none';
     const linkGlowCategories = new Set(['hyperlinks', 'navigation']);
-    const mediaGlowLegend = (() => {
-      const imageGlow = effects.categories.images.effect === 'glow';
-      const videoGlow = effects.categories.videos.effect === 'glow';
-      if (imageGlow && videoGlow) return 'Images & Videos: Glow';
-      if (imageGlow) return 'Images: Glow';
-      if (videoGlow) return 'Videos: Glow';
-      return 'Media: Glow';
-    })();
+    const imageGlowLike = isGlowLike(effects.categories.images.effect);
+    const videoGlowLike = isGlowLike(effects.categories.videos.effect);
+    const articleGlowLike = isGlowLike(effects.categories.articles.effect);
     const updateCategoryGlow = (categoryId, patch) =>
       this.updateGlobal({
         effects: {
@@ -143,14 +139,120 @@ export class EffectsPanel extends StoreBoundElement {
           },
         },
       });
+    const panScanFieldset = showPanScanOptions
+      ? html`
+          <fieldset class="param-fieldset">
+            <legend>Images: Pan &amp; scan</legend>
+            <div class="parameter">
+              <label for="pan-scan-speed">
+                <span>Speed</span>
+                <input
+                  id="pan-scan-speed"
+                  type="range"
+                  min="4"
+                  max="40"
+                  step="1"
+                  .value=${String(effects.panScan.speed)}
+                  @input=${(e) => updatePanScan('speed', e.target.value)}
+                />
+              </label>
+              <output>${effects.panScan.speed}s</output>
+            </div>
+            <div class="parameter">
+              <label for="pan-scan-zoom">
+                <span>Zoom</span>
+                <input
+                  id="pan-scan-zoom"
+                  type="range"
+                  min="4"
+                  max="40"
+                  step="1"
+                  .value=${String(effects.panScan.zoom)}
+                  @input=${(e) => updatePanScan('zoom', e.target.value)}
+                />
+              </label>
+              <output>${effects.panScan.zoom}%</output>
+            </div>
+            <div class="parameter">
+              <label for="pan-scan-distance">
+                <span>Pan distance</span>
+                <input
+                  id="pan-scan-distance"
+                  type="range"
+                  min="0"
+                  max="12"
+                  step="1"
+                  .value=${String(effects.panScan.distance)}
+                  @input=${(e) => updatePanScan('distance', e.target.value)}
+                />
+              </label>
+              <output>${effects.panScan.distance}%</output>
+            </div>
+            <div class="parameter">
+              <label for="pan-scan-motion">
+                <span>Variation</span>
+                <select
+                  id="pan-scan-motion"
+                  .value=${effects.panScan.motion}
+                  @change=${(e) => updatePanScan('motion', e.target.value)}
+                >
+                  <option value="scan">Scan (2D)</option>
+                  <option value="pan">Pan (horizontal)</option>
+                  <option value="tilt">Tilt (vertical)</option>
+                </select>
+              </label>
+              <output></output>
+            </div>
+            <div class="parameter">
+              <label for="pan-scan-loop">
+                <span>Loop</span>
+                <select
+                  id="pan-scan-loop"
+                  .value=${effects.panScan.loop}
+                  @change=${(e) => updatePanScan('loop', e.target.value)}
+                >
+                  <option value="fade">Cross dissolve</option>
+                  <option value="oscillate">Oscillate</option>
+                </select>
+              </label>
+              <output></output>
+            </div>
+          </fieldset>
+        `
+      : html``;
+    const mediaGlowFieldset = (legend) => html`
+      <fieldset class="param-fieldset">
+        <legend>${legend}</legend>
+        <div class="sub toggle-row">
+          <input
+            type="checkbox"
+            .checked=${effects.glow.animated}
+            @change=${(e) =>
+              this.updateGlobal({ effects: { glow: { animated: e.target.checked } } })}
+          />
+          <label>Animated glow pulse</label>
+        </div>
+        <div class="sub toggle-row">
+          <label for="glow-color">Glow color</label>
+          <input
+            id="glow-color"
+            type="color"
+            .value=${effects.glow.color || '#a08a7f'}
+            @change=${(e) =>
+              this.updateGlobal({ effects: { glow: { color: e.target.value } } })}
+          />
+        </div>
+      </fieldset>
+    `;
 
     return html`
-      <p class="hint">Pick one effect per category. Cursor and background motion stay page-wide.</p>
+      <p class="hint">Chrome effects (glow, drop glow, marquee) are separate from image motion. Glow is centered; drop glow is offset. Cursor and background motion stay page-wide.</p>
 
       ${Object.entries(EFFECT_CATEGORIES).map(([categoryId, meta]) => {
         const current = effects.categories[categoryId]?.effect || 'none';
         const glow = effects.categories[categoryId]?.glow;
-        const showLinkGlow = linkGlowCategories.has(categoryId) && current === 'glow';
+        const showLinkGlow =
+          linkGlowCategories.has(categoryId) && (current === 'glow' || current === 'drop-glow');
         const effectLabel =
           meta.effects.find((effect) => effect.id === current)?.label || current;
         return html`
@@ -176,6 +278,42 @@ export class EffectsPanel extends StoreBoundElement {
               )}
             </select>
           </div>
+          ${categoryId === 'images' && imageGlowLike
+            ? mediaGlowFieldset(`Images: ${effectLabel}`)
+            : html``}
+          ${categoryId === 'images'
+            ? html`
+                <div class="category">
+                  <span>Image motion</span>
+                  <select
+                    aria-label="Image motion effect"
+                    @change=${(e) =>
+                      this.updateGlobal({
+                        effects: {
+                          categories: {
+                            images: { motion: e.target.value },
+                          },
+                        },
+                      })}
+                  >
+                    ${IMAGE_MOTION_EFFECTS.map(
+                      (effect) => html`
+                        <option value=${effect.id} ?selected=${effect.id === imageMotion}>
+                          ${effect.label}
+                        </option>
+                      `
+                    )}
+                  </select>
+                </div>
+                ${panScanFieldset}
+              `
+            : html``}
+          ${categoryId === 'videos' && videoGlowLike && !imageGlowLike
+            ? mediaGlowFieldset(`Videos: ${effectLabel}`)
+            : html``}
+          ${categoryId === 'articles' && articleGlowLike && !imageGlowLike && !videoGlowLike
+            ? mediaGlowFieldset(`Articles: ${effectLabel}`)
+            : html``}
           ${showLinkGlow
             ? html`
                 <fieldset class="param-fieldset">
@@ -203,115 +341,6 @@ export class EffectsPanel extends StoreBoundElement {
             : html``}
         `;
       })}
-
-      ${showPanScanOptions
-        ? html`
-            <fieldset class="param-fieldset">
-              <legend>Images: Pan &amp; scan</legend>
-              <div class="parameter">
-                <label for="pan-scan-speed">
-                  <span>Speed</span>
-                  <input
-                    id="pan-scan-speed"
-                    type="range"
-                    min="4"
-                    max="40"
-                    step="1"
-                    .value=${String(effects.panScan.speed)}
-                    @input=${(e) => updatePanScan('speed', e.target.value)}
-                  />
-                </label>
-                <output>${effects.panScan.speed}s</output>
-              </div>
-              <div class="parameter">
-                <label for="pan-scan-zoom">
-                  <span>Zoom</span>
-                  <input
-                    id="pan-scan-zoom"
-                    type="range"
-                    min="4"
-                    max="40"
-                    step="1"
-                    .value=${String(effects.panScan.zoom)}
-                    @input=${(e) => updatePanScan('zoom', e.target.value)}
-                  />
-                </label>
-                <output>${effects.panScan.zoom}%</output>
-              </div>
-              <div class="parameter">
-                <label for="pan-scan-distance">
-                  <span>Pan distance</span>
-                  <input
-                    id="pan-scan-distance"
-                    type="range"
-                    min="0"
-                    max="12"
-                    step="1"
-                    .value=${String(effects.panScan.distance)}
-                    @input=${(e) => updatePanScan('distance', e.target.value)}
-                  />
-                </label>
-                <output>${effects.panScan.distance}%</output>
-              </div>
-              <div class="parameter">
-                <label for="pan-scan-motion">
-                  <span>Variation</span>
-                  <select
-                    id="pan-scan-motion"
-                    .value=${effects.panScan.motion}
-                    @change=${(e) => updatePanScan('motion', e.target.value)}
-                  >
-                    <option value="scan">Scan (2D)</option>
-                    <option value="pan">Pan (horizontal)</option>
-                    <option value="tilt">Tilt (vertical)</option>
-                  </select>
-                </label>
-                <output></output>
-              </div>
-              <div class="parameter">
-                <label for="pan-scan-loop">
-                  <span>Loop</span>
-                  <select
-                    id="pan-scan-loop"
-                    .value=${effects.panScan.loop}
-                    @change=${(e) => updatePanScan('loop', e.target.value)}
-                  >
-                    <option value="fade">Cross dissolve</option>
-                    <option value="oscillate">Oscillate</option>
-                  </select>
-                </label>
-                <output></output>
-              </div>
-            </fieldset>
-          `
-        : html``}
-
-      ${showMediaGlowOptions
-        ? html`
-            <fieldset class="param-fieldset">
-              <legend>${mediaGlowLegend}</legend>
-              <div class="sub toggle-row">
-                <input
-                  type="checkbox"
-                  .checked=${effects.glow.animated}
-                  @change=${(e) =>
-                    this.updateGlobal({ effects: { glow: { animated: e.target.checked } } })}
-                />
-                <label>Animated glow pulse</label>
-              </div>
-              <div class="sub toggle-row">
-                <label for="glow-color">Glow color</label>
-                <input
-                  id="glow-color"
-                  type="color"
-                  .value=${effects.glow.color || '#a08a7f'}
-                  @change=${(e) =>
-                    this.updateGlobal({ effects: { glow: { color: e.target.value } } })}
-                />
-              </div>
-            </fieldset>
-          `
-        : html``}
 
       <hr class="divider" />
 

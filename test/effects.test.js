@@ -150,12 +150,18 @@ describe('effectsRules category paint', () => {
     assert.match(css, /--gmixer-cube-half-d/);
   });
 
-  it('allows rotating-cube on images', () => {
-    assert.equal(
-      normalizeEffects({ categories: { images: { effect: 'rotating-cube' } } }).categories.images
-        .effect,
-      'rotating-cube'
-    );
+  it('migrates pan-scan and rotating-cube off images.effect onto images.motion', () => {
+    const cube = normalizeEffects({ categories: { images: { effect: 'rotating-cube' } } });
+    assert.equal(cube.categories.images.effect, 'none');
+    assert.equal(cube.categories.images.motion, 'rotating-cube');
+    const pan = normalizeEffects({ categories: { images: { effect: 'pan-scan' } } });
+    assert.equal(pan.categories.images.effect, 'none');
+    assert.equal(pan.categories.images.motion, 'pan-scan');
+    const both = normalizeEffects({
+      categories: { images: { effect: 'glow', motion: 'pan-scan' } },
+    });
+    assert.equal(both.categories.images.effect, 'glow');
+    assert.equal(both.categories.images.motion, 'pan-scan');
   });
 
   it('emits navigation glow on nav/header/footer selectors, not bare a', () => {
@@ -241,6 +247,40 @@ describe('effectsRules category paint', () => {
     assert.match(css, /nav a[\s\S]*text-shadow: 0 0 8px #00ff00/);
   });
 
+  it('emits an offset drop-glow distinct from centered glow', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'drop-glow' }, hyperlinks: { effect: 'drop-glow' } },
+        glow: { animated: false, color: '#ff00aa' },
+      }),
+      null
+    );
+    assert.match(css, /box-shadow: 4px 10px 20px #ff00aa/);
+    assert.match(css, /a \{ text-shadow: 2px 4px 10px /);
+    assert.doesNotMatch(css, /gmixer-glow-box-pulse/);
+    assert.doesNotMatch(css, /box-shadow: 0 0 12px/);
+  });
+
+  it('aliases saved drop-shadow to drop-glow', () => {
+    const normalized = normalizeEffects({
+      categories: { images: { effect: 'drop-shadow' } },
+    });
+    assert.equal(normalized.categories.images.effect, 'drop-glow');
+  });
+
+  it('emits a rotating marquee outline on images and article containers', () => {
+    const css = buildCss(
+      withEffects({
+        categories: { images: { effect: 'marquee' }, articles: { effect: 'marquee' } },
+      }),
+      null
+    );
+    assert.match(css, /@keyframes gmixer-marquee-spin/);
+    assert.match(css, /--gmixer-marquee-angle/);
+    assert.match(css, /conic-gradient\(from var\(--gmixer-marquee-angle\)/);
+    assert.match(css, /article, \[role="article"\]/);
+  });
+
   it('omits effects CSS when the Effects section is off', () => {
     const global = withEffects({
       categories: { images: { effect: 'pan-scan' }, navigation: { effect: 'glow' } },
@@ -292,5 +332,26 @@ describe('preview effects css', () => {
     assert.equal(previewEffectsActive(global), false);
     global.sections.effects = true;
     assert.equal(previewEffectsActive(global), true);
+  });
+
+  it('activates preview when only image motion is on', () => {
+    const global = createDefaultState().global;
+    global.sections.effects = true;
+    global.effects.categories.images.motion = 'pan-scan';
+    assert.equal(previewEffectsActive(global), true);
+  });
+
+  it('previews offset drop-glow and marquee outline', () => {
+    const shadow = buildPreviewEffectsCss(
+      { categories: { images: { effect: 'drop-glow' } }, glow: { animated: false, color: '#ff00aa' } },
+      { accent: '#7c3aed' }
+    );
+    assert.match(shadow, /4px 10px 20px #ff00aa/);
+    const marquee = buildPreviewEffectsCss(
+      { categories: { images: { effect: 'marquee' } } },
+      { accent: '#7c3aed' }
+    );
+    assert.match(marquee, /gmixer-preview-marquee-spin/);
+    assert.match(marquee, /\.theme-preview \.blurb-image/);
   });
 });

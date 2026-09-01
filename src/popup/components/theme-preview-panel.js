@@ -363,11 +363,33 @@ export class ThemePreviewPanel extends StoreBoundElement {
       font-weight: 600;
       line-height: 1.3;
     }
-    .blurb-heading-small {
+    .blurb-heading-scale {
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    .blurb-h3,
+    .blurb-h4,
+    .blurb-h5,
+    .blurb-h6 {
       margin: 0;
-      font-size: 11px;
       font-weight: 650;
       line-height: 1.3;
+    }
+    .blurb-h3 {
+      font-size: 15px;
+    }
+    .blurb-h4 {
+      font-size: 13px;
+    }
+    .blurb-h5 {
+      font-size: 12px;
+    }
+    .blurb-h6 {
+      font-size: 11px;
       letter-spacing: 0.02em;
     }
     .blurb-article-link,
@@ -956,6 +978,18 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const subheadFamily = fontFamily(
       fonts.headings?.h2?.fontId || fonts.subheadings?.fontId || fonts.headers?.fontId
     );
+    const h3Family = fontFamily(
+      fonts.headings?.h3?.fontId || fonts.subheadings?.fontId || fonts.headers?.fontId
+    );
+    const h4Family = fontFamily(
+      fonts.headings?.h4?.fontId || fonts.subheadings?.fontId || fonts.headers?.fontId
+    );
+    const h5Family = fontFamily(
+      fonts.headings?.h5?.fontId || fonts.subheadings?.fontId || fonts.headers?.fontId
+    );
+    const h6Family = fontFamily(
+      fonts.headings?.h6?.fontId || fonts.subheadings?.fontId || fonts.headers?.fontId
+    );
     const bodyFamily = fontFamily(fonts.paragraph?.fontId);
     const captionFamily = fontFamily(fonts.captions?.fontId);
     const uiFamily = fontFamily(fonts.ui?.fontId || fonts.paragraph?.fontId);
@@ -993,8 +1027,10 @@ export class ThemePreviewPanel extends StoreBoundElement {
     const previewTextureCss = textureOn
       ? buildPreviewTextureCss(global.texture)
       : '';
-    const useRotatingCube =
-      effectsOn && global.effects?.categories?.images?.effect === 'rotating-cube';
+    const imageMotion =
+      global.effects?.categories?.images?.motion ||
+      global.effects?.categories?.images?.effect;
+    const useRotatingCube = effectsOn && imageMotion === 'rotating-cube';
 
     const hl = (leaf) => this._leafHighlightClass(leaf);
 
@@ -1122,15 +1158,6 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 style="font-family: ${subheadFamily}; color: ${colors.link}"
               >
                 Subheading for section hierarchy
-              </p>
-              <p
-                class=${`blurb-heading-small ${hl({ roleId: 'headingSmall', fontSlot: 'headings.h2' })}`.trim()}
-                data-gmixer-preview-role="headingSmall"
-                data-gmixer-preview-font="headings.h2"
-                data-gmixer-texture="accent.headingSmall"
-                style="font-family: ${subheadFamily}; color: ${colors.headingSmall}"
-              >
-                Small heading detail
               </p>
               <p
                 class=${`blurb-body ${hl({ roleId: 'text', fontSlot: 'paragraph' })}`.trim()}
@@ -1324,6 +1351,50 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 Button
               </button>
             </div>
+          </div>
+          <div
+            class="blurb-heading-scale"
+            style="border-color: ${colors.border}"
+          >
+            <p class="blurb-card-label" style="font-family: ${uiFamily}">
+              Heading scale
+            </p>
+            <h3
+              class=${`blurb-h3 ${hl({ roleId: 'headingMedium', fontSlot: 'headings.h3' })}`.trim()}
+              data-gmixer-preview-role="headingMedium"
+              data-gmixer-preview-font="headings.h3"
+              data-gmixer-texture="accent.headingMedium"
+              style="font-family: ${h3Family}; color: ${colors.headingMedium}"
+            >
+              H3 section heading
+            </h3>
+            <h4
+              class=${`blurb-h4 ${hl({ roleId: 'headingMedium', fontSlot: 'headings.h4' })}`.trim()}
+              data-gmixer-preview-role="headingMedium"
+              data-gmixer-preview-font="headings.h4"
+              data-gmixer-texture="accent.headingMedium"
+              style="font-family: ${h4Family}; color: ${colors.headingMedium}"
+            >
+              H4 subsection heading
+            </h4>
+            <h5
+              class=${`blurb-h5 ${hl({ roleId: 'headingSmall', fontSlot: 'headings.h5' })}`.trim()}
+              data-gmixer-preview-role="headingSmall"
+              data-gmixer-preview-font="headings.h5"
+              data-gmixer-texture="accent.headingSmall"
+              style="font-family: ${h5Family}; color: ${colors.headingSmall}"
+            >
+              H5 supporting heading
+            </h5>
+            <h6
+              class=${`blurb-h6 ${hl({ roleId: 'headingSmall', fontSlot: 'headings.h6' })}`.trim()}
+              data-gmixer-preview-role="headingSmall"
+              data-gmixer-preview-font="headings.h6"
+              data-gmixer-texture="accent.headingSmall"
+              style="font-family: ${h6Family}; color: ${colors.headingSmall}"
+            >
+              H6 fine heading
+            </h6>
           </div>
         </div>
         ${this._renderInspector(colors)}

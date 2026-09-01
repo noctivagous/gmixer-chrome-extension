@@ -1,3 +1,4 @@
+import { normalizeEffects } from '../config/effects-catalog.js';
 import { MAX_MEDIA_EFFECT_SCAN, MIN_MEDIA_EFFECT_PX } from './scan-limits.js';
 
 export const SCENE_ATTR = 'data-gmixer-rotating-cube-scene';
@@ -15,7 +16,7 @@ export function syncRotatingCube(resolved) {
   const enabled =
     resolved?.enabled !== false &&
     resolved?.sections?.effects === true &&
-    resolved?.effects?.categories?.images?.effect === 'rotating-cube';
+    normalizeEffects(resolved.effects).categories.images.motion === 'rotating-cube';
 
   if (!enabled) {
     removeCubes();

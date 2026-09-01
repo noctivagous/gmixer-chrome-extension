@@ -8,12 +8,14 @@ import {
   promotePaintedSurfaces,
   seedPageSheets,
   stampOpaquePaintTargets,
+  stampCoveringPseudoFills,
   assignToneSteps,
   ROLE_ATTR,
   MEDIA_ATTR,
   NATIVE_L_ATTR,
   TONE_STEP_ATTR,
   CANVAS_WASH_ATTR,
+  PSEUDO_FILL_ATTR,
 } from '../src/content/page-classifier.js';
 
 function el(tag, attrs = {}, children = []) {
@@ -871,6 +873,61 @@ describe('page-classifier', () => {
     try {
       assert.equal(stampOpaquePaintTargets(root), 0);
       assert.equal(panel.hasAttribute(NATIVE_L_ATTR), false);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('stamps covering empty ::before fills on classified sheets', () => {
+    const host = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface', [NATIVE_L_ATTR]: '0.9800' }),
+      closest: () => null,
+      getBoundingClientRect: () => ({ width: 1500, height: 800 }),
+      _before: {
+        content: '""',
+        position: 'absolute',
+        width: '1200px',
+        height: '790px',
+        backgroundColor: 'rgb(255, 255, 255)',
+        backgroundImage: 'none',
+      },
+    };
+    const icon = {
+      tagName: 'SPAN',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ [ROLE_ATTR]: 'surface' }),
+      closest: () => null,
+      getBoundingClientRect: () => ({ width: 24, height: 24 }),
+      _before: {
+        content: '"\\2192"',
+        position: 'absolute',
+        width: '16px',
+        height: '16px',
+        backgroundColor: 'rgb(255, 255, 255)',
+        backgroundImage: 'none',
+      },
+    };
+    const root = {
+      querySelectorAll: (selector) =>
+        String(selector).includes(ROLE_ATTR) || String(selector).includes(NATIVE_L_ATTR)
+          ? [host, icon]
+          : [],
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (node, pseudo) => {
+      if (pseudo === '::before' || pseudo === ':before') {
+        return node._before || { content: 'none', position: 'static', width: 'auto', height: 'auto', backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none' };
+      }
+      return { backgroundColor: 'rgb(53, 58, 70)', backgroundImage: 'none' };
+    };
+    try {
+      assert.equal(stampCoveringPseudoFills(root), 1);
+      assert.equal(host.getAttribute(PSEUDO_FILL_ATTR), 'before');
+      assert.equal(icon.hasAttribute(PSEUDO_FILL_ATTR), false);
     } finally {
       globalThis.getComputedStyle = previousCs;
     }

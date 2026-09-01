@@ -33,6 +33,12 @@ export const CANVAS_WASH_ATTR = 'data-gmixer-canvas-wash';
  * Value is native alpha 0..1. CSS keeps the glaze and swaps in theme color.
  */
 export const GLAZE_ATTR = 'data-gmixer-glaze';
+/**
+ * Space-separated `before` / `after` when a generated box is a covering
+ * opaque fill (empty content, absolute/fixed, large). CSS restyles those
+ * pseudos; icon/content pseudos are left alone.
+ */
+export const PSEUDO_FILL_ATTR = 'data-gmixer-pseudo-fill';
 
 export const CLASSIFIER_CONFIDENCE_THRESHOLD = 0.7;
 export const SURFACE_LADDER_STEPS = 3;
@@ -921,6 +927,7 @@ function clearClassification(el) {
   el.removeAttribute(TONE_STEP_ATTR);
   el.removeAttribute(CANVAS_WASH_ATTR);
   el.removeAttribute(GLAZE_ATTR);
+  el.removeAttribute(PSEUDO_FILL_ATTR);
 }
 
 function elementsUnder(root) {
@@ -933,6 +940,67 @@ const CSS_GRADIENT_RE = /(?:repeating-)?(?:linear|radial|conic)-gradient\(/i;
 
 function hasCssGradientFill(backgroundImage) {
   return CSS_GRADIENT_RE.test(backgroundImage || '');
+}
+
+function isEmptyGeneratedContent(content) {
+  const raw = String(content || '').trim();
+  return raw === '""' || raw === "''";
+}
+
+/**
+ * True when ::before/::after is a covering sheet (not an icon glyph).
+ * @param {Element} el
+ * @param {string} pseudo `::before` or `::after`
+ */
+function isCoveringPseudoFill(el, pseudo) {
+  if (typeof getComputedStyle !== 'function' || typeof el.getBoundingClientRect !== 'function') {
+    return false;
+  }
+  const style = getComputedStyle(el, pseudo);
+  if (!style) return false;
+  if (!isEmptyGeneratedContent(style.content)) return false;
+  const pos = String(style.position || '');
+  if (pos !== 'absolute' && pos !== 'fixed') return false;
+  if (!isOpaqueBackground(el, style) && !hasCssGradientFill(style.backgroundImage || '')) {
+    return false;
+  }
+  const host = el.getBoundingClientRect();
+  const w = parseFloat(style.width);
+  const h = parseFloat(style.height);
+  if (!(w >= 80) || !(h >= 80)) return false;
+  if (host.width >= 1 && w / host.width < 0.4) return false;
+  if (host.height >= 1 && h / host.height < 0.4) return false;
+  return true;
+}
+
+/**
+ * Mark hosts whose empty ::before/::after is the visible opaque fill.
+ * @param {ParentNode} root
+ * @returns {number}
+ */
+export function stampCoveringPseudoFills(root = document.body) {
+  if (!root || typeof root.querySelectorAll !== 'function') return 0;
+  const scope =
+    typeof document !== 'undefined' && (root === document.body || root === document.documentElement)
+      ? document
+      : root;
+  const nodes = scope.querySelectorAll?.(
+    `[${ROLE_ATTR}], [${NATIVE_L_ATTR}]`
+  ) || [];
+  let stamped = 0;
+  for (const el of nodes) {
+    if (isOwnedByGmixer(el)) continue;
+    const parts = [];
+    if (isCoveringPseudoFill(el, '::before')) parts.push('before');
+    if (isCoveringPseudoFill(el, '::after')) parts.push('after');
+    if (parts.length) {
+      el.setAttribute(PSEUDO_FILL_ATTR, parts.join(' '));
+      stamped += 1;
+    } else if (el.hasAttribute?.(PSEUDO_FILL_ATTR)) {
+      el.removeAttribute(PSEUDO_FILL_ATTR);
+    }
+  }
+  return stamped;
 }
 
 function isOpaqueBackground(el, style) {
@@ -1414,6 +1482,7 @@ function classifyOneTree(root, options = {}, budget = { remaining: MAX_SCAN }) {
     }
   }
   stampOpaquePaintTargets(root);
+  stampCoveringPseudoFills(root);
   return {
     stamped: stamped + surfaces + sheets,
     scanned,

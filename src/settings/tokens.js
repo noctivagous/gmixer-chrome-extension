@@ -6,7 +6,7 @@ export const GRID = Object.freeze({
   baseline: 24,
   railWidth: 192, // 24 × 8
   titlebarHeight: 48, // 2 × 24
-  panelWidth: 520,
+  panelWidth: 750,
   /** Min page strip visible beside the drawer (so live theme stays in view). */
   panelPagePeek: 48,
 });

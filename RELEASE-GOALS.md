@@ -9,13 +9,15 @@ setting for each site in cache
 for document_start script so that
 restyling is faster.
 
-deferred sections: Texture, Clipping/Corners.
+deferred sections: Texture, Clipping/Corners,
+Font Size Clamping, Side Panel, Theme Packs.
 
 0.1.1 - Texturing of page, Clipping/Corners,
 Minimum/maximum values for font size in
 Typography groups.
 
-[ ] In Typography, we want a feature that is enabled
+[ ] Font Size Clamping - 
+In Typography, we want a feature that is enabled
 manually by the user for each styling category like h1,
 body text, beneath the font picker select dropdown.
 Put a checkbox to the left of a range slider 
@@ -32,7 +34,10 @@ the page the min is higher than the h1 elements' heights
 on the page it will increase the font size of h1 
 elements on the page.
 
-[ ] 
+[ ] Re-enable and Finish: 
+  [ ] Clipping/Corners
+  [ ] Side Panel
+  [ ] Theme Packs
 
 Events and Actions
 

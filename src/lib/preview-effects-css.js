@@ -29,9 +29,15 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
   const blurb = `${root} .blurb`;
 
   const imageEffect = normalized.categories.images.effect;
+  const imageMotion = normalized.categories.images.motion || 'none';
+  const videoEffect = normalized.categories.videos.effect;
   const linkEffect = normalized.categories.hyperlinks.effect;
   const navEffect = normalized.categories.navigation.effect;
   const articleEffect = normalized.categories.articles.effect;
+  const video = `${root} .blurb-video-thumb`;
+  const card = `${root} .blurb-card`;
+  const dropGlowBox = `4px 10px 20px ${mediaGlowColor}, 1px 3px 8px ${mediaGlowColor}`;
+  const dropGlowText = (color) => `2px 4px 10px ${color}`;
 
   if (imageEffect === 'glow' && normalized.glow.animated) {
     rules.push(`@keyframes gmixer-preview-glow-box-pulse {
@@ -58,7 +64,33 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
         ? `${img} { animation: gmixer-preview-glow-box-pulse 2.4s ease-in-out infinite; }`
         : `${img} { box-shadow: 0 0 12px ${mediaGlowColor}; }`
     );
-  } else if (imageEffect === 'pan-scan') {
+  } else if (imageEffect === 'drop-glow') {
+    rules.push(`${img} { box-shadow: ${dropGlowBox}; }`);
+  }
+
+  const usesMarquee =
+    imageEffect === 'marquee' || videoEffect === 'marquee' || articleEffect === 'marquee';
+  if (usesMarquee) {
+    rules.push(`@property --gmixer-preview-marquee-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes gmixer-preview-marquee-spin {
+  to { --gmixer-preview-marquee-angle: 360deg; }
+}`);
+  }
+  if (imageEffect === 'marquee') {
+    rules.push(`${img} {
+  --gmixer-preview-marquee-angle: 0deg;
+  border: 2px solid transparent;
+  border-image-source: conic-gradient(from var(--gmixer-preview-marquee-angle), transparent 0deg, ${mediaGlowColor} 48deg, transparent 110deg, transparent 180deg, ${mediaGlowColor} 228deg, transparent 290deg);
+  border-image-slice: 1;
+  animation: gmixer-preview-marquee-spin 2.6s linear infinite;
+}`);
+  }
+
+  if (imageMotion === 'pan-scan') {
     const { speed, zoom, distance, loop, motion } = normalized.panScan;
     const zoomScale = 1 + zoom / 100;
     const travel = distance / 2;
@@ -84,7 +116,7 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
         `${img} { transform-origin: 35% 45%; animation: gmixer-preview-pan-scan-fade ${speed}s ease-in-out infinite; }`
       );
     }
-  } else if (imageEffect === 'rotating-cube') {
+  } else if (imageMotion === 'rotating-cube') {
     rules.push(`@keyframes gmixer-preview-rotating-cube {
   0% { transform: rotateY(0deg); }
   100% { transform: rotateY(360deg); }
@@ -95,11 +127,30 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
     );
   }
 
+  if (videoEffect === 'glow') {
+    rules.push(
+      normalized.glow.animated
+        ? `${video} { animation: gmixer-preview-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${video} { box-shadow: 0 0 12px ${mediaGlowColor}; }`
+    );
+  } else if (videoEffect === 'drop-glow') {
+    rules.push(`${video} { box-shadow: ${dropGlowBox}; }`);
+  } else if (videoEffect === 'marquee') {
+    rules.push(`${video} {
+  --gmixer-preview-marquee-angle: 0deg;
+  outline: 2px solid color-mix(in srgb, ${mediaGlowColor} 70%, transparent);
+  outline-offset: 2px;
+  animation: gmixer-preview-marquee-spin 2.6s linear infinite;
+}`);
+  }
+
   if (linkEffect === 'glow') {
     rules.push(`${link} { text-shadow: 0 0 8px ${linkGlowColor}; }`);
     if (normalized.categories.hyperlinks.glow?.animated !== false) {
       rules.push(`${link} { animation: gmixer-preview-glow-pulse-link 2.4s ease-in-out infinite; }`);
     }
+  } else if (linkEffect === 'drop-glow') {
+    rules.push(`${link} { text-shadow: ${dropGlowText(linkGlowColor)}; }`);
   } else if (linkEffect === 'flash') {
     rules.push(`@keyframes gmixer-preview-flash-link {
   0%, 90%, 100% { opacity: 1; }
@@ -113,12 +164,38 @@ export function buildPreviewEffectsCss(effects, palette, root = '.theme-preview'
     if (normalized.categories.navigation.glow?.animated !== false) {
       rules.push(`${nav} { animation: gmixer-preview-glow-pulse-nav 2.4s ease-in-out infinite; }`);
     }
+  } else if (navEffect === 'drop-glow') {
+    rules.push(`${nav} { text-shadow: ${dropGlowText(navGlowColor)}; }`);
   } else if (navEffect === 'flash') {
     rules.push(`@keyframes gmixer-preview-flash {
   0%, 90%, 100% { opacity: 1; }
   95% { opacity: 0.55; }
 }`);
     rules.push(`${nav} { animation: gmixer-preview-flash 3s linear infinite; }`);
+  }
+
+  if (articleEffect === 'drop-glow') {
+    rules.push(`${card} { box-shadow: ${dropGlowBox}; }`);
+  } else if (articleEffect === 'marquee') {
+    rules.push(`${card} {
+  position: relative;
+  --gmixer-preview-marquee-angle: 0deg;
+}
+${card}::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 2px;
+  box-sizing: border-box;
+  background: conic-gradient(from var(--gmixer-preview-marquee-angle), transparent 0deg, ${accent} 48deg, transparent 110deg, transparent 180deg, ${accent} 228deg, transparent 290deg);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  animation: gmixer-preview-marquee-spin 2.6s linear infinite;
+}`);
   }
 
   if (articleEffect === 'link-shimmer') {
@@ -168,5 +245,8 @@ export function previewEffectsActive(global) {
   if (!global || global.sections?.effects !== true) return false;
   const normalized = normalizeEffects(global.effects);
   if (normalized.cursor.enabled || normalized.backgroundMotion.enabled) return true;
+  if (normalized.categories.images.motion && normalized.categories.images.motion !== 'none') {
+    return true;
+  }
   return Object.values(normalized.categories).some((slot) => slot.effect !== 'none');
 }

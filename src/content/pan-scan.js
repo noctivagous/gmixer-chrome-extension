@@ -23,7 +23,7 @@ export function syncPanScan(resolved) {
   const enabled =
     resolved?.enabled !== false &&
     resolved?.sections?.effects === true &&
-    resolved?.effects?.categories?.images?.effect === 'pan-scan';
+    normalizeEffects(resolved.effects).categories.images.motion === 'pan-scan';
 
   if (!enabled) {
     activePanScan = null;

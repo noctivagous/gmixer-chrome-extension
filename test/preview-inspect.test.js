@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PREVIEW_COLOR_ROLES,
+  PREVIEW_FONT_SLOTS,
   PREVIEW_MEDIA_LABEL,
   fontIdForPreviewSlot,
   fontsPatchForPreviewSlot,
@@ -29,6 +30,8 @@ describe('preview-inspect', () => {
     assert.equal(previewRoleLabel('background'), 'BG:Primary');
     assert.equal(previewRoleLabel('backgroundSecondary'), 'BG:Secondary');
     assert.equal(previewRoleLabel('surfaceGui'), 'Surface: GUI');
+    assert.equal(previewRoleLabel('headingMedium'), 'Accent:Heading-Medium');
+    assert.equal(previewRoleLabel('headingSmall'), 'Accent:Heading-Small');
     assert.ok(PREVIEW_COLOR_ROLES.some((role) => role.id === 'accent'));
   });
 
@@ -82,11 +85,32 @@ describe('preview-inspect', () => {
     assert.equal(fontIdForPreviewSlot(fonts, 'paragraph'), 'body-face');
     assert.equal(fontIdForPreviewSlot(fonts, 'headings.h1'), 'legacy-header');
     assert.equal(fontIdForPreviewSlot(fonts, 'headings.h2'), 'sub-face');
+    assert.equal(fontIdForPreviewSlot(fonts, 'headings.h3'), 'legacy-header');
     assert.deepEqual(fontsPatchForPreviewSlot('paragraph', 'new-body'), {
       paragraph: { fontId: 'new-body' },
     });
     assert.deepEqual(fontsPatchForPreviewSlot('headings.h1', 'hero'), {
       headings: { h1: { fontId: 'hero' } },
+    });
+  });
+
+  it('exposes inspectable h3–h6 font slots', () => {
+    for (const tag of ['h3', 'h4', 'h5', 'h6']) {
+      const key = `headings.${tag}`;
+      assert.equal(PREVIEW_FONT_SLOTS[key].path, key);
+      assert.equal(PREVIEW_FONT_SLOTS[key].label, tag.toUpperCase());
+    }
+    const fonts = {
+      subheadings: { fontId: 'legacy-sub' },
+      headings: { h5: { fontId: 'small-face' } },
+    };
+    assert.equal(fontIdForPreviewSlot(fonts, 'headings.h3'), 'legacy-sub');
+    assert.equal(fontIdForPreviewSlot(fonts, 'headings.h5'), 'small-face');
+    assert.deepEqual(fontsPatchForPreviewSlot('headings.h4', 'outfit'), {
+      headings: { h4: { fontId: 'outfit' } },
+    });
+    assert.deepEqual(fontsPatchForPreviewSlot('headings.h6', 'tippa'), {
+      headings: { h6: { fontId: 'tippa' } },
     });
   });
 });

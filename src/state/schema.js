@@ -151,7 +151,7 @@ export function createDefaultState() {
       },
       effects: {
         categories: {
-          images: { effect: 'none' },
+          images: { effect: 'none', motion: 'none' },
           videos: { effect: 'none' },
           hyperlinks: { effect: 'none', glow: { animated: true, color: '' } },
           navigation: { effect: 'none', glow: { animated: true, color: '' } },

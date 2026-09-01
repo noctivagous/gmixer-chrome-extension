@@ -433,6 +433,82 @@ function dropGlowKeyframes(name, color) {
 }`;
 }
 
+/** Offset glow (same color as Glow, shifted down-right — not a centered halo). */
+function offsetBoxGlow(color) {
+  return `4px 10px 20px ${color}, 1px 3px 8px ${color}`;
+}
+
+function offsetTextGlow(color) {
+  return `2px 4px 10px ${color}`;
+}
+
+function offsetBoxGlowKeyframes(name, color) {
+  return `@keyframes ${name} {
+  0%, 100% { box-shadow: 3px 6px 10px ${color}; }
+  50% { box-shadow: 6px 14px 24px ${color}; }
+}`;
+}
+
+function offsetTextGlowKeyframes(name, color) {
+  return `@keyframes ${name} {
+  0%, 100% { text-shadow: 1px 2px 6px ${color}; }
+  50% { text-shadow: 3px 6px 14px ${color}; }
+}`;
+}
+
+const EFFECTS_ARTICLE_SELECTORS =
+  'article, [role="article"], [data-gmixer-role="main"]';
+
+function marqueeSpinKeyframes(name) {
+  return `@property --gmixer-marquee-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes ${name} {
+  to { --gmixer-marquee-angle: 360deg; }
+}`;
+}
+
+function marqueeConic(color) {
+  return `conic-gradient(from var(--gmixer-marquee-angle), transparent 0deg, ${color} 48deg, transparent 110deg, transparent 180deg, ${color} 228deg, transparent 290deg)`;
+}
+
+/** Perimeter chase on replaced media (img/video have no ::after). */
+function marqueeReplacedRule(selectors, color, animName) {
+  return `${selectors} {
+  --gmixer-marquee-angle: 0deg;
+  border: 2px solid transparent !important;
+  border-image-source: ${marqueeConic(color)} !important;
+  border-image-slice: 1 !important;
+  animation: ${animName} 2.6s linear infinite;
+}`;
+}
+
+/** Perimeter chase overlay on boxes that can host ::after. */
+function marqueeOverlayRule(selectors, color, animName) {
+  return `${selectors} {
+  position: relative;
+  --gmixer-marquee-angle: 0deg;
+}
+${selectors}::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: -3px !important;
+  border-radius: inherit;
+  pointer-events: none !important;
+  z-index: 2;
+  padding: 2px !important;
+  box-sizing: border-box !important;
+  background: ${marqueeConic(color)} !important;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  animation: ${animName} 2.6s linear infinite;
+}`;
+}
+
 /**
  * Direct parent overflow:hidden crops box/drop-shadow on the child.
  * @param {string} selectors
@@ -483,9 +559,11 @@ function effectsRules(effects, palette) {
   const categories = normalized.categories;
 
   const imageEffect = categories.images.effect;
+  const imageMotion = categories.images.motion || 'none';
   const videoEffect = categories.videos.effect;
   const linkEffect = categories.hyperlinks.effect;
   const navEffect = categories.navigation.effect;
+  const articleEffect = categories.articles?.effect;
   const bodyInk = palette.link || palette.accent;
   const navInk = palette.navLink || bodyInk;
   const linkGlowColor = resolveGlowColor(categories.hyperlinks.glow?.color, bodyInk);
@@ -493,6 +571,12 @@ function effectsRules(effects, palette) {
 
   if ((imageEffect === 'glow' || videoEffect === 'glow') && normalized.glow.animated) {
     rules.push(boxGlowKeyframes('gmixer-glow-box-pulse', mediaGlowColor));
+  }
+  if (
+    (imageEffect === 'drop-glow' || videoEffect === 'drop-glow' || articleEffect === 'drop-glow') &&
+    normalized.glow.animated
+  ) {
+    rules.push(offsetBoxGlowKeyframes('gmixer-drop-glow-box-pulse', mediaGlowColor));
   }
   if (linkEffect === 'glow' && categories.hyperlinks.glow?.animated !== false) {
     rules.push(textGlowKeyframes('gmixer-glow-pulse-link', linkGlowColor));
@@ -525,7 +609,18 @@ function effectsRules(effects, palette) {
       rules.push(`${opaqueLogo} { box-shadow: 0 0 12px 3px ${mediaGlowColor}; }`);
       rules.push(`${alphaLogo} { filter: drop-shadow(0 0 12px ${mediaGlowColor}); }`);
     }
-  } else if (imageEffect === 'pan-scan') {
+  } else if (imageEffect === 'drop-glow') {
+    rules.push(unclipGlow(EFFECTS_IMAGE_SELECTORS, { includeSelf: false }));
+    rules.push(
+      normalized.glow.animated
+        ? `${EFFECTS_IMAGE_SELECTORS} { animation: gmixer-drop-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${EFFECTS_IMAGE_SELECTORS} { box-shadow: ${offsetBoxGlow(mediaGlowColor)} !important; }`
+    );
+  } else if (imageEffect === 'marquee') {
+    rules.push(unclipGlow(EFFECTS_IMAGE_SELECTORS, { includeSelf: false }));
+  }
+
+  if (imageMotion === 'pan-scan') {
     const { speed, zoom, loop } = normalized.panScan;
     const zoomScale = 1 + zoom / 100;
     // Per-image --gmixer-pan-ox/oy are 9×9 grid origins set by pan-scan.js.
@@ -571,7 +666,7 @@ ${targetSel} {
   animation: gmixer-pan-scan-rest ${speed}s ease-in-out infinite;
 }`);
     }
-  } else if (imageEffect === 'rotating-cube') {
+  } else if (imageMotion === 'rotating-cube') {
     // Horizontal spin on the Y axis. Front/back keep the image aspect (W×H);
     // left/right use depth×H. Depth vars come from rotating-cube.js.
     rules.push(`@keyframes gmixer-rotating-cube {
@@ -648,9 +743,33 @@ ${targetSel} {
         ? `${EFFECTS_VIDEO_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
         : `${EFFECTS_VIDEO_SELECTORS} { box-shadow: 0 0 12px ${mediaGlowColor}; }`
     );
+  } else if (videoEffect === 'drop-glow') {
+    rules.push(unclipGlow(EFFECTS_VIDEO_SELECTORS, { includeSelf: false }));
+    rules.push(
+      normalized.glow.animated
+        ? `${EFFECTS_VIDEO_SELECTORS} { animation: gmixer-drop-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${EFFECTS_VIDEO_SELECTORS} { box-shadow: ${offsetBoxGlow(mediaGlowColor)} !important; }`
+    );
+  } else if (videoEffect === 'marquee') {
+    rules.push(unclipGlow(EFFECTS_VIDEO_SELECTORS, { includeSelf: false }));
   }
 
-  if (linkEffect === 'glow' || linkEffect === 'flash') {
+  const usesMarquee =
+    imageEffect === 'marquee' || videoEffect === 'marquee' || articleEffect === 'marquee';
+  if (usesMarquee) {
+    rules.push(marqueeSpinKeyframes('gmixer-marquee-spin'));
+    if (imageEffect === 'marquee') {
+      rules.push(marqueeReplacedRule(EFFECTS_IMAGE_SELECTORS, mediaGlowColor, 'gmixer-marquee-spin'));
+    }
+    if (videoEffect === 'marquee') {
+      rules.push(marqueeReplacedRule(EFFECTS_VIDEO_SELECTORS, mediaGlowColor, 'gmixer-marquee-spin'));
+    }
+    if (articleEffect === 'marquee') {
+      rules.push(marqueeOverlayRule(EFFECTS_ARTICLE_SELECTORS, mediaGlowColor, 'gmixer-marquee-spin'));
+    }
+  }
+
+  if (linkEffect === 'glow' || linkEffect === 'flash' || linkEffect === 'drop-glow') {
     if (linkEffect === 'glow') {
       const animated = categories.hyperlinks.glow?.animated !== false;
       // Text-shadow glow — unclip the anchors only, never :has(> a) parents.
@@ -658,6 +777,14 @@ ${targetSel} {
       rules.push(`a { text-shadow: 0 0 8px ${linkGlowColor}; }`);
       if (animated) {
         rules.push(`a { animation: gmixer-glow-pulse-link 2.4s ease-in-out infinite; }`);
+      }
+    } else if (linkEffect === 'drop-glow') {
+      const animated = categories.hyperlinks.glow?.animated !== false;
+      rules.push(unclipGlow('a', { includeParents: false }));
+      rules.push(`a { text-shadow: ${offsetTextGlow(linkGlowColor)}; }`);
+      if (animated) {
+        rules.push(offsetTextGlowKeyframes('gmixer-drop-glow-pulse-link', linkGlowColor));
+        rules.push(`a { animation: gmixer-drop-glow-pulse-link 2.4s ease-in-out infinite; }`);
       }
     } else {
       rules.push(`@keyframes gmixer-flash-link { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
@@ -677,12 +804,30 @@ a { animation: gmixer-flash-link 3s linear infinite; }`);
         `${EFFECTS_NAV_SELECTORS} { animation: gmixer-glow-pulse-nav 2.4s ease-in-out infinite; }`
       );
     }
+  } else if (navEffect === 'drop-glow') {
+    const animated = categories.navigation.glow?.animated !== false;
+    rules.push(unclipGlow(EFFECTS_NAV_SELECTORS, { includeParents: false }));
+    rules.push(`${EFFECTS_NAV_SELECTORS} { text-shadow: ${offsetTextGlow(navGlowColor)}; }`);
+    if (animated) {
+      rules.push(offsetTextGlowKeyframes('gmixer-drop-glow-pulse-nav', navGlowColor));
+      rules.push(
+        `${EFFECTS_NAV_SELECTORS} { animation: gmixer-drop-glow-pulse-nav 2.4s ease-in-out infinite; }`
+      );
+    }
   } else if (navEffect === 'flash') {
     rules.push(`@keyframes gmixer-flash-nav { 0%, 90%, 100% { opacity: 1; } 95% { opacity: 0.6; } }
 ${EFFECTS_NAV_SELECTORS} { animation: gmixer-flash-nav 3s linear infinite; }`);
   }
 
-  if (categories.articles?.effect === 'link-shimmer') {
+  if (articleEffect === 'drop-glow') {
+    rules.push(
+      normalized.glow.animated
+        ? `${EFFECTS_ARTICLE_SELECTORS} { animation: gmixer-drop-glow-box-pulse 2.4s ease-in-out infinite; }`
+        : `${EFFECTS_ARTICLE_SELECTORS} { box-shadow: ${offsetBoxGlow(mediaGlowColor)} !important; }`
+    );
+  }
+
+  if (articleEffect === 'link-shimmer') {
     // Soft sheen only — no border/outline. Color follows theme accent/swatch
     // via --gmixer-shimmer-color on the overlay (fallback: palette accent).
     const sheen = `var(--gmixer-shimmer-color, ${palette.accent})`;
@@ -999,6 +1144,17 @@ function roleCss(
        a secondary surface fill. */
     [data-gmixer-canvas-wash] {
       background-color: transparent !important;
+      background-image: none !important;
+    }
+
+    /* Empty covering ::before/::after sheets (rounded content wells). Inherit
+       the host fill so Light|Gray|Dark replace native white overlays. */
+    [data-gmixer-pseudo-fill~="before"]::before {
+      background-color: inherit !important;
+      background-image: none !important;
+    }
+    [data-gmixer-pseudo-fill~="after"]::after {
+      background-color: inherit !important;
       background-image: none !important;
     }
 
