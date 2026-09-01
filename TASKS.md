@@ -1,58 +1,46 @@
+[ ] 1. Investigate the flash between a page's original appearance and gMixer's themed result.
+  Root cause candidates confirmed in code:
+  - `content-start.js` (document_start) only paints a **static** theme from `chrome.storage.session` cache + `buildCss(resolved, null)` — no page sampling, no element classification (see the file's own "BOUNDARY" comment banning `samplePageRoles`/`classifyPage`/tonal layers at this stage).
+  - The actual whitespot coverage — `seedPageSheets`, `stampOpaquePaintTargets`, `assignToneSteps` in `page-classifier.js`, plus `runAdaptivePass` in `adaptive-pass.js` — only runs from `content-end.js`, gated behind `waitForPageSettle()` and then `requestIdleCallback(..., { timeout: 1500 })`. So even on a repeat visit where the CSS cache hits, there's a window where only the base theme (bg/text/link colors) is painted but per-element surface reclassification hasn't landed yet — that's the visible flash.
+  - Confirm this timeline with real timestamps (e.g. temporary console.time markers around the static paint vs. `runAdaptivePass`) before deciding on a fix.
+  1a. Evaluate whether a blanket `filter:` treatment (e.g. invert/contrast on a wrapping layer, or a full-page opacity-0→1 fade until the adaptive pass completes) is worth it vs. just shrinking the adaptive-pass delay/timeout for the common case.
 
-[ ] there is often a flash from the page's original appearance to our result, even after  our page analyzer has
-visited one of the pages.  First, is our page analyzer caching its analysis well for each new page load 
-of the same website? should we use css:filter on elements across 
-the entire page so that before analysis the entire page has no white spots that are part of the original page, such as 
-transitioning to a dark theme?  
+[ ] 2. Tone section (Light | Gray | Dark) — `src/config/theme-packs.js` `THEME_MODES` (currently exactly `light`, `gray`, `dark`) and the picker in `src/popup/components/color-panel.js:255-277` (`.tone-segments`/`.tone-segment`, no chevron today — the `.chevron` hits elsewhere are the unrelated accordion disclosure triangle).
+  2a. Add a slim right-pointing arrow affordance to each Tone list item.
+  2b. Insert **Light Gray** and **Dark Gray** entries so the order is: Light, Light Gray, Gray, Dark Gray, Dark.
+    - The 3-tone id is currently hardcoded in **5** places that all need extending together: `THEME_MODES` (`theme-packs.js:45-49`), `modeSet()` (`theme-packs.js:52-58`), `COLOR_SCHEME_HSL_BY_TONE` (`gmixer-walkthrough.js:213-218`), the `buildPalette()` mode ternary `mode==='light'?96:mode==='gray'?42:8` (`color-theory.js:353,378-386`), and the validation `Set` in `debug-api.js:15,151`. The walkthrough popover mirrors the same tone data as swipeable tabs (`gmixer-walkthrough.js:1662-1690`, `.tone-tab`).
+    - Task 1a/2b implies an ordered 5-point spectrum, not just two more discrete buckets — convert `buildPalette`'s 3-way ternary into a continuous lightness function keyed by tone id.
+  2c. Add an intensity slider (0.0–1.0) scoped to each Tone's range — 0.0 = whitest bg for Light, 1.0 = upper bound of that tone's range; for Dark, 0.0 = very dark gray, 1.0 = black.
+    - Reuse the existing `<input type="range">` pattern already in `color-panel.js:311-320` ("Theme grayscale", min 8/max 92 driving `hsl.l` via `_setMonochromeLightness`) plus the track-styling helper `schemeHslTrackStyle` in `src/lib/hsl-slider-track.js` — don't build a new slider primitive.
+    - No state field exists yet for this — `src/state/schema.js` has `themeMode` (line 28) but nothing for a per-tone intensity; note `color.intensity` (lines 33-40) is an unrelated saturation-intensity field for the Color Scheme panel, so pick a distinct name to avoid collision.
+    - Whatever absolute 0–1 gray value results (0 = black) should seed the base hue/lightness handed to the Color Scheme tab in the walkthrough. Plumbing already exists at the wrong granularity: `_colorSchemeBaseForTone(mode)` (`gmixer-walkthrough.js:1333-1337`) does a dictionary lookup into `COLOR_SCHEME_HSL_BY_TONE`, called from `_selectTone` (lines 1300-1310) and on first activation of the Color Scheme slide (line 1156) — change this to interpolate `l` from the new intensity value instead of a fixed per-bucket constant, the same way `buildPalette`/`applyColorOverrides` (`src/lib/color-theory.js`, `src/lib/effective-palette.js`) currently cascade `background` → `backgroundSecondary` → `surfaceGui` → `surfaceContainers`.
 
+[ ] 3. Page analyzer: BG:Secondary vs. BG:Primary reclassification heuristic.
+  Add detection in the page sampler (`src/content/page-sampler.js`, `samplePageRoles`/`findPrimaryBackground*`) for pages where the element scored as `backgroundSecondary` is actually filling the primary-background role visually (e.g. `background` never covers meaningful area). When this fires, promote that surface to `background`/BG:Primary and re-derive the rest of the ladder (`backgroundSecondary`/`surfaceGui`/`surfaceContainers`) from the new primary via `deriveSurface`/`deriveSurfaceLadder` (`src/lib/color-theory.js:315-345`) instead of leaving the old assignments in place.
 
+[ ] 4. Fix Surface:Containers vs. BG:Secondary using the same color.
+  Confirmed: `surfaceContainers` is derived from `surfaceGui`, which is derived from `backgroundSecondary`, via two successive calls to `deriveSurface()` (`src/lib/color-theory.js:410-411`, `src/lib/effective-palette.js:150-163`, `src/content/page-sampler.js:849-857`). `deriveSurface` clamps lightness to `[12, 88]` (`color-theory.js:315-323`), so once a surface's lightness hits that clamp, every further "elevate one step" call returns the *same* value — `surfaceGui` and `surfaceContainers` (and sometimes `backgroundSecondary`) collapse onto one color for pages whose sampled/derived background sits near those bounds. Fix by either widening the clamp range, giving `surfaceContainers` its own independent step size, or detecting the collapse and nudging by hue/saturation instead of lightness when clamped.
+  Loose end noticed while diagnosing this: `deriveSurface()` only takes one parameter (`backgroundHex`) even though several call sites pass a second `isDark` argument that is silently ignored — worth fixing while in this function.
 
-[ ]  1. Light, Gray, Dark list on "Tone" of gmixer settings should have a slim arrow on the right edge pointing to the right.
-  1a.  Add a Dark Gray Tone after and a Light Gray Tone before it in this section. They sit in between
-  Order: Light, Light Gray, Gray, Dark Gray, Dark.  
-  2a. Add an intensity slider for the given Tone that fits inside its tone range.  So in Light, the 0 setting will be as
-  light as possible, a white bg and the 1.0 setting will be the upper bound of the tone.  For Dark, 0.0 will be 
-  very dark gray and 1.0 will be black.
-  2a i. Whatever the gray is in the absolute scale of 0 to 1, with 0 being black, should seed the next
-  tab, Color Scheme, in the walkthrough popover
-  
-  2b. We want a feature of our page analyzer that recognizes that often what we classify as BG:Secondary is
-  serving as what we regard as BG:Primary so we can give these surfaces BG:Primary.  We should consider
-  that in the case we bump down a BG:Secondary to BG:Primary we may have to adjust other assignments.
-  2c. We want to make sure that we have a distinction between Surface:Containers and BG:Secondary
-  but right now they have the same color.
-  2d. We want Surface:GUI:Button and Surface:GUI:TextArea, Surface:GUI:Input[text], Surface:GUI:Input[slider]
-We may have added these already and if so reconcile them with the names just given,
-using whichever fits best.  We don't seem to show all of them in 
-BG:Secondary:Button
-BG:Secondary:InputField
-BG:Secondary:TextArea
-Accent:Heading-Large  // h1-h2
-Accent:Heading-Medium // h3-h4
-Accent:Heading-Small // h5-h6
-Link:Bare // for links outside of articles
-Link:Article // for links inside articles
-Link:Heading // for links inside heading tags, should inherit the same as the heading.
-Muted:Caption-Kicker
-Muted:Photo-Caption (probably for <caption>)
-Muted:Caption-Asides-Notes
-  2e. Make a dedicated preview page in the extension that is
-  primarily for debugging that lists all of the surfaces
-  classified and .
-  
-  3. We need examples of h3-h6 in the Live Preview and put them in the bottom section
-  so that there aren't too many h tags together.
-  
-  4. Add drop shadows (dark instead of lighter) and drop glows (current) to the Effects
-  tab.  Add some marquee outline effects as well where there is one or more elements
-  moving around the perimeter of the container.
-  4a. internal image effects, pan and scan and rotate cube should be in a separate
-  dropdown from glow, drop shadow, etc.
-  
-  5. after the user clicks "done" in the last tab, there is a brief flash of the background
-  of the walkthrough popover before the dialog box comes up that tells the user
-  about how to return to settings
-  
+[ ] 5. Reconcile GUI element + text-role naming between the texture catalog and the color-role pickers.
+  `src/config/texture-catalog.js` already defines `gui.button`, `gui.input`, `gui.textarea`, `accent.headingLarge/Medium/Small`, `link.bare/article/heading`, `muted.kicker/photoCaption/asideNotes` — these names already match what was being asked for (`Surface:GUI:Button`, `Surface:GUI:Input[text]`, etc.), but they only exist as **texture on/off toggles**, not as colorable roles. The actual color-role pickers (`SWATCH_ROLES` in `palette-swatches.js`, `ROLES` in `color-panel.js`, `PREVIEW_COLOR_ROLES` in `preview-inspect.js`) only expose the coarse set: `background`, `backgroundSecondary`, `surfaceGui`, `surfaceContainers`, `text`, `muted`, `accent`, `link`, `linkHover`, `navLink`, `navLinkHover`, `border`, `focus`.
+  5a. Decide whether Button/Input/TextArea/Slider, Heading-Large/Medium/Small, Link:Bare/Article/Heading, and Muted:Caption-Kicker/Photo-Caption/Asides-Notes should become independently colorable roles (not just texture toggles) — if so, extend `effective-palette.js`, the swatch lists above, and `style-injector.js`'s selector groups (it already has button/input/textarea selector groups around `style-injector.js:938-1079` and `texture-page-css.js:16-40`) to carry per-role color, not just shared `surfaceGui`.
+  5b. There is currently no `gui.slider` entry anywhere (texture catalog or selectors) — add one if sliders are meant to be distinct from text inputs.
+  5c. Reconcile naming: settle on `Surface:GUI:*` vs. the existing `BG:Secondary:Button`/`BG:Secondary:InputField`/`BG:Secondary:TextArea` phrasing so texture-catalog ids, CSS selector groups, and any new swatch labels agree on one vocabulary.
 
+[ ] 6. Build a dedicated debug/preview page listing every surface as actually classified on the live page.
+  Nothing like this exists yet — the closest thing today is the synthetic "Live Preview" blurb panel (`theme-preview-panel.js`) used inside Settings/Walkthrough, which previews a fake article, not the real page's classification output. `src/debug/debug-api.js` exposes some raw CSS-variable introspection but no UI. Build a page (likely under `src/popup/` or a new debug route, gated behind the existing `__GMIXER_DEBUG__` build flag used by `installDebugApi`) that lists every role/surface (`background`, `backgroundSecondary`, `surfaceGui`, `surfaceContainers`, texture-catalog roles, etc.) with the swatch actually assigned on the current tab's page.
 
-[ ] web transitions api accordion item section
+[ ] 7. Add h3–h6 examples to the Live Preview (`theme-preview-panel.js`), placed in the bottom section so headings aren't clustered together.
+
+[ ] 8. Effects tab (`src/config/effects-catalog.js`, `style-injector.js` glow/drop-shadow rules around lines 390-650).
+  8a. Add dark drop shadows (distinct from the existing light drop-glow) as an effect option.
+  8b. Add marquee/outline effects — one or more elements animating around the perimeter of a container.
+  8c. Move the internal image effects (pan-and-scan `pan-scan.js`, rotate-cube `rotating-cube.js`) into their own dropdown, separate from glow/drop-shadow/marquee.
+
+[ ] 9. Investigate the background flash in the walkthrough completion dialog.
+  `_finish()` (`gmixer-walkthrough.js:1093-1104`) sets `showCompletion = true`, which both renders a small `.completion-dialog` and — via `:host([showcompletion])` (`gmixer-walkthrough.js:253-259`) — resizes the host from the full `min(1120px,...) × min(840px,...)` walkthrough panel down to a `440px` centered dialog. Root cause confirmed: the *outer* iframe box is sized independently by the parent page's stylesheet (`settings-host.js:175-183`, hardcoded to the same `min(1120px,...) × min(840px,...)`) and never shrinks to match when the inner host resizes. Since both the iframe and popover backgrounds are `transparent`, the leftover iframe area briefly exposes the page's `::backdrop` before layout settles — that's the flash. Fix by syncing the iframe's size to the inner host's `showcompletion` state (e.g. via a postMessage/resize signal) or transitioning both together.
+
+[ ] 10. Add a View Transitions API animation to the accordion item open/close in the in-page Settings shell (`gmixer-settings.js:1039`, `.accordion` CSS at `gmixer-settings.js:464`, toggled via `_toggleExpanded()` at `gmixer-settings.js:1125-1128`). No View Transitions usage exists in the codebase today — this is a net-new addition, using `document.startViewTransition` (with a feature check / fallback for browsers without support) to animate the expand/collapse instead of the current instant mount/unmount (the ternary at lines 1088-1095 has no transition at all; `.section-panel`'s existing CSS transitions at lines 507-519 only cover `border-color`/`box-shadow`/`background`/`opacity`, not the content swap).
+  Note: `extension/settings-frame.js` and `extension/walkthrough-frame.js` are generated build output (via `node build.js` from `src/`), not separate sources — edit `src/settings/components/gmixer-settings.js` and rebuild, don't edit the `extension/` copies directly.
+  Unrelated secondary collapsible worth knowing about but out of scope here: native `<details>/<summary>` in `src/popup/components/image-filter-panel.js:225-287` ("Detailed Media Categories").
