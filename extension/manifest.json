@@ -53,6 +53,7 @@
                 "<all_urls>"
             ],
             "js": [
+                "early-boot.js",
                 "content-start.js"
             ],
             "run_at": "document_start",

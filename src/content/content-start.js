@@ -27,6 +27,7 @@ import {
 } from './css-cache.js';
 import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
 import { markThemePhase } from './adaptive-timing.js';
+import { clearEarlyCanvas, persistEarlyCanvasFromDocument } from './early-canvas.js';
 
 async function applyStaticTheme() {
   markThemePhase('gmixer:static-start');
@@ -41,6 +42,7 @@ async function applyStaticTheme() {
       !document.getElementById(STYLE_ELEMENT_ID)
     ) {
       injectStyle(cached.css);
+      persistEarlyCanvasFromDocument();
       markThemePhase('gmixer:static-cache-paint');
     }
     return cached;
@@ -52,6 +54,7 @@ async function applyStaticTheme() {
   const scope = cssCacheScope(location);
   if (resolved.enabled === false) {
     removeStyle();
+    clearEarlyCanvas();
     await clearCssCache(hostname);
     return;
   }
@@ -66,6 +69,7 @@ async function applyStaticTheme() {
   // stylesheet this pass would rebuild.
   if (cacheMatches && cached.css && initialScope === scope) {
     markThemePhase('gmixer:static-cache-hit');
+    persistEarlyCanvasFromDocument();
     return;
   }
 
@@ -73,6 +77,7 @@ async function applyStaticTheme() {
   const css = buildCss(resolved, null);
   injectStyle(css);
   markThemePhase('gmixer:static-rebuild-paint');
+  persistEarlyCanvasFromDocument();
   await writeCssCache(hostname, scope, resolved, css);
 }
 

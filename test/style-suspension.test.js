@@ -31,7 +31,7 @@ describe('native style measurement transaction', () => {
           appended += 1;
         },
       },
-      getElementById: () => style,
+      getElementById: (id) => (id === STYLE_ELEMENT_ID ? style : null),
     };
 
     const measured = withStyleSuspended(() => {

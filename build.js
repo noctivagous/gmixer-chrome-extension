@@ -32,6 +32,14 @@ const shared = {
 
 const entries = [
   {
+    // Tiny sync canvas paint — must stay a separate document_start file so it
+    // evaluates before the full content-start bundle.
+    entryPoints: ['src/content/early-boot.js'],
+    outfile: `${OUT_DIR}/early-boot.js`,
+    format: 'iife',
+    ...shared,
+  },
+  {
     entryPoints: ['src/content/content-start.js'],
     outfile: `${OUT_DIR}/content-start.js`,
     format: 'iife',

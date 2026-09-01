@@ -27,6 +27,7 @@ import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
+import { removeEarlyCanvasStyle } from './early-canvas.js';
 
 export {
   PALETTE_FILTER_PRESETS,
@@ -1678,6 +1679,10 @@ export function injectStyle(css) {
   // Re-appending moves it to the end, keeping equal-specificity precedence
   // over the page's own stylesheets even if they load after us.
   parent.appendChild(styleEl);
+  // Keep the early sheet overlay until removeStyle() (native sampling /
+  // disable). Static CSS does not paint `body > section` until classification
+  // stamps `[data-gmixer-native-l]`; stripping early here is what left
+  // Slashdot's white section showing behind already-themed article text.
   adoptThemeSheet(css);
   // Theme re-append would otherwise sit after the popover host reset and
   // restyle [popover]/[role="dialog"] chrome. Keep gMixer UI last.
@@ -1698,6 +1703,7 @@ export function syncAdoptedTheme() {
 
 export function removeStyle() {
   clearDocumentCanvasInline();
+  removeEarlyCanvasStyle();
   document.getElementById(STYLE_ELEMENT_ID)?.remove();
   if (adoptedSheet && typeof document !== 'undefined') {
     adoptIntoOpenShadows({ remove: true });
