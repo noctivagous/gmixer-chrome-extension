@@ -245,6 +245,18 @@ describe('color-theory', () => {
         navLinkHover: '',
         border: '',
         focus: '',
+        guiButton: '',
+        guiInput: '',
+        guiTextarea: '',
+        guiSlider: '',
+        headingLarge: '',
+        headingMedium: '',
+        headingSmall: '',
+        linkBare: '',
+        linkArticle: '',
+        mutedKicker: '',
+        mutedPhotoCaption: '',
+        mutedAsideNotes: '',
       }
     );
     assert.match(css, new RegExp(`--gmixer-surface-gui: ${generated.surfaceGui}`));

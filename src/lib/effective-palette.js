@@ -168,6 +168,27 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
 
   const link = pick('link');
   const navLink = hasOverride(o, 'navLink') ? o.navLink.trim() : baseRoles?.navLink || link;
+  const muted = pick('muted');
+  const accent = pick('accent');
+
+  // Surface:GUI:*, Accent:Heading-*, Link:*, Muted:* — fine-grained roles that
+  // fall back to their coarse parent (surfaceGui/accent/link/muted) when Auto.
+  // Link:Heading intentionally has no override of its own: it inherits
+  // whichever heading-tier color applies, same as the heading it sits in.
+  const pickSub = (key, fallback) =>
+    hasOverride(o, key) ? o[key].trim() : baseRoles?.[key] || fallback;
+  const guiButton = pickSub('guiButton', surfaceGui);
+  const guiInput = pickSub('guiInput', surfaceGui);
+  const guiTextarea = pickSub('guiTextarea', surfaceGui);
+  const guiSlider = pickSub('guiSlider', surfaceGui);
+  const headingLarge = pickSub('headingLarge', accent);
+  const headingMedium = pickSub('headingMedium', accent);
+  const headingSmall = pickSub('headingSmall', accent);
+  const linkBare = pickSub('linkBare', link);
+  const linkArticle = pickSub('linkArticle', link);
+  const mutedKicker = pickSub('mutedKicker', muted);
+  const mutedPhotoCaption = pickSub('mutedPhotoCaption', muted);
+  const mutedAsideNotes = pickSub('mutedAsideNotes', muted);
 
   const colors = {
     background,
@@ -175,8 +196,8 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
     surfaceGui,
     surfaceContainers,
     text: pick('text'),
-    muted: pick('muted'),
-    accent: pick('accent'),
+    muted,
+    accent,
     link,
     linkHover: hasOverride(o, 'linkHover')
       ? o.linkHover.trim()
@@ -187,6 +208,18 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
       : baseRoles?.navLinkHover || navLink,
     border: pick('border'),
     focus: pick('focus'),
+    guiButton,
+    guiInput,
+    guiTextarea,
+    guiSlider,
+    headingLarge,
+    headingMedium,
+    headingSmall,
+    linkBare,
+    linkArticle,
+    mutedKicker,
+    mutedPhotoCaption,
+    mutedAsideNotes,
   };
 
   /** @param {string} key */

@@ -22,7 +22,7 @@ import { getFontById } from '../config/fonts.js';
 import { getThemePackById } from '../config/theme-packs.js';
 import { fontFaceRules } from '../lib/font-faces.js';
 import { cornersRule } from '../lib/corners-css.js';
-import { texturePageRules } from '../lib/texture-page-css.js';
+import { texturePageRules, TEXTURE_PAGE_TARGETS } from '../lib/texture-page-css.js';
 import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
@@ -739,6 +739,18 @@ function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, bran
       --gmixer-nav-link-active: ${role('navLinkActive') || role('navLink') || role('link')};
       --gmixer-border: ${role('border')};
       --gmixer-focus: ${role('focus')};
+      --gmixer-gui-button: ${role('guiButton') || surfaceGui};
+      --gmixer-gui-input: ${role('guiInput') || surfaceGui};
+      --gmixer-gui-textarea: ${role('guiTextarea') || surfaceGui};
+      --gmixer-gui-slider: ${role('guiSlider') || surfaceGui};
+      --gmixer-heading-large: ${role('headingLarge') || role('accent')};
+      --gmixer-heading-medium: ${role('headingMedium') || role('accent')};
+      --gmixer-heading-small: ${role('headingSmall') || role('accent')};
+      --gmixer-link-bare: ${role('linkBare') || role('link')};
+      --gmixer-link-article: ${role('linkArticle') || role('link')};
+      --gmixer-muted-kicker: ${role('mutedKicker') || role('muted')};
+      --gmixer-muted-photo-caption: ${role('mutedPhotoCaption') || role('muted')};
+      --gmixer-muted-aside-notes: ${role('mutedAsideNotes') || role('muted')};
       --gmixer-brand: ${brandFamily.brand};
       --gmixer-brand-tint: ${brandFamily.tint};
       --gmixer-brand-shade: ${brandFamily.shade};
@@ -793,6 +805,53 @@ function roleCss(
       .split(',')
       .map((part) => `${part.trim()}${suffix}`)
       .join(',\n    ');
+  /** Anchor variants nested in a selector — used for heading-link tiers. */
+  const anchorVariants = (selectors) =>
+    [eachSelector(selectors, ' a'), eachSelector(selectors, ' a:link'), eachSelector(selectors, ' a:visited')].join(
+      ',\n    '
+    );
+  /** Drop parts that key off classifier media attributes — color-only rules
+   * must stay media-agnostic so tone-only/no-media builds don't reference them. */
+  const withoutMediaSelectors = (selectors) =>
+    selectors
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => !part.includes('data-gmixer-media') && !part.includes('gmixer-link-shimmer'))
+      .join(',\n    ');
+  /** Bare tag list (no `body ` ancestor) — for nesting under another selector. */
+  const stripBodyPrefix = (selectors) =>
+    selectors
+      .split(',')
+      .map((part) => part.trim().replace(/^body\s+/, ''))
+      .join(', ');
+  const headingTierBase = {
+    large: stripBodyPrefix(TEXTURE_PAGE_TARGETS['accent.headingLarge'].selectors),
+    medium: stripBodyPrefix(TEXTURE_PAGE_TARGETS['accent.headingMedium'].selectors),
+    small: stripBodyPrefix(TEXTURE_PAGE_TARGETS['accent.headingSmall'].selectors),
+  };
+  const nestedHeadingTierRules = Object.entries(headingTierBase)
+    .map(
+      ([tier, base]) => `[data-gmixer-role] :is(${base}) {
+      color: var(--gmixer-heading-${tier}) !important;
+    }
+    [data-gmixer-role] :is(${base}) a,
+    [data-gmixer-role] :is(${base}) a:link,
+    [data-gmixer-role] :is(${base}) a:visited {
+      color: var(--gmixer-heading-${tier}) !important;
+    }`
+    )
+    .join('\n    ');
+  const headingLinkTierRules = Object.entries({
+    large: TEXTURE_PAGE_TARGETS['accent.headingLarge'].selectors,
+    medium: TEXTURE_PAGE_TARGETS['accent.headingMedium'].selectors,
+    small: TEXTURE_PAGE_TARGETS['accent.headingSmall'].selectors,
+  })
+    .map(
+      ([tier, base]) => `${anchorVariants(base)} {
+      color: var(--gmixer-heading-${tier}) !important;
+    }`
+    )
+    .join('\n    ');
   /** Keep tagged photo backgrounds (overlay path); clear CSS gradients/fills. */
   const solidPaint = (selectors) =>
     selectors
@@ -941,6 +1000,25 @@ function roleCss(
     body [role="button"], body [role="tab"], body [contenteditable="true"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
       color: var(--gmixer-text) !important;
+    }
+
+    /* Surface:GUI:Button/Input/TextArea/Slider — narrower, more specific than
+       the shared GUI fill above, so a per-control override wins on the exact
+       control type while everything else still falls back to Surface:GUI. */
+    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.button'].selectors)} {
+      background-color: var(--gmixer-gui-button) !important;
+      color: var(--gmixer-text) !important;
+    }
+    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.input'].selectors)} {
+      background-color: var(--gmixer-gui-input) !important;
+      color: var(--gmixer-text) !important;
+    }
+    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.textarea'].selectors)} {
+      background-color: var(--gmixer-gui-textarea) !important;
+      color: var(--gmixer-text) !important;
+    }
+    ${TEXTURE_PAGE_TARGETS['gui.slider'].selectors} {
+      accent-color: var(--gmixer-gui-slider) !important;
     }
 
     /* Header/nav in-bar items share one chrome fill. Do not elevate buttons,
@@ -1151,13 +1229,46 @@ function roleCss(
       color: var(--gmixer-muted) !important;
     }
 
+    /* Muted:Caption-Kicker/Photo-Caption/Asides-Notes — narrower matches than
+       the shared Muted color above, so a specific override wins in context. */
+    ${TEXTURE_PAGE_TARGETS['muted.kicker'].selectors} {
+      color: var(--gmixer-muted-kicker) !important;
+    }
+    ${TEXTURE_PAGE_TARGETS['muted.photoCaption'].selectors} {
+      color: var(--gmixer-muted-photo-caption) !important;
+    }
+    ${TEXTURE_PAGE_TARGETS['muted.asideNotes'].selectors} {
+      color: var(--gmixer-muted-aside-notes) !important;
+    }
+
     h1, h2, h3, h4, h5, h6, [role="heading"] {
       color: var(--gmixer-accent) !important;
+    }
+
+    /* Accent:Heading-Large/Medium/Small — tiered, so a level-specific
+       override wins over the shared Accent heading color above. */
+    ${TEXTURE_PAGE_TARGETS['accent.headingLarge'].selectors} {
+      color: var(--gmixer-heading-large) !important;
+    }
+    ${TEXTURE_PAGE_TARGETS['accent.headingMedium'].selectors} {
+      color: var(--gmixer-heading-medium) !important;
+    }
+    ${TEXTURE_PAGE_TARGETS['accent.headingSmall'].selectors} {
+      color: var(--gmixer-heading-small) !important;
     }
 
     a, a:link, a:visited {
       color: var(--gmixer-link) !important;
       background-color: transparent !important;
+    }
+
+    /* Link:Bare/Article — narrower context matches than the generic anchor
+       rule above, so a Link:Bare/Article override wins in those contexts. */
+    ${TEXTURE_PAGE_TARGETS['link.bare'].selectors} {
+      color: var(--gmixer-link-bare) !important;
+    }
+    ${withoutMediaSelectors(TEXTURE_PAGE_TARGETS['link.article'].selectors)} {
+      color: var(--gmixer-link-article) !important;
     }
 
     /* Tab chips that had a native fill: GUI wins over the transparent-link wipe.
@@ -1250,6 +1361,10 @@ function roleCss(
       color: var(--gmixer-accent) !important;
     }
 
+    /* Tiered version of the two rules above — a level-specific override wins
+       over the shared Accent color once one is set. */
+    ${nestedHeadingTierRules}
+
     /* Heading links belong to the heading role, not ordinary body links. */
     h1 a, h1 a:link, h1 a:visited,
     h2 a, h2 a:link, h2 a:visited,
@@ -1260,6 +1375,10 @@ function roleCss(
     [role="heading"] a, [role="heading"] a:link, [role="heading"] a:visited {
       color: var(--gmixer-accent) !important;
     }
+
+    /* Link:Heading has no override of its own — it always mirrors whichever
+       Accent:Heading tier the link sits inside. */
+    ${headingLinkTierRules}
 
     h1 a:hover, h1 a:focus-visible,
     h2 a:hover, h2 a:focus-visible,

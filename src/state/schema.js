@@ -67,6 +67,23 @@ export function createDefaultState() {
           navLinkHover: '',
           border: '',
           focus: '',
+          // Surface:GUI:* — fall back to `surfaceGui` when Auto.
+          guiButton: '',
+          guiInput: '',
+          guiTextarea: '',
+          guiSlider: '',
+          // Accent:Heading-* — fall back to `accent` when Auto. Link:Heading
+          // has no override of its own; it mirrors whichever tier applies.
+          headingLarge: '',
+          headingMedium: '',
+          headingSmall: '',
+          // Link:* — fall back to `link` when Auto.
+          linkBare: '',
+          linkArticle: '',
+          // Muted:* — fall back to `muted` when Auto.
+          mutedKicker: '',
+          mutedPhotoCaption: '',
+          mutedAsideNotes: '',
         },
       },
       fonts: {

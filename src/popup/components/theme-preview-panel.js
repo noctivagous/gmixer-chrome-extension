@@ -346,6 +346,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
       min-height: 44px;
       resize: none;
     }
+    .blurb-slider {
+      width: 100%;
+      margin: 2px 0;
+      pointer-events: auto;
+    }
     .blurb-button {
       justify-self: start;
       margin: 0;
@@ -1088,20 +1093,20 @@ export class ThemePreviewPanel extends StoreBoundElement {
           <div class="blurb-top">
             <div class="blurb-copy">
               <p
-                class=${`blurb-kicker ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
-                data-gmixer-preview-role="muted"
+                class=${`blurb-kicker ${hl({ roleId: 'mutedKicker', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="mutedKicker"
                 data-gmixer-preview-font="captions"
                 data-gmixer-texture="muted.kicker"
-                style="font-family: ${captionFamily}; color: ${colors.muted}"
+                style="font-family: ${captionFamily}; color: ${colors.mutedKicker}"
               >
                 Caption / kicker
               </p>
               <p
-                class=${`blurb-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
-                data-gmixer-preview-role="accent"
+                class=${`blurb-title ${hl({ roleId: 'headingLarge', fontSlot: 'headings.h1' })}`.trim()}
+                data-gmixer-preview-role="headingLarge"
                 data-gmixer-preview-font="headings.h1"
                 data-gmixer-texture="accent.headingLarge"
-                style="font-family: ${headerFamily}; color: ${colors.accent}"
+                style="font-family: ${headerFamily}; color: ${colors.headingLarge}"
               >
                 <span
                   class="blurb-heading-link"
@@ -1119,11 +1124,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 Subheading for section hierarchy
               </p>
               <p
-                class=${`blurb-heading-small ${hl({ roleId: 'accent', fontSlot: 'headings.h2' })}`.trim()}
-                data-gmixer-preview-role="accent"
+                class=${`blurb-heading-small ${hl({ roleId: 'headingSmall', fontSlot: 'headings.h2' })}`.trim()}
+                data-gmixer-preview-role="headingSmall"
                 data-gmixer-preview-font="headings.h2"
                 data-gmixer-texture="accent.headingSmall"
-                style="font-family: ${subheadFamily}; color: ${colors.accent}"
+                style="font-family: ${subheadFamily}; color: ${colors.headingSmall}"
               >
                 Small heading detail
               </p>
@@ -1136,21 +1141,21 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 ${pack.description}
               </p>
               <p
-                class=${`blurb-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
-                data-gmixer-preview-role="muted"
+                class=${`blurb-caption ${hl({ roleId: 'mutedAsideNotes', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="mutedAsideNotes"
                 data-gmixer-preview-font="captions"
                 data-gmixer-texture="muted.asideNotes"
-                style="font-family: ${captionFamily}; color: ${colors.muted}"
+                style="font-family: ${captionFamily}; color: ${colors.mutedAsideNotes}"
               >
                 Caption text for asides, timestamps, and supporting notes.
               </p>
               <p class="blurb-meta">
                 <span
-                  class=${`blurb-link ${hl({ roleId: 'link', fontSlot: 'paragraph' })}`.trim()}
-                  data-gmixer-preview-role="link"
+                  class=${`blurb-link ${hl({ roleId: 'linkBare', fontSlot: 'paragraph' })}`.trim()}
+                  data-gmixer-preview-role="linkBare"
                   data-gmixer-preview-font="paragraph"
                   data-gmixer-texture="link.bare"
-                  style="font-family: ${bodyFamily}; color: ${colors.link}"
+                  style="font-family: ${bodyFamily}; color: ${colors.linkBare}"
                   >Sample link</span
                 >
                 <code
@@ -1186,11 +1191,11 @@ export class ThemePreviewPanel extends StoreBoundElement {
                   : previewImage()}
               </span>
               <figcaption
-                class=${`blurb-image-caption ${hl({ roleId: 'muted', fontSlot: 'captions' })}`.trim()}
-                data-gmixer-preview-role="muted"
+                class=${`blurb-image-caption ${hl({ roleId: 'mutedPhotoCaption', fontSlot: 'captions' })}`.trim()}
+                data-gmixer-preview-role="mutedPhotoCaption"
                 data-gmixer-preview-font="captions"
                 data-gmixer-texture="muted.photoCaption"
-                style="font-family: ${captionFamily}; color: ${colors.muted}"
+                style="font-family: ${captionFamily}; color: ${colors.mutedPhotoCaption}"
               >
                 Sample photo caption
               </figcaption>
@@ -1221,16 +1226,17 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 Surface: Containers
               </p>
               <p
-                class=${`blurb-card-title ${hl({ roleId: 'accent', fontSlot: 'headings.h1' })}`.trim()}
-                data-gmixer-preview-role="accent"
+                class=${`blurb-card-title ${hl({ roleId: 'headingMedium', fontSlot: 'headings.h1' })}`.trim()}
+                data-gmixer-preview-role="headingMedium"
                 data-gmixer-preview-font="headings.h1"
                 data-gmixer-texture="accent.headingMedium"
-                style="font-family: ${headerFamily}; color: ${colors.accent}"
+                style="font-family: ${headerFamily}; color: ${colors.headingMedium}"
               >
                 <span
-                  class="blurb-article-link"
+                  class=${`blurb-article-link ${hl({ roleId: 'linkArticle' })}`.trim()}
+                  data-gmixer-preview-role="linkArticle"
                   data-gmixer-texture="link.article"
-                  style="color: ${colors.link}"
+                  style="color: ${colors.linkArticle}"
                   >Card title</span
                 >
               </p>
@@ -1256,47 +1262,60 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 BG:Secondary
               </p>
               <input
-                class=${`blurb-field ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
+                class=${`blurb-field ${hl({ roleId: 'guiInput', fontSlot: 'ui' })}`.trim()}
                 type="text"
                 readonly
                 tabindex="-1"
                 value="Text input"
-                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-role="guiInput"
                 data-gmixer-preview-font="ui"
                 data-gmixer-texture="gui.input"
                 style="
                   font-family: ${uiFamily};
-                  background: ${colors.surfaceGui};
+                  background: ${colors.guiInput};
                   border-color: ${colors.border};
                   color: ${colors.text};
                   outline-color: ${colors.focus};
                 "
               />
               <textarea
-                class=${`blurb-textarea ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
+                class=${`blurb-textarea ${hl({ roleId: 'guiTextarea', fontSlot: 'ui' })}`.trim()}
                 readonly
                 tabindex="-1"
-                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-role="guiTextarea"
                 data-gmixer-preview-font="ui"
                 data-gmixer-texture="gui.textarea"
                 style="
                   font-family: ${uiFamily};
-                  background: ${colors.surfaceGui};
+                  background: ${colors.guiTextarea};
                   border-color: ${colors.border};
                   color: ${colors.text};
                   outline-color: ${colors.focus};
                 "
               >Text area</textarea>
+              <input
+                class=${`blurb-slider ${hl({ roleId: 'guiSlider' })}`.trim()}
+                type="range"
+                readonly
+                tabindex="-1"
+                value="60"
+                data-gmixer-preview-role="guiSlider"
+                data-gmixer-texture="gui.slider"
+                style="
+                  accent-color: ${colors.guiSlider};
+                  outline-color: ${colors.focus};
+                "
+              />
               <button
                 type="button"
-                class=${`blurb-button ${hl({ roleId: 'surfaceGui', fontSlot: 'ui' })}`.trim()}
+                class=${`blurb-button ${hl({ roleId: 'guiButton', fontSlot: 'ui' })}`.trim()}
                 tabindex="-1"
-                data-gmixer-preview-role="surfaceGui"
+                data-gmixer-preview-role="guiButton"
                 data-gmixer-preview-font="ui"
                 data-gmixer-texture="gui.button"
                 style="
                   font-family: ${uiFamily};
-                  background: ${colors.surfaceGui};
+                  background: ${colors.guiButton};
                   border-color: ${colors.border};
                   color: ${colors.text};
                   box-shadow: 0 0 0 1px ${colors.focus};

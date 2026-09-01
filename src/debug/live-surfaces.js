@@ -39,6 +39,18 @@ export const PALETTE_CSS_VARS = [
   { id: 'focus', cssVar: '--gmixer-focus', label: 'Focus' },
   { id: 'masthead', cssVar: '--gmixer-masthead', label: 'Masthead' },
   { id: 'nav', cssVar: '--gmixer-nav', label: 'Nav fill' },
+  { id: 'guiButton', cssVar: '--gmixer-gui-button', label: 'Surface:GUI:Button' },
+  { id: 'guiInput', cssVar: '--gmixer-gui-input', label: 'Surface:GUI:Input' },
+  { id: 'guiTextarea', cssVar: '--gmixer-gui-textarea', label: 'Surface:GUI:TextArea' },
+  { id: 'guiSlider', cssVar: '--gmixer-gui-slider', label: 'Surface:GUI:Slider' },
+  { id: 'headingLarge', cssVar: '--gmixer-heading-large', label: 'Accent:Heading-Large' },
+  { id: 'headingMedium', cssVar: '--gmixer-heading-medium', label: 'Accent:Heading-Medium' },
+  { id: 'headingSmall', cssVar: '--gmixer-heading-small', label: 'Accent:Heading-Small' },
+  { id: 'linkBare', cssVar: '--gmixer-link-bare', label: 'Link:Bare' },
+  { id: 'linkArticle', cssVar: '--gmixer-link-article', label: 'Link:Article' },
+  { id: 'mutedKicker', cssVar: '--gmixer-muted-kicker', label: 'Muted:Caption-Kicker' },
+  { id: 'mutedPhotoCaption', cssVar: '--gmixer-muted-photo-caption', label: 'Muted:Photo-Caption' },
+  { id: 'mutedAsideNotes', cssVar: '--gmixer-muted-aside-notes', label: 'Muted:Asides-Notes' },
 ];
 
 const ROLE_LABELS = {

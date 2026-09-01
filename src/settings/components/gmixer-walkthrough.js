@@ -5,7 +5,7 @@ import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theor
 import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { defineElement } from '../../lib/define-element.js';
-import { closeHostPopover, requestShellSwitch } from '../close-host-popover.js';
+import { closeHostPopover, notifyHostLayout, requestShellSwitch } from '../close-host-popover.js';
 import {
   shellSegmentControlStyles,
   renderShellSegments,
@@ -251,11 +251,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
     }
 
     :host([showcompletion]) {
-      position: fixed;
-      inset: 0;
-      margin: auto;
-      width: min(440px, calc(100vw - 32px));
-      height: fit-content;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .completion-dialog {
@@ -263,6 +263,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
       gap: 20px;
       padding: 28px;
       text-align: center;
+      width: min(440px, 100%);
+      box-sizing: border-box;
     }
 
     .completion-dialog p {
@@ -1098,7 +1100,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
       return;
     }
     this.showCompletion = true;
+    notifyHostLayout('completion');
     this.updateComplete.then(() => {
+      const dialog = this.renderRoot.querySelector('.completion-dialog');
+      const rect = dialog?.getBoundingClientRect();
+      if (rect?.width && rect?.height) {
+        notifyHostLayout('completion', { width: rect.width, height: rect.height });
+      }
       this.renderRoot.querySelector('.completion-dialog button')?.focus();
     });
   }

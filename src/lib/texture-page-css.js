@@ -36,6 +36,10 @@ export const TEXTURE_PAGE_TARGETS = {
     family: 'fill',
     selectors: 'body textarea',
   },
+  'gui.slider': {
+    family: 'fill',
+    selectors: 'body input[type="range"], body [role="slider"]',
+  },
   'media.articleImage': {
     family: 'media',
     selectors: [

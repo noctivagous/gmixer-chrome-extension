@@ -35,6 +35,18 @@ const ROLES = [
   { id: 'navLinkHover', label: 'Nav hover' },
   { id: 'border', label: 'Border' },
   { id: 'focus', label: 'Focus' },
+  { id: 'guiButton', label: 'Surface:GUI:Button' },
+  { id: 'guiInput', label: 'Surface:GUI:Input' },
+  { id: 'guiTextarea', label: 'Surface:GUI:TextArea' },
+  { id: 'guiSlider', label: 'Surface:GUI:Slider' },
+  { id: 'headingLarge', label: 'Accent:Heading-Large' },
+  { id: 'headingMedium', label: 'Accent:Heading-Medium' },
+  { id: 'headingSmall', label: 'Accent:Heading-Small' },
+  { id: 'linkBare', label: 'Link:Bare' },
+  { id: 'linkArticle', label: 'Link:Article' },
+  { id: 'mutedKicker', label: 'Muted:Caption-Kicker' },
+  { id: 'mutedPhotoCaption', label: 'Muted:Photo-Caption' },
+  { id: 'mutedAsideNotes', label: 'Muted:Asides-Notes' },
 ];
 
 /**

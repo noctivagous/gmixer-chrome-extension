@@ -19,6 +19,7 @@ import {
   MSG_OPEN_WALKTHROUGH,
 } from '../messaging/messages.js';
 import { drainEarlyMessageQueue } from '../messaging/early-message-queue.js';
+import { applyWalkthroughFrameLayout, WALKTHROUGH_COMPLETION_FRAME_CSS } from '../settings/walkthrough-frame-layout.js';
 import { toggleSiteTheming } from '../state/site-enable.js';
 import { createDefaultState } from '../state/schema.js';
 import { store } from '../state/store.js';
@@ -175,11 +176,18 @@ function ensureHostStyles() {
     #${WALKTHROUGH_POPOVER_ID} iframe.gmixer-ui-frame {
       display: block;
       border: 0;
-      background: transparent;
+      background: var(--gm-bg);
+      border-radius: 12px;
       width: min(1120px, calc(90vw + 80px), calc(100vw - 32px));
       height: min(840px, calc(85vh + 80px));
       max-width: 90vw;
       max-height: 90vh;
+      transition: width 180ms ease, height 180ms ease;
+    }
+
+    #${WALKTHROUGH_POPOVER_ID}[data-gmixer-layout="completion"] iframe.gmixer-ui-frame {
+      width: ${WALKTHROUGH_COMPLETION_FRAME_CSS.width};
+      height: ${WALKTHROUGH_COMPLETION_FRAME_CSS.height};
     }
   `;
   (document.head || document.documentElement).appendChild(style);
@@ -236,6 +244,7 @@ export async function openWalkthroughPopover() {
   }
   const el = await ensureWalkthroughPopover();
   const iframe = el.querySelector('iframe.gmixer-ui-frame');
+  applyWalkthroughFrameLayout(el, { layout: 'panel' }, iframe);
   const reset = () => {
     iframe?.contentWindow?.postMessage({ source: 'gmixer-host', type: 'reset' }, '*');
   };
@@ -571,6 +580,14 @@ function onUiFrameMessage(event) {
     const shell =
       event.data.shell === 'walkthrough-modal' ? 'walkthrough-modal' : 'side-panel';
     void switchToShell(shell);
+    return;
+  }
+
+  if (event.data.type === 'layout') {
+    const walkthrough = document.getElementById(WALKTHROUGH_POPOVER_ID);
+    const fromWalkthrough =
+      walkthrough?.querySelector('iframe')?.contentWindow === event.source;
+    if (fromWalkthrough) applyWalkthroughFrameLayout(walkthrough, event.data);
     return;
   }
 

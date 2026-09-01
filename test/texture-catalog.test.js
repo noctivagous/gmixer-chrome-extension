@@ -50,6 +50,7 @@ describe('texture-catalog', () => {
       'gui.button',
       'gui.input',
       'gui.textarea',
+      'gui.slider',
       'media.articleImage',
       'media.videoThumb',
       'accent.headingLarge',

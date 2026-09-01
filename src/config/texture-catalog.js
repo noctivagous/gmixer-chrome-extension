@@ -8,6 +8,7 @@
  *   | 'gui.button'
  *   | 'gui.input'
  *   | 'gui.textarea'
+ *   | 'gui.slider'
  *   | 'media.articleImage'
  *   | 'media.videoThumb'
  *   | 'accent.headingLarge'
@@ -84,6 +85,14 @@ export const TEXTURE_SURFACES = [
   {
     id: 'gui.textarea',
     label: 'Text area',
+    family: 'fill',
+    group: 'Surface:GUI',
+    inUi: true,
+    defaultOn: false,
+  },
+  {
+    id: 'gui.slider',
+    label: 'Slider',
     family: 'fill',
     group: 'Surface:GUI',
     inUi: true,
@@ -354,6 +363,7 @@ export const TEXTURE_PREVIEW_SELECTORS = {
   'gui.button': '.blurb-button',
   'gui.input': '.blurb-field',
   'gui.textarea': '.blurb-textarea',
+  'gui.slider': '.blurb-slider',
   'media.articleImage': '.blurb-image-wrap',
   'media.videoThumb': '.blurb-video-thumb',
   'accent.headingLarge': '.blurb-title',
