@@ -58,6 +58,11 @@ const MAX_EARLY_SHEETS = 10;
 const EARLY_STRUCTURAL_SHEETS =
   'body > section, body > main, body #main, [role="main"]';
 
+/** Soften native photos until Chroming Media / full theme CSS lands. */
+const EARLY_IMAGE_GRAYSCALE = `img, picture img, svg image, image {
+  filter: grayscale(1) !important;
+}`;
+
 const SAFE_COLOR =
   /^(#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\(\s*[\d.]+\s*(?:,\s*[\d.]+\s*){2,3}(?:,\s*[\d.]+\s*)?\)|hsla?\(\s*[\d.]+(?:deg)?\s*(?:,\s*[\d.]+%?\s*){2,3}(?:,\s*[\d.]+\s*)?\)|oklch\(\s*[^)]+\))$/i;
 
@@ -387,7 +392,8 @@ ${PROVISIONAL_SURFACE_SHEETS} {
   background-color: ${surface} !important;
   background-image: none !important;
   color: ${text} !important;
-}`;
+}
+${EARLY_IMAGE_GRAYSCALE}`;
   return true;
 }
 
@@ -509,6 +515,7 @@ ${EARLY_STRUCTURAL_SHEETS} {
   background-color: ${sheetFill} !important;
   background-image: none !important;
 }
+${EARLY_IMAGE_GRAYSCALE}
 ${remembered}`;
   return true;
 }

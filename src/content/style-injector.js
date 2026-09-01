@@ -116,6 +116,8 @@ function headingScaleRules(headerSizeVariance) {
 // that background-image-tagger.js stamps onto elements after checking
 // computed style, so this selector also reaches those.
 export const BACKGROUND_IMAGE_ATTR = 'data-gmixer-bgimg';
+/** Opacity-0 <img> whose visible pixels come from a sibling/parent url() layer. */
+export const GHOST_PAINT_ATTR = 'data-gmixer-ghost-paint';
 
 /** sepia(1) lands near ~35deg; rotate from there to a palette hex hue. */
 function hueRotateFromSepia(hex) {
@@ -185,7 +187,10 @@ export function backgroundOverlayForPreset(preset, palette) {
     const color = paletteHexForFilterPreset(preset, palette) || palette.accent || '#808080';
     return { color, blend: 'color', opacity: 0.72 };
   }
-  return { color: '#808080', blend: 'saturation', opacity: 0.72 };
+  // grayscale / monochrome (and other full-desat defaults): match filter:grayscale(1).
+  // Partial opacity left visible chroma on sites that paint photos via background-image
+  // (e.g. opacity-0 <img> + sibling url() layer on X.com).
+  return { color: '#808080', blend: 'saturation', opacity: 1 };
 }
 
 function imageFilterRule(filterRaw, palette, options = {}) {
@@ -236,8 +241,11 @@ image[data-gmixer-media="avatar"] {
 
   if (imagesCss && imagesCss !== 'none') {
     // Exclude stamped roles so primary Images cannot beat more specific rows.
+    // Ghost-paint hosts: sites (X.com) that hide the <img> and paint via a
+    // same-size background-image sibling — filter the visible layer instead.
     rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="cover-image"]):not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]),
-picture:not(:has([data-gmixer-media="article-image"])):not(:has([data-gmixer-media="cover-image"])):not(:has([data-gmixer-media="video-thumbnail"])) img:not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]):not([data-gmixer-media="cover-image"]) {
+picture:not(:has([data-gmixer-media="article-image"])):not(:has([data-gmixer-media="cover-image"])):not(:has([data-gmixer-media="video-thumbnail"])) img:not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]):not([data-gmixer-media="cover-image"]),
+[${BACKGROUND_IMAGE_ATTR}][${GHOST_PAINT_ATTR}] {
   filter: ${imagesCss} !important;
 }`);
   }
@@ -274,7 +282,8 @@ image[data-gmixer-media="avatar"]:hover,
 [data-gmixer-media="article-image"]:hover,
 [data-gmixer-media="cover-image"]:hover,
 [data-gmixer-media="avatar"]:hover,
-[data-gmixer-media="video-thumbnail"]:hover {
+[data-gmixer-media="video-thumbnail"]:hover,
+[${BACKGROUND_IMAGE_ATTR}][${GHOST_PAINT_ATTR}]:hover {
   filter: none !important;
 }`);
   }
@@ -283,13 +292,16 @@ image[data-gmixer-media="avatar"]:hover,
     // Never put filter/background declarations on the element that owns the
     // page's background-image: that also filters its text and can replace the
     // site's image. A separate layer blends over the original image instead.
+    // Skip hosts already chromed via category filter (ghost-paired cover/avatar
+    // or unclassified ghost-paint) so overlay + filter do not stack.
     const overlay = backgroundOverlayForPreset(bgPreset, palette);
+    const overlayHost = `[${BACKGROUND_IMAGE_ATTR}]:not([${GHOST_PAINT_ATTR}]):not([data-gmixer-media="avatar"]):not([data-gmixer-media="cover-image"]):not([data-gmixer-media="article-image"]):not([data-gmixer-media="video-thumbnail"])`;
     rules.push(`
-    [${BACKGROUND_IMAGE_ATTR}] {
+    ${overlayHost} {
       position: relative !important;
       isolation: isolate !important;
     }
-    [${BACKGROUND_IMAGE_ATTR}] > .gmixer-bgimg-overlay {
+    ${overlayHost} > .gmixer-bgimg-overlay {
       position: absolute !important;
       inset: 0 !important;
       z-index: 0 !important;
@@ -298,13 +310,13 @@ image[data-gmixer-media="avatar"]:hover,
       opacity: ${overlay.opacity} !important;
       mix-blend-mode: ${overlay.blend} !important;
     }
-    [${BACKGROUND_IMAGE_ATTR}] > .gmixer-bgimg-overlay ~ * {
+    ${overlayHost} > .gmixer-bgimg-overlay ~ * {
       position: relative;
       z-index: 1;
     }
     ${
       filter.revealOnHover
-        ? `[${BACKGROUND_IMAGE_ATTR}]:hover > .gmixer-bgimg-overlay { opacity: 0 !important; }`
+        ? `${overlayHost}:hover > .gmixer-bgimg-overlay { opacity: 0 !important; }`
         : ''
     }
   `);

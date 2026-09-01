@@ -14,6 +14,7 @@ import { stampLogoAlpha } from './logo-alpha.js';
 import {
   shouldTagBackgroundImages,
   tagBackgroundImageElements,
+  tagGhostMediaBackgroundHosts,
   removeBackgroundImageOverlays,
 } from './background-image-tagger.js';
 import { removeStyle } from './style-injector.js';
@@ -23,6 +24,7 @@ import {
   stopVideoPlaybackState,
 } from './video-playback-state.js';
 import { clearNavPointerTargets, stampNavPointerTargets } from './clickable-detector.js';
+import { imageFilterAppliesToReplacedMedia } from '../config/image-filter-presets.js';
 
 /**
  * @typedef {object} AdaptivePassResult
@@ -66,6 +68,22 @@ export function runAdaptivePass(resolved) {
       tagBackgroundImageElements(shadow, tagOpts);
     }
   }
+  // After bg tagging: pair opacity-0 imgs with their visible url() paint hosts.
+  if (
+    filterOverlays ||
+    imageFilterAppliesToReplacedMedia(resolved?.imageFilter)
+  ) {
+    const imagesCat = resolved?.imageFilter?.categories?.images;
+    const ghostOpts = {
+      createOverlays: filterOverlays,
+      preferFilterForUnclassified:
+        !!imagesCat && imagesCat !== 'none' && !filterOverlays,
+    };
+    tagGhostMediaBackgroundHosts(document.body, ghostOpts);
+    for (const shadow of collectOpenShadowRoots(document.documentElement)) {
+      tagGhostMediaBackgroundHosts(shadow, ghostOpts);
+    }
+  }
 
   return { sample, classification };
 }
@@ -95,6 +113,21 @@ function runNativeSubtreePass(root, resolved) {
     tagBackgroundImageElements(root, tagOpts);
     for (const shadow of collectOpenShadowRoots(root)) {
       tagBackgroundImageElements(shadow, tagOpts);
+    }
+  }
+  if (
+    filterOverlays ||
+    imageFilterAppliesToReplacedMedia(resolved?.imageFilter)
+  ) {
+    const imagesCat = resolved?.imageFilter?.categories?.images;
+    const ghostOpts = {
+      createOverlays: filterOverlays,
+      preferFilterForUnclassified:
+        !!imagesCat && imagesCat !== 'none' && !filterOverlays,
+    };
+    tagGhostMediaBackgroundHosts(root, ghostOpts);
+    for (const shadow of collectOpenShadowRoots(root)) {
+      tagGhostMediaBackgroundHosts(shadow, ghostOpts);
     }
   }
   return classification;

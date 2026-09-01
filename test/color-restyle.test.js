@@ -746,7 +746,28 @@ describe('buildCss page paint', () => {
     assert.match(css, /\.gmixer-bgimg-overlay/);
     assert.match(css, /mix-blend-mode: saturation/);
     assert.match(css, /background: #808080 !important/);
-    assert.doesNotMatch(css, /\[data-gmixer-bgimg\][^{]*\{[^}]*filter:/);
+    // Full desat — matches filter:grayscale(1) on replaced media.
+    assert.match(css, /opacity: 1 !important/);
+    // Generic bgimg hosts use an overlay, not filter on the owner itself.
+    assert.doesNotMatch(css, /\[data-gmixer-bgimg\]\s*\{[^}]*filter:/);
+  });
+
+  it('filters ghost-paint background hosts when Images chroming is on', () => {
+    const global = createDefaultState().global;
+    global.sections.filter = true;
+    global.imageFilter.enabled = true;
+    global.imageFilter.categories = {
+      articleImages: 'none',
+      images: 'monochrome',
+      bgImages: 'none',
+      videos: 'none',
+      videoPlayback: 'none',
+    };
+    const css = buildCss(global, null);
+    assert.match(
+      css,
+      /\[data-gmixer-bgimg\]\[data-gmixer-ghost-paint\][\s\S]*filter: grayscale\(1\)/
+    );
   });
 
   it('reveals original images and background overlays on hover when enabled', () => {
@@ -767,10 +788,8 @@ describe('buildCss page paint', () => {
     assert.match(css, /img:hover, video:hover/);
     assert.match(css, /a:hover img, a:hover video/);
     assert.match(css, /filter: none !important/);
-    assert.match(
-      css,
-      /\[data-gmixer-bgimg\]:hover > \.gmixer-bgimg-overlay \{ opacity: 0 !important; \}/
-    );
+    assert.match(css, /data-gmixer-ghost-paint\]:hover/);
+    assert.match(css, /:hover > \.gmixer-bgimg-overlay \{ opacity: 0 !important; \}/);
   });
 
   it('emits accent-tint and link-wash when Color is on', () => {

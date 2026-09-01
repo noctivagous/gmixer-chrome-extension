@@ -110,6 +110,7 @@ describe('early canvas persistence', () => {
     assert.equal(created[0].id, EARLY_CANVAS_STYLE_ID);
     assert.match(created[0].textContent, /background-color: #111316/);
     assert.match(created[0].textContent, /color-scheme: dark/);
+    assert.match(created[0].textContent, /img, picture img, svg image, image \{[\s\S]*filter: grayscale\(1\) !important;/);
   });
 
   it('clears remembered canvas when theming is disabled', () => {
@@ -328,7 +329,7 @@ describe('early canvas persistence', () => {
     assert.match(provisional.textContent, /article/);
     assert.match(provisional.textContent, /aside/);
     assert.match(provisional.textContent, /section/);
-    assert.doesNotMatch(provisional.textContent, /filter:/);
+    assert.match(provisional.textContent, /img, picture img, svg image, image \{[\s\S]*filter: grayscale\(1\) !important;/);
     assert.doesNotMatch(provisional.textContent, /(?:^|,\s*)div(?:\s|,|{)/);
 
     writeEarlyCanvas({ bg: '#111316', scheme: 'dark' });
