@@ -450,7 +450,7 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /body > header\[data-gmixer-native-l\]/);
     assert.match(
       css,
-      /body main:not\(\[data-gmixer-bgimg\]\), body #main:not\(\[data-gmixer-bgimg\]\), body \[role="main"\]:not\(\[data-gmixer-bgimg\]\), body \[data-gmixer-role="main"\]:not\(\[data-gmixer-bgimg\]\) \{/
+      /body main:not\(\[data-gmixer-bgimg\]\),\s*body #main:not\(\[data-gmixer-bgimg\]\),\s*body \[role="main"\]:not\(\[data-gmixer-bgimg\]\),\s*body \[data-gmixer-role="main"\]:not\(\[data-gmixer-bgimg\]\) \{/
     );
     assert.match(css, /body \.card:not\(\[data-gmixer-bgimg\]\),\s*body article:not\(\[data-gmixer-bgimg\]\),/);
   });

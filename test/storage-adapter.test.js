@@ -106,7 +106,7 @@ describe('storage adapter', () => {
     const syncData = {};
     const localData = {};
     installStorage(syncData, localData);
-    chrome.storage.sync.set = async (patch) => {
+    globalThis.chrome.storage.sync.set = async (patch) => {
       syncSets += 1;
       Object.assign(syncData, patch);
     };

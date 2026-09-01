@@ -327,9 +327,11 @@ export function isOverlayPanel(el) {
     analysisDiagnostics.flyoutRejectedMediaChrome += 1;
     return false;
   }
-  // Absolute parallax / decorative floaters with no native fill are not menus.
-  // Painting them invents solid sheets over artwork (Opera GX POV section).
-  if (!semantic && !hasOverlayFill(style)) {
+  // Unfilled list containers are commonly CSS-only dropdowns: their visible
+  // sheet is supplied by the extension. Other transparent floaters are
+  // decorative/parallax content and must remain unpainted.
+  const isListPanel = el.tagName === 'UL' || el.tagName === 'OL' || el.tagName === 'MENU';
+  if (!semantic && !isListPanel && !hasOverlayFill(style)) {
     analysisDiagnostics.flyoutRejectedTransparent =
       (analysisDiagnostics.flyoutRejectedTransparent || 0) + 1;
     return false;
