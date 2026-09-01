@@ -299,7 +299,12 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
     const base = color.schemeBaseColor || color.baseColor;
     this.updateGlobal({
       color: {
-        swatchAssignments: autoAssignSwatches(base, scheme, global.themeMode || 'dark'),
+        swatchAssignments: autoAssignSwatches(
+          base,
+          scheme,
+          global.themeMode || 'dark',
+          global.themeIntensity
+        ),
       },
     });
   }
@@ -340,7 +345,8 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       currentColor.swatchAssignments,
       baseColor,
       scheme.id,
-      themeMode
+      themeMode,
+      this.state?.global?.themeIntensity
     );
     const chipsByCell = new Map();
     for (const role of SWATCH_ASSIGN_ROLES) {
@@ -584,7 +590,8 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       color.swatchAssignments,
       base,
       scheme,
-      this.state?.global?.themeMode || 'dark'
+      this.state?.global?.themeMode || 'dark',
+      this.state?.global?.themeIntensity
     ).assignments[roleId];
     const index = board.cells.findIndex(
       (cell) => cell.scale === stored.scale && cell.hue === stored.hue && cell.step === stored.step
@@ -604,7 +611,8 @@ export class GmixerColorSchemeScales extends StoreBoundElement {
       color.swatchAssignments,
       base,
       scheme,
-      this.state?.global?.themeMode || 'dark'
+      this.state?.global?.themeMode || 'dark',
+      this.state?.global?.themeIntensity
     );
     this.updateGlobal({
       color: {

@@ -1,16 +1,16 @@
 // Settings focus / prioritization — which accordion sections the panel shows.
 // See product description.txt lines 6–12 and BRANDED_SITE_THEMING_AUDIT.md.
 //
-// Tone (Light | Gray | Dark) and Color Scheme are separate layers. Tone-only
+// Tone (Light … Dark) and Color Scheme are separate layers. Tone-only
 // focus opens Tone, turns Color Scheme Off, and paints the install / walkthrough
-// slide 0 baseline (neutral monochrome Light|Gray|Dark) — see buildCss.
+// slide 0 baseline (neutral monochrome Light through Dark) — see buildCss.
 
 /** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
 
 /** @type {{ id: SettingsFocus, label: string }[]} */
 export const SETTINGS_FOCUS_OPTIONS = [
   { id: 'media', label: 'Only: Monochrome Page Media' },
-  { id: 'tone', label: 'Only: Tone Light | Gray | Dark Mode' },
+  { id: 'tone', label: 'Only: Tone Light through Dark Mode' },
   { id: 'theme', label: 'Theme (Select Settings)' },
 ];
 

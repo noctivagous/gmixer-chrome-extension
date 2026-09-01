@@ -92,12 +92,24 @@ export function resolveEffectivePalette(global, opts = {}) {
     ? '#8a8a8a'
     : global?.color?.baseColor || '#8a8a8a';
   const themeMode = global?.themeMode || 'dark';
-  const generatedPalette = buildPalette(paletteBaseColor, paletteScheme, themeMode);
+  const themeIntensity = global?.themeIntensity;
+  const generatedPalette = buildPalette(
+    paletteBaseColor,
+    paletteScheme,
+    themeMode,
+    themeIntensity
+  );
   const storedAssignments = global?.color?.swatchAssignments;
   const useAssignments =
     colorOn && !toneFocus && hasSwatchAssignments(storedAssignments);
   const { board, assignments } = useAssignments
-    ? resolveSwatchAssignments(storedAssignments, paletteBaseColor, paletteScheme, themeMode)
+    ? resolveSwatchAssignments(
+        storedAssignments,
+        paletteBaseColor,
+        paletteScheme,
+        themeMode,
+        themeIntensity
+      )
     : { board: null, assignments: {} };
   const themePalette = useAssignments
     ? applySwatchAssignments(generatedPalette, assignments, board)

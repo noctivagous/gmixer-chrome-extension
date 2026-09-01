@@ -13,7 +13,13 @@
  * @property {string} id
  * @property {string} label
  * @property {string} description
- * @property {{ light: ThemeModeConfig, gray: ThemeModeConfig, dark: ThemeModeConfig }} modes
+ * @property {{
+ *   light: ThemeModeConfig,
+ *   'light-gray': ThemeModeConfig,
+ *   gray: ThemeModeConfig,
+ *   'dark-gray': ThemeModeConfig,
+ *   dark: ThemeModeConfig
+ * }} modes
  *   Tonal modes sharing this pack's personality.
  * @property {ThemeMediaConfig} media Category-specific media styling slots.
  * @property {Partial<import('../state/schema.js').createDefaultState>} patch
@@ -21,7 +27,7 @@
  */
 /**
  * @typedef {object} ThemeModeConfig
- * @property {'light'|'gray'|'dark'} tone
+ * @property {'light'|'light-gray'|'gray'|'dark-gray'|'dark'} tone
  * @property {string} label
  */
 /**
@@ -44,14 +50,20 @@
 
 export const THEME_MODES = [
   { id: 'light', label: 'Light', description: 'Bright, high-contrast surfaces' },
+  { id: 'light-gray', label: 'Light Gray', description: 'Pale gray surfaces, still a light page' },
   { id: 'gray', label: 'Gray', description: 'Neutral mid-tone surfaces' },
+  { id: 'dark-gray', label: 'Dark Gray', description: 'Dim charcoal surfaces, not full night' },
   { id: 'dark', label: 'Dark', description: 'Low-light surfaces with bright text' },
 ];
+
+export const THEME_MODE_IDS = THEME_MODES.map((mode) => mode.id);
 
 function modeSet() {
   return {
     light: { label: 'Light', tone: 'light' },
+    'light-gray': { label: 'Light Gray', tone: 'light-gray' },
     gray: { label: 'Gray', tone: 'gray' },
+    'dark-gray': { label: 'Dark Gray', tone: 'dark-gray' },
     dark: { label: 'Dark', tone: 'dark' },
   };
 }

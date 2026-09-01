@@ -4,6 +4,12 @@ import { THEME_MODES } from '../../config/theme-packs.js';
 import { buildPalette, SCHEMES, hexToHsl, hslToHex } from '../../lib/color-theory.js';
 import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
+import {
+  grayHexFromLightness,
+  normalizeThemeIntensity,
+  toneBand,
+  toneCanvasLightness,
+} from '../../lib/tone-canvas.js';
 import { defineElement } from '../../lib/define-element.js';
 import { closeHostPopover, notifyHostLayout, requestShellSwitch } from '../close-host-popover.js';
 import {
@@ -205,16 +211,16 @@ function walkthroughTabIcon(slideId) {
 }
 
 /**
- * Color Scheme HSL slider defaults per Tone. Dark is a low-chroma night
- * canvas; Light mirrors that as a pale wash; Gray stays mid-value with
- * less saturation so mid-lightness does not read as a strong tint.
- * @type {Record<'light'|'gray'|'dark', { s: number, l: number }>}
+ * Color Scheme saturation defaults per Tone. Lightness comes from
+ * `toneCanvasLightness` (named stop + intensity).
+ * @type {Record<string, number>}
  */
-const COLOR_SCHEME_HSL_BY_TONE = {
-  dark: { s: 15, l: 15 },
-  // Mid-canvas Gray must stay below ~45 L so dark-mode text/accents keep contrast.
-  gray: { s: 10, l: 42 },
-  light: { s: 18, l: 85 },
+const COLOR_SCHEME_S_BY_TONE = {
+  light: 18,
+  'light-gray': 14,
+  gray: 10,
+  'dark-gray': 12,
+  dark: 15,
 };
 
 /**
@@ -735,10 +741,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
       font-variant-numeric: tabular-nums;
     }
 
-    .grayscale-range {
+    .grayscale-range,
+    .grayscale-control input[type='range'] {
       width: 100%;
       margin: 0;
       accent-color: var(--gm-accent, #7c3aed);
+    }
+
+    .grayscale-track {
+      height: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
     }
 
     .grayscale-track {
@@ -770,7 +783,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
     .tone-tab {
       display: grid;
-      grid-template-columns: 56px minmax(0, 1fr);
+      grid-template-columns: 56px minmax(0, 1fr) 10px;
       gap: 10px;
       align-items: center;
       padding: 10px;
@@ -798,6 +811,17 @@ export class GmixerWalkthrough extends StoreBoundElement {
     .tone-tab:focus-visible {
       outline: 2px solid var(--gm-accent, #7c3aed);
       outline-offset: 2px;
+    }
+
+    .tone-tab::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-right: 1.5px solid currentColor;
+      border-top: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      opacity: 0.5;
+      justify-self: end;
     }
 
     .tone-tab-copy {
@@ -1161,6 +1185,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       case 'color': {
         const baseColor = this._colorSchemeBaseForTone();
         const mode = this.state?.global?.themeMode || 'dark';
+        const intensity = this.state?.global?.themeIntensity;
         this.updateGlobal({
           activeThemePackId: 'user-made',
           sections: { color: true },
@@ -1168,7 +1193,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
             baseColor,
             schemeBaseColor: baseColor,
             scheme: 'triadic',
-            swatchAssignments: autoAssignSwatches(baseColor, 'triadic', mode),
+            swatchAssignments: autoAssignSwatches(baseColor, 'triadic', mode, intensity),
           },
         });
         break;
@@ -1253,7 +1278,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _tonePalette(mode) {
     const baseColor = this.state?.global?.color?.baseColor || '#8a8a8a';
-    return buildPalette(baseColor, 'monochrome', mode);
+    return buildPalette(baseColor, 'monochrome', mode, this.state?.global?.themeIntensity);
   }
 
   _renderToneMock(palette, { detail = false } = {}) {
@@ -1287,11 +1312,23 @@ export class GmixerWalkthrough extends StoreBoundElement {
         { label: 'Cards and panels use soft gray elevation', role: 'surfaceContainers' },
         { label: 'Borders and dividers stay subtle and light', role: 'border' },
       ],
+      'light-gray': [
+        { label: 'Page background cools to a pale gray sheet', role: 'background' },
+        { label: 'Body text stays dark on a still-light canvas', role: 'text' },
+        { label: 'Cards and panels lift a shade above the page', role: 'surfaceContainers' },
+        { label: 'Borders stay soft without going inky', role: 'border' },
+      ],
       gray: [
         { label: 'Page background settles into a neutral mid-tone', role: 'background' },
         { label: 'Text stays high-contrast without full dark mode', role: 'text' },
         { label: 'Cards and panels step up one shade for depth', role: 'surfaceContainers' },
         { label: 'Borders stay visible but not harsh', role: 'border' },
+      ],
+      'dark-gray': [
+        { label: 'Page background settles into charcoal, not black', role: 'background' },
+        { label: 'Body text stays bright on the dim canvas', role: 'text' },
+        { label: 'Cards and panels lift a step above the sheet', role: 'surfaceContainers' },
+        { label: 'Borders stay dim but still readable', role: 'border' },
       ],
       dark: [
         { label: 'Page background drops to a low-light canvas', role: 'background' },
@@ -1308,6 +1345,29 @@ export class GmixerWalkthrough extends StoreBoundElement {
     const patch = { themeMode: mode };
     if (this._isColorSchemeEnabled()) {
       const baseColor = this._colorSchemeBaseForTone(mode);
+      const intensity = this.state?.global?.themeIntensity;
+      patch.activeThemePackId = 'user-made';
+      patch.color = {
+        baseColor,
+        schemeBaseColor: baseColor,
+        swatchAssignments: autoAssignSwatches(
+          baseColor,
+          this.state?.global?.color?.scheme || 'triadic',
+          mode,
+          intensity
+        ),
+      };
+    }
+    this.updateGlobal(patch);
+  }
+
+  _setThemeIntensity(value) {
+    const intensity = normalizeThemeIntensity(value);
+    /** @type {Record<string, unknown>} */
+    const patch = { themeIntensity: intensity };
+    if (this._isColorSchemeEnabled()) {
+      const mode = this.state?.global?.themeMode || 'dark';
+      const baseColor = this._colorSchemeBaseForTone(mode, intensity);
       patch.activeThemePackId = 'user-made';
       patch.color = { baseColor, schemeBaseColor: baseColor };
     }
@@ -1317,7 +1377,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
   _onToneTabKeyDown(event, index) {
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
     event.preventDefault();
-    const next = event.key === 'ArrowDown' ? (index + 1) % 3 : (index + 2) % 3;
+    const count = THEME_MODES.length;
+    const next = event.key === 'ArrowDown' ? (index + 1) % count : (index + count - 1) % count;
     const mode = THEME_MODES[next]?.id;
     if (!mode) return;
     this._selectTone(mode);
@@ -1332,17 +1393,22 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   /**
    * Working color for the current tone after a hue pick. Hue comes from the
-   * ring (s=1.0, l=0.5); tone supplies the default saturation/lightness.
-   * @param {'light'|'gray'|'dark'} [mode]
+   * ring (s=1.0, l=0.5); tone + intensity supply saturation/lightness.
+   * @param {string} [mode]
+   * @param {number} [intensity]
    * @returns {string}
    */
-  _colorSchemeBaseForTone(mode) {
+  _colorSchemeBaseForTone(mode, intensity) {
     const themeMode = mode || this.state?.global?.themeMode || 'dark';
     const hsl = hexToHsl(this.state?.global?.color?.baseColor || '#8a8a8a');
-    const defaults = COLOR_SCHEME_HSL_BY_TONE[themeMode] || COLOR_SCHEME_HSL_BY_TONE.dark;
+    const t = normalizeThemeIntensity(
+      intensity == null ? this.state?.global?.themeIntensity : intensity
+    );
+    const s = COLOR_SCHEME_S_BY_TONE[themeMode] ?? COLOR_SCHEME_S_BY_TONE.dark;
+    const l = toneCanvasLightness(themeMode, t);
     // Gray has H=0; use blue (210°) instead of red when Color is enabled.
     const h = hsl.s < 5 ? 210 : hsl.h;
-    return hslToHex({ h, s: defaults.s, l: defaults.l });
+    return hslToHex({ h, s, l });
   }
 
   _setScheme(schemeId) {
@@ -1350,12 +1416,13 @@ export class GmixerWalkthrough extends StoreBoundElement {
     if (!color) return;
     const base = color.schemeBaseColor || color.baseColor;
     const mode = this.state?.global?.themeMode || 'dark';
+    const intensity = this.state?.global?.themeIntensity;
     this.updateGlobal({
       activeThemePackId: 'user-made',
       sections: { color: true },
       color: {
         scheme: schemeId,
-        swatchAssignments: autoAssignSwatches(base, schemeId, mode),
+        swatchAssignments: autoAssignSwatches(base, schemeId, mode, intensity),
       },
     });
   }
@@ -1369,6 +1436,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
       const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
       const baseColor = this._colorSchemeBaseForTone();
       const mode = this.state?.global?.themeMode || 'dark';
+      const intensity = this.state?.global?.themeIntensity;
       this.updateGlobal({
         activeThemePackId: 'user-made',
         sections: { color: true },
@@ -1376,7 +1444,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
           scheme,
           baseColor,
           schemeBaseColor: baseColor,
-          swatchAssignments: autoAssignSwatches(baseColor, scheme, mode),
+          swatchAssignments: autoAssignSwatches(baseColor, scheme, mode, intensity),
         },
       });
       return;
@@ -1664,8 +1732,11 @@ export class GmixerWalkthrough extends StoreBoundElement {
 
   _renderSlide1() {
     const activeMode = this.state?.global?.themeMode || 'dark';
-    const activeModeMeta = THEME_MODES.find((mode) => mode.id === activeMode) || THEME_MODES[2];
+    const activeModeMeta = THEME_MODES.find((mode) => mode.id === activeMode) || THEME_MODES[4];
     const activePalette = this._tonePalette(activeMode);
+    const themeIntensity = normalizeThemeIntensity(this.state?.global?.themeIntensity);
+    const band = toneBand(activeMode);
+    const intensityTrack = `background:linear-gradient(to right, ${grayHexFromLightness(band.lighter)}, ${grayHexFromLightness(band.darker)})`;
     return html`
       <div class="tone-picker">
         <div class="tone-tabs" role="tablist" aria-label="Select tone">
@@ -1717,6 +1788,22 @@ export class GmixerWalkthrough extends StoreBoundElement {
               )}
             </ul>
           </div>
+          <label class="grayscale-control">
+            <span class="grayscale-control-header">
+              <span>Tone intensity</span>
+              <output>${Math.round(themeIntensity * 100)}%</output>
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              .value=${String(themeIntensity)}
+              aria-label="Tone intensity"
+              @input=${(event) => this._setThemeIntensity(event.target.value)}
+            />
+            <span class="grayscale-track" style=${intensityTrack} aria-hidden="true"></span>
+          </label>
         </div>
       </div>
     `;

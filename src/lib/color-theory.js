@@ -1,6 +1,12 @@
 // Generates a page-role palette from ONE base color, using standard
 // color-theory relationships. See product description.txt > FEATURE 1.
-import { toneCanvasLightness } from './tone-canvas.js';
+import {
+  normalizeThemeIntensity,
+  toneBand,
+  toneCanvasLightness,
+  toneIsDark,
+  toneModeBias,
+} from './tone-canvas.js';
 
 /** @param {string} hex e.g. "#7c3aed" */
 export function hexToHsl(hex) {
@@ -361,10 +367,11 @@ export function deriveSurfaceLadder(backgroundHex, isDark, steps = 3) {
 /**
  * @param {string} baseColorHex
  * @param {'analog'|'complement'|'splitComplement'|'triadic'|'tetradic'|'monochrome'} scheme
- * @param {'light'|'gray'|'dark'} [mode='dark']
+ * @param {'light'|'light-gray'|'gray'|'dark-gray'|'dark'} [mode='dark']
+ * @param {number} [intensity=0.5] 0–1 position in the tone band (0.5 = named tone)
  * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, linkHover: string, navLink: string, navLinkHover: string, border: string, focus: string, isDark: boolean }}
  */
-export function buildPalette(baseColorHex, scheme, mode = 'dark') {
+export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.5) {
   const base = hexToHsl(baseColorHex);
   const offsets = accentHueOffsets(scheme);
   // Relationship hues after the base. Spread later stops across chrome roles
@@ -388,21 +395,21 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
     ? Math.min(base.s, 20)
     : Math.min(Math.max(base.s, 28), 42);
 
-  const isDark = mode !== 'light';
-  // Monochrome: Light|Gray|Dark owns the canvas; picker L is a small nudge.
+  const isDark = toneIsDark(mode);
+  const t = normalizeThemeIntensity(intensity);
+  // Monochrome: the 5-stop Tone spectrum owns the canvas; picker L is a small nudge.
   // Chromatic: picker H/S/L is the color; mode only biases lightness so a
   // lime pick can still be lime (not a 25% gray-green).
   let backgroundLightness;
   if (scheme === 'monochrome') {
-    const tonalBase = toneCanvasLightness(mode);
+    const band = toneBand(mode);
+    const tonalBase = toneCanvasLightness(mode, t);
     const neutralOffset = (base.l - 50) * 0.24;
-    backgroundLightness = Math.max(
-      mode === 'light' ? 80 : 3,
-      Math.min(mode === 'light' ? 99 : mode === 'gray' ? 58 : 20, tonalBase + neutralOffset)
-    );
+    const lo = Math.min(band.lighter, band.darker);
+    const hi = Math.max(band.lighter, band.darker);
+    backgroundLightness = Math.max(lo, Math.min(hi, tonalBase + neutralOffset));
   } else {
-    const modeBias = mode === 'light' ? 18 : mode === 'gray' ? 0 : -18;
-    backgroundLightness = Math.max(4, Math.min(96, base.l + modeBias));
+    backgroundLightness = Math.max(4, Math.min(96, base.l + toneModeBias(mode)));
   }
   const backgroundSaturation = scheme === 'monochrome' ? Math.min(base.s, 8) : base.s;
   const textLightness = isDark ? 92 : 12;

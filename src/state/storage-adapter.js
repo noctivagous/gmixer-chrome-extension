@@ -17,6 +17,7 @@ const FIELD_STORAGE_AREAS = {
   enabled: 'local',
   activeThemePackId: 'sync',
   themeMode: 'sync',
+  themeIntensity: 'sync',
   color: 'sync',
   fonts: 'local', // customFonts can hold data: URLs — keep off sync quota
   imageFilter: 'sync',

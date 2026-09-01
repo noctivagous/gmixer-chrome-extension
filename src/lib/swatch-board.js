@@ -117,9 +117,9 @@ export function nearestCell(board, hex) {
   return { scale: best.scale, hue: best.hue, step: best.step };
 }
 
-export function autoAssignSwatches(baseColorHex, scheme, themeMode = 'dark') {
+export function autoAssignSwatches(baseColorHex, scheme, themeMode = 'dark', intensity) {
   const board = buildSwatchBoard(baseColorHex, scheme);
-  const palette = buildPalette(baseColorHex, scheme, themeMode);
+  const palette = buildPalette(baseColorHex, scheme, themeMode, intensity);
   /** @type {Record<string, { scale: string, hue: number, step: number }>} */
   const assignments = {};
   for (const role of SWATCH_ASSIGN_ROLES) {
@@ -141,9 +141,9 @@ function isBareCoord(value) {
  * Valid stored coords win; missing/invalid roles fall back to auto-assign.
  * @param {Record<string, { scale: string, hue: number, step: number }>|null|undefined} stored
  */
-export function resolveSwatchAssignments(stored, baseColorHex, scheme, themeMode = 'dark') {
+export function resolveSwatchAssignments(stored, baseColorHex, scheme, themeMode = 'dark', intensity) {
   const board = buildSwatchBoard(baseColorHex, scheme);
-  const auto = autoAssignSwatches(baseColorHex, scheme, themeMode);
+  const auto = autoAssignSwatches(baseColorHex, scheme, themeMode, intensity);
   /** @type {Record<string, { scale: string, hue: number, step: number }>} */
   const assignments = {};
   for (const role of SWATCH_ASSIGN_ROLES) {

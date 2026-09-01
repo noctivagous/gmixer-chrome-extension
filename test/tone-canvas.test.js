@@ -32,6 +32,21 @@ describe('tone canvas ladder', () => {
     assert.ok(toneCanvasLightness('light', 0) >= 96);
   });
 
+  it('treats intensity 0.5 as the named tone', () => {
+    assert.equal(toneCanvasLightness('light', 0.5), 96);
+    assert.equal(toneCanvasLightness('light-gray', 0.5), 78);
+    assert.equal(toneCanvasLightness('gray', 0.5), 42);
+    assert.equal(toneCanvasLightness('dark-gray', 0.5), 22);
+    assert.equal(toneCanvasLightness('dark', 0.5), 8);
+  });
+
+  it('keeps a tone band from crossing its neighbors', () => {
+    assert.ok(toneCanvasLightness('light', 1) >= toneCanvasLightness('light-gray', 0));
+    assert.ok(toneCanvasLightness('light-gray', 1) >= toneCanvasLightness('gray', 0));
+    assert.ok(toneCanvasLightness('gray', 1) >= toneCanvasLightness('dark-gray', 0));
+    assert.ok(toneCanvasLightness('dark-gray', 1) >= toneCanvasLightness('dark', 0));
+  });
+
   it('builds a dark canvas with elevated secondary/surface and light text', () => {
     const canvas = toneCanvas('dark');
     assert.equal(canvas.scheme, 'dark');

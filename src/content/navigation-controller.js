@@ -39,7 +39,8 @@ export class NavigationController {
     const palette = buildPalette(
       resolved?.color?.baseColor || '#7c3aed',
       resolved?.color?.scheme || 'splitComplement',
-      resolved?.themeMode || 'dark'
+      resolved?.themeMode || 'dark',
+      resolved?.themeIntensity
     );
     const color = resolved?.color?.overrides?.accent || palette.accent;
 

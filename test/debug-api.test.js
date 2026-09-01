@@ -33,6 +33,9 @@ function makeStore(initial = {}) {
       if (patch.themeMode) {
         state.global.themeMode = patch.themeMode;
       }
+      if (patch.themeIntensity != null) {
+        state.global.themeIntensity = patch.themeIntensity;
+      }
       if (patch.imageFilter) {
         state.global.imageFilter = { ...(state.global.imageFilter || {}), ...patch.imageFilter };
       }
@@ -96,6 +99,11 @@ describe('debug-api', () => {
 
     await api.setThemeMode('light');
     assert.equal(store.getState().global.themeMode, 'light');
+    await api.setThemeMode('light-gray');
+    assert.equal(store.getState().global.themeMode, 'light-gray');
+    await api.setThemeIntensity(0.25);
+    assert.equal(store.getState().global.themeIntensity, 0.25);
+    await assert.rejects(() => api.setThemeMode('sepia'), /Invalid themeMode/);
 
     await api.setSettingsFocus('tone');
     assert.equal(store.getState().global.ui.settingsFocus, 'tone');

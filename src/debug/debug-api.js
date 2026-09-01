@@ -12,9 +12,10 @@ import { STYLE_ELEMENT_ID } from '../content/style-injector.js';
 import { patchForSettingsFocus } from '../settings/settings-focus.js';
 import { collectLiveSurfaces } from './live-surfaces.js';
 import { MSG_DEBUG_OPEN_SURFACES } from '../messaging/messages.js';
+import { THEME_MODE_IDS } from '../config/theme-packs.js';
 
 const SETTINGS_POPOVER_ID = 'gmixer-settings';
-const THEME_MODES = new Set(['light', 'gray', 'dark']);
+const THEME_MODES = new Set(THEME_MODE_IDS);
 const SETTINGS_FOCUSES = new Set(['theme', 'tone', 'media']);
 
 function safeClone(value) {
@@ -145,8 +146,8 @@ export function createDebugApi(deps) {
     },
 
     /**
-     * Switch Light | Gray | Dark tone direction (themeMode).
-     * @param {'light'|'gray'|'dark'} mode
+     * Switch Light … Dark tone direction (themeMode).
+     * @param {'light'|'light-gray'|'gray'|'dark-gray'|'dark'} mode
      */
     async setThemeMode(mode) {
       await store.ready;
@@ -155,6 +156,20 @@ export function createDebugApi(deps) {
       }
       await store.update({ themeMode: mode });
       return { themeMode: mode };
+    },
+
+    /**
+     * 0–1 position inside the current tone's lightness band.
+     * @param {number} intensity
+     */
+    async setThemeIntensity(intensity) {
+      await store.ready;
+      const n = Math.max(0, Math.min(1, Number(intensity)));
+      if (Number.isNaN(n)) {
+        throw new Error(`Invalid themeIntensity: ${intensity}`);
+      }
+      await store.update({ themeIntensity: n });
+      return { themeIntensity: n };
     },
 
     /**
@@ -251,6 +266,7 @@ export function createDebugApi(deps) {
         sections: safeClone(state?.global?.sections ?? {}),
         activeThemePackId: state?.global?.activeThemePackId ?? null,
         themeMode: state?.global?.themeMode ?? null,
+        themeIntensity: state?.global?.themeIntensity ?? null,
         primaryBackground: findPrimaryBackground(),
         primaryBackgroundCandidates: candidates,
         pageSample: samplePageRoles(),

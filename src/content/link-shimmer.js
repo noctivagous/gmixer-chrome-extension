@@ -187,7 +187,8 @@ function resolveShimmerColor(resolved) {
   const palette = buildPalette(
     resolved?.color?.baseColor || '#7c3aed',
     resolved?.color?.scheme || 'analogous',
-    resolved?.themeMode || 'dark'
+    resolved?.themeMode || 'dark',
+    resolved?.themeIntensity
   );
   return palette.accent || '#a78bfa';
 }

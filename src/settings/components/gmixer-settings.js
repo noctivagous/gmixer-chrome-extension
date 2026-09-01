@@ -18,7 +18,7 @@ import '../../popup/components/effects-panel.js';
 import '../../popup/components/texture-panel.js';
 import '../../popup/components/navigation-panel.js';
 import '../../popup/components/site-toggle.js';
-import { THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
+import { THEME_MODES, THEME_PACKS, getThemePackById } from '../../config/theme-packs.js';
 import './font-browser.js';
 import { defineElement } from '../../lib/define-element.js';
 import { closeHostPopover, requestShellSwitch } from '../close-host-popover.js';
@@ -1172,12 +1172,13 @@ export class GmixerSettings extends StoreBoundElement {
       const h = hsl.s < 5 ? 210 : hsl.h;
       const baseColor = hslToHex({ ...hsl, h, s: Math.max(hsl.s, 70) });
       const mode = this.state?.global?.themeMode || 'dark';
+      const intensity = this.state?.global?.themeIntensity;
       patch.activeThemePackId = 'user-made';
       patch.color = {
         scheme,
         baseColor,
         schemeBaseColor: baseColor,
-        swatchAssignments: autoAssignSwatches(baseColor, scheme, mode),
+        swatchAssignments: autoAssignSwatches(baseColor, scheme, mode, intensity),
       };
     }
     if (id === 'color' && !enabled) {
@@ -1195,7 +1196,7 @@ export class GmixerSettings extends StoreBoundElement {
     const hints = {
       preview: 'Live sample of the active theme pack',
       filter: 'Style images, video, and background media',
-      tone: 'Light | Gray | Dark surface direction',
+      tone: 'Light through Dark surface direction',
       color: 'Pipeline: scheme → hue → S/L; drag surfaces onto swatches',
       texture: 'Noise or grid surface texture (spacing + rotation)',
       fonts: 'Separate roles for hierarchy and UI',
@@ -1213,25 +1214,31 @@ export class GmixerSettings extends StoreBoundElement {
       ? buildPalette(
           global.color.baseColor,
           global.sections?.color === true ? global.color.scheme : 'monochrome',
-          global.themeMode || 'dark'
+          global.themeMode || 'dark',
+          global.themeIntensity
         )
       : null;
 
     if (id === 'tone' && palette) {
       return html`
         <svg viewBox="0 0 220 72" preserveAspectRatio="xMidYMid slice">
-          ${['light', 'gray', 'dark'].map((mode, index) => {
-            const tone = buildPalette(global.color.baseColor, 'monochrome', mode);
+          ${THEME_MODES.map((mode, index) => {
+            const tone = buildPalette(
+              global.color.baseColor,
+              'monochrome',
+              mode.id,
+              global.themeIntensity
+            );
             return html`
               <rect
-                x=${98 + index * 30}
+                x=${86 + index * 22}
                 y="17"
-                width="24"
+                width="18"
                 height="38"
                 rx="4"
                 fill=${tone.background}
-                stroke=${global.themeMode === mode ? palette.accent : 'currentColor'}
-                stroke-width=${global.themeMode === mode ? '3' : '1'}
+                stroke=${global.themeMode === mode.id ? palette.accent : 'currentColor'}
+                stroke-width=${global.themeMode === mode.id ? '3' : '1'}
               />
             `;
           })}

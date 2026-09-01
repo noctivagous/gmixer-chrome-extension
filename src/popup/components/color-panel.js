@@ -4,6 +4,12 @@ import { buildPalette, hexToHsl, hslToHex, SCHEMES } from '../../lib/color-theor
 import { autoAssignSwatches } from '../../lib/swatch-board.js';
 import { schemeHslTrackStyle } from '../../lib/hsl-slider-track.js';
 import { THEME_MODES } from '../../config/theme-packs.js';
+import {
+  grayHexFromLightness,
+  normalizeThemeIntensity,
+  toneBand,
+  toneCanvasLightness,
+} from '../../lib/tone-canvas.js';
 import { defineElement } from '../../lib/define-element.js';
 
 import './gmixer-color-wheel.js';
@@ -50,12 +56,12 @@ const ROLES = [
 ];
 
 /**
- * Color controls, split by settings sections: Tone (Light | Gray | Dark) and
+ * Color controls, split by settings sections: Tone (Light … Dark) and
  * Color Scheme (hue ring at s=1.0/l=0.5, then S/L sliders, scheme, identity).
  */
 export class ColorPanel extends StoreBoundElement {
   static properties = {
-    /** When true, only Light | Gray | Dark controls are shown. */
+    /** When true, only Tone spectrum + intensity controls are shown. */
     toneOnly: { type: Boolean, attribute: 'tone-only' },
     /** When true, excludes Tone and shows only color-scheme controls. */
     schemeOnly: { type: Boolean, attribute: 'scheme-only' },
@@ -200,7 +206,7 @@ export class ColorPanel extends StoreBoundElement {
     }
     .tone-segments {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       overflow: hidden;
       border: 1px solid var(--gm-border, rgba(255, 255, 255, 0.15));
       border-radius: 6px;
@@ -213,7 +219,7 @@ export class ColorPanel extends StoreBoundElement {
       justify-items: center;
       min-height: 56px;
       margin: 0;
-      padding: 8px 6px;
+      padding: 8px 4px;
       border: 0;
       border-right: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 0;
@@ -222,6 +228,15 @@ export class ColorPanel extends StoreBoundElement {
       cursor: pointer;
       box-sizing: border-box;
       text-align: center;
+    }
+    .tone-segment::after {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-right: 1.5px solid currentColor;
+      border-top: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      opacity: 0.5;
     }
     .tone-segment:last-child {
       border-right: 0;
@@ -240,8 +255,8 @@ export class ColorPanel extends StoreBoundElement {
       color: var(--gm-text, #f2eefc);
     }
     .tone-name {
-      font: 650 12px/1.1 system-ui, sans-serif;
-      letter-spacing: 0.02em;
+      font: 650 11px/1.1 system-ui, sans-serif;
+      letter-spacing: 0.01em;
     }
     .tone-caption {
       max-width: 11ch;
@@ -264,6 +279,9 @@ export class ColorPanel extends StoreBoundElement {
     const color = this.state?.global?.color;
     if (!color) return html``;
     const activeMode = this.state?.global?.themeMode || 'dark';
+    const themeIntensity = normalizeThemeIntensity(this.state?.global?.themeIntensity);
+    const band = toneBand(activeMode);
+    const intensityTrack = `background:linear-gradient(to right, ${grayHexFromLightness(band.lighter)}, ${grayHexFromLightness(band.darker)})`;
     const toneControls = html`
       <div class="mode-picker">
         <span class="field-label" id="theme-mode-label">Tone</span>
@@ -275,7 +293,7 @@ export class ColorPanel extends StoreBoundElement {
                 class="tone-segment"
                 aria-pressed=${mode.id === activeMode}
                 title=${mode.description}
-                @click=${() => this.updateGlobal({ themeMode: mode.id })}
+                @click=${() => this._selectTone(mode.id)}
               >
                 <span class="tone-name">${mode.label}</span>
                 <span class="tone-caption">${mode.description}</span>
@@ -283,16 +301,35 @@ export class ColorPanel extends StoreBoundElement {
             `
           )}
         </div>
+        <label class="grayscale-control">
+          <span class="grayscale-control-header">
+            <span>Tone intensity</span>
+            <output>${Math.round(themeIntensity * 100)}%</output>
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            .value=${String(themeIntensity)}
+            aria-valuemin="0"
+            aria-valuemax="1"
+            aria-valuenow=${String(themeIntensity)}
+            aria-label="Tone intensity"
+            @input=${(event) => this._setThemeIntensity(event.target.value)}
+          />
+          <span class="grayscale-track" style=${intensityTrack} aria-hidden="true"></span>
+        </label>
         <p class="hint">
-          Light, Gray, or Dark sets the full surface direction — the same control used by Only:
-          Tone.
+          Light through Dark sets the surface direction. Intensity moves within that tone — 0 is
+          the lighter edge, 100% the darker edge.
         </p>
       </div>
     `;
 
     if (this.toneOnly) return toneControls;
 
-    const palette = buildPalette(color.baseColor, color.scheme, activeMode);
+    const palette = buildPalette(color.baseColor, color.scheme, activeMode, themeIntensity);
     const colorEnabled = this.state?.global?.sections?.color === true;
     const hsl = hexToHsl(color.baseColor);
     const intensity = color.intensity ?? 100;
@@ -494,10 +531,11 @@ export class ColorPanel extends StoreBoundElement {
     if (!color) return;
     const base = color.schemeBaseColor || color.baseColor;
     const mode = this.state?.global?.themeMode || 'dark';
+    const intensity = this.state?.global?.themeIntensity;
     this.updateGlobal({
       color: {
         scheme: schemeId,
-        swatchAssignments: autoAssignSwatches(base, schemeId, mode),
+        swatchAssignments: autoAssignSwatches(base, schemeId, mode, intensity),
       },
     });
   }
@@ -517,6 +555,7 @@ export class ColorPanel extends StoreBoundElement {
     if (!color) return;
     const hsl = hexToHsl(color.baseColor);
     const mode = this.state?.global?.themeMode || 'dark';
+    const intensity = this.state?.global?.themeIntensity;
     if (enabled) {
       const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
       // Gray has H=0; use blue (210°) instead of red when raising saturation.
@@ -529,7 +568,7 @@ export class ColorPanel extends StoreBoundElement {
           scheme,
           baseColor,
           schemeBaseColor: baseColor,
-          swatchAssignments: autoAssignSwatches(baseColor, scheme, mode),
+          swatchAssignments: autoAssignSwatches(baseColor, scheme, mode, intensity),
         },
       });
       return;
@@ -543,6 +582,38 @@ export class ColorPanel extends StoreBoundElement {
         schemeBaseColor: hslToHex({ h: hsl.h, s: 0, l: hsl.l }),
       },
     });
+  }
+
+  _toneColorPatch(mode, intensity) {
+    const color = this.state?.global?.color;
+    if (!color || this.state?.global?.sections?.color !== true) return {};
+    const hsl = hexToHsl(color.baseColor);
+    const h = hsl.s < 5 ? 210 : hsl.h;
+    const baseColor = hslToHex({
+      h,
+      s: hsl.s,
+      l: toneCanvasLightness(mode, intensity),
+    });
+    const scheme = color.scheme === 'monochrome' ? 'analog' : color.scheme;
+    return {
+      activeThemePackId: 'user-made',
+      color: {
+        baseColor,
+        schemeBaseColor: baseColor,
+        swatchAssignments: autoAssignSwatches(baseColor, scheme, mode, intensity),
+      },
+    };
+  }
+
+  _selectTone(mode) {
+    const intensity = normalizeThemeIntensity(this.state?.global?.themeIntensity);
+    this.updateGlobal({ themeMode: mode, ...this._toneColorPatch(mode, intensity) });
+  }
+
+  _setThemeIntensity(value) {
+    const intensity = normalizeThemeIntensity(value);
+    const mode = this.state?.global?.themeMode || 'dark';
+    this.updateGlobal({ themeIntensity: intensity, ...this._toneColorPatch(mode, intensity) });
   }
 
   _setMonochromeLightness(value) {

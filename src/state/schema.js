@@ -26,6 +26,9 @@ export function createDefaultState() {
       enabled: true,
       activeThemePackId: 'user-made',
       themeMode: /** @type {ThemeMode} */ ('dark'),
+      // 0–1 position inside the current tone's lightness band. Distinct from
+      // `color.intensity` (Color Scheme mix). 0.5 = the named tone.
+      themeIntensity: 0.5,
       color: {
         // Working color after the Color Scheme pipeline:
         // 1) scheme, 2) hue from the ring (s=1.0, l=0.5), 3) saturation & lightness.

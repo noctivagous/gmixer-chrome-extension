@@ -79,16 +79,25 @@ describe('color-theory', () => {
     assert.ok(hexToHsl(deriveSurface(background, false)).l < hexToHsl(background).l);
   });
 
-  it('supports light, gray, and dark tonal modes', () => {
+  it('supports the five-stop Light through Dark spectrum', () => {
     const light = buildPalette('#7c3aed', 'monochrome', 'light');
+    const lightGray = buildPalette('#7c3aed', 'monochrome', 'light-gray');
     const gray = buildPalette('#7c3aed', 'monochrome', 'gray');
+    const darkGray = buildPalette('#7c3aed', 'monochrome', 'dark-gray');
     const dark = buildPalette('#7c3aed', 'monochrome', 'dark');
-    assert.ok(hexToHsl(light.background).l > hexToHsl(gray.background).l);
-    assert.ok(hexToHsl(gray.background).l > hexToHsl(dark.background).l);
+    assert.ok(hexToHsl(light.background).l > hexToHsl(lightGray.background).l);
+    assert.ok(hexToHsl(lightGray.background).l > hexToHsl(gray.background).l);
+    assert.ok(hexToHsl(gray.background).l > hexToHsl(darkGray.background).l);
+    assert.ok(hexToHsl(darkGray.background).l > hexToHsl(dark.background).l);
     assert.ok(hexToHsl(gray.surface).l > hexToHsl(gray.background).l);
     assert.equal(light.isDark, false);
+    assert.equal(lightGray.isDark, false);
     assert.equal(gray.isDark, true);
+    assert.equal(darkGray.isDark, true);
     assert.equal(dark.isDark, true);
+    const darkSoft = buildPalette('#7c3aed', 'monochrome', 'dark', 0);
+    const darkHard = buildPalette('#7c3aed', 'monochrome', 'dark', 1);
+    assert.ok(hexToHsl(darkSoft.background).l > hexToHsl(darkHard.background).l);
   });
 
   it('keeps monochrome palette roles desaturated for Tone-only themes', () => {
@@ -885,7 +894,13 @@ describe('theme package schema', () => {
   it('gives every pack shared light/gray/dark modes and media slots', () => {
     const mediaRoles = ['articleImage', 'videoThumbnail', 'avatar', 'logo', 'ad', 'hero', 'card', 'sidebar'];
     for (const pack of THEME_PACKS) {
-      assert.deepEqual(Object.keys(pack.modes).sort(), ['dark', 'gray', 'light']);
+      assert.deepEqual(Object.keys(pack.modes).sort(), [
+        'dark',
+        'dark-gray',
+        'gray',
+        'light',
+        'light-gray',
+      ]);
       for (const role of mediaRoles) {
         assert.ok(pack.media[role]);
         assert.ok(typeof pack.media[role].filter === 'string');
@@ -897,7 +912,7 @@ describe('theme package schema', () => {
   it('preserves each pack personality while tone changes its surfaces', () => {
     for (const pack of THEME_PACKS.filter((pack) => pack.patch.color)) {
       const { baseColor, scheme } = pack.patch.color;
-      const palettes = ['light', 'gray', 'dark'].map((mode) =>
+      const palettes = ['light', 'light-gray', 'gray', 'dark-gray', 'dark'].map((mode) =>
         buildPalette(baseColor, scheme, mode)
       );
 
@@ -905,6 +920,8 @@ describe('theme package schema', () => {
       assert.ok(pack.media.defaultFilter !== undefined, `${pack.label} keeps its media direction`);
       assert.ok(hexToHsl(palettes[0].background).l > hexToHsl(palettes[1].background).l);
       assert.ok(hexToHsl(palettes[1].background).l > hexToHsl(palettes[2].background).l);
+      assert.ok(hexToHsl(palettes[2].background).l > hexToHsl(palettes[3].background).l);
+      assert.ok(hexToHsl(palettes[3].background).l > hexToHsl(palettes[4].background).l);
     }
   });
 });
