@@ -26,8 +26,10 @@ import {
   clearCssCache,
 } from './css-cache.js';
 import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
+import { markThemePhase } from './adaptive-timing.js';
 
 async function applyStaticTheme() {
+  markThemePhase('gmixer:static-start');
   const hostname = location.hostname;
   const initialScope = cssCacheScope(location);
 
@@ -39,6 +41,7 @@ async function applyStaticTheme() {
       !document.getElementById(STYLE_ELEMENT_ID)
     ) {
       injectStyle(cached.css);
+      markThemePhase('gmixer:static-cache-paint');
     }
     return cached;
   });
@@ -61,11 +64,15 @@ async function applyStaticTheme() {
 
   // Cached styles are static-only, so a matching entry is the exact fast-path
   // stylesheet this pass would rebuild.
-  if (cacheMatches && cached.css && initialScope === scope) return;
+  if (cacheMatches && cached.css && initialScope === scope) {
+    markThemePhase('gmixer:static-cache-hit');
+    return;
+  }
 
   // Static only: pure theme palette, no live page sample.
   const css = buildCss(resolved, null);
   injectStyle(css);
+  markThemePhase('gmixer:static-rebuild-paint');
   await writeCssCache(hostname, scope, resolved, css);
 }
 

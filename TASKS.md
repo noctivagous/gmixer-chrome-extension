@@ -22,12 +22,19 @@
 [x] 5. Investigate the background flash in the walkthrough completion dialog.
   `_finish()` (`gmixer-walkthrough.js:1093-1104`) sets `showCompletion = true`, which both renders a small `.completion-dialog` and — via `:host([showcompletion])` (`gmixer-walkthrough.js:253-259`) — resizes the host from the full `min(1120px,...) × min(840px,...)` walkthrough panel down to a `440px` centered dialog. Root cause confirmed: the *outer* iframe box is sized independently by the parent page's stylesheet (`settings-host.js:175-183`, hardcoded to the same `min(1120px,...) × min(840px,...)`) and never shrinks to match when the inner host resizes. Since both the iframe and popover backgrounds are `transparent`, the leftover iframe area briefly exposes the page's `::backdrop` before layout settles — that's the flash. Fix by syncing the iframe's size to the inner host's `showcompletion` state (e.g. via a postMessage/resize signal) or transitioning both together.
 
-[ ] 6. Investigate the flash between a page's original appearance and gMixer's themed result.
-  Root cause candidates confirmed in code:
-  - `content-start.js` (document_start) only paints a **static** theme from `chrome.storage.session` cache + `buildCss(resolved, null)` — no page sampling, no element classification (see the file's own "BOUNDARY" comment banning `samplePageRoles`/`classifyPage`/tonal layers at this stage).
-  - The actual whitespot coverage — `seedPageSheets`, `stampOpaquePaintTargets`, `assignToneSteps` in `page-classifier.js`, plus `runAdaptivePass` in `adaptive-pass.js` — only runs from `content-end.js`, gated behind `waitForPageSettle()` and then `requestIdleCallback(..., { timeout: 1500 })`. So even on a repeat visit where the CSS cache hits, there's a window where only the base theme (bg/text/link colors) is painted but per-element surface reclassification hasn't landed yet — that's the visible flash.
-  - Confirm this timeline with real timestamps (e.g. temporary console.time markers around the static paint vs. `runAdaptivePass`) before deciding on a fix.
-  6a. Evaluate whether a blanket `filter:` treatment (e.g. invert/contrast on a wrapping layer, or a full-page opacity-0→1 fade until the adaptive pass completes) is worth it vs. just shrinking the adaptive-pass delay/timeout for the common case.
+[x] 6. Investigate the flash between a page's original appearance and gMixer's themed result.
+  Root cause confirmed with debug-build `[gmixer-timing]` marks (`markThemePhase` in `adaptive-timing.js`) on live tabs:
+  - `content-start.js` paints a **static** theme only (`buildCss(resolved, null)` / session CSS cache). No sampling, no classification.
+  - Classification (`seedPageSheets` / `stampOpaquePaintTargets` / `assignToneSteps` via `runAdaptivePass`) waits until `content-end.js` → `waitForPageSettle()` → `requestIdleCallback`. Until that lands, the page has base bg/text/link colors but unstamped whitespots.
+  Measured (ms from navigation start, Chrome DevTools console):
+  | page | static paint | document_end | settled | idle+adaptive start | adaptive done |
+  | Slashdot first | 441 rebuild | 1014 | 1027 (+13) | 1252 (+225 idle) | 1400 (148ms pass) |
+  | Wikipedia first | 335 rebuild | 856 | 890 (+34) | 1120 (+230 idle) | 1405 (285ms pass) |
+  | Wikipedia reload (cache hit) | 157 cache | 435 | 533 (+98) | 627 (+94 idle) | 920 (293ms pass) |
+  | Reddit /r/programming | 403 rebuild | 1245 | 1882 (+637, main thread busy) | 2285 (+403 idle) | 2554 (269ms pass) |
+  The old `requestIdleCallback(..., { timeout: 1500 })` was the controllable slice of that gap (up to 1.5s of "static theme, no surfaces" on a busy tab). Settle's 250ms cap almost never won vs double-rAF (~13–34ms) except when the thread was already blocked.
+  6a. Rejected a blanket `filter:` / opacity-0→1 veil: it would hide first content, fight Media-section `filter: !important` rules, and still sit on top of `runAdaptivePass`'s synchronous `removeStyle()` sample window. Chose shrinking the delay instead.
+  Fix: `PAGE_SETTLE_TIMEOUT_MS = 80` (was 250) and `ADAPTIVE_IDLE_TIMEOUT_MS = 120` (was 1500), both in `adaptive-timing.js`, scheduled via `scheduleFirstAdaptivePass()`. Debug builds still log the timeline. Tests in `test/adaptive-timing.test.js`. Verified themed Slashdot / Wikipedia / Reddit after the change (style present, hundreds of `data-gmixer-role` stamps).
 
 [ ] 7. Tone section (Light | Gray | Dark) — `src/config/theme-packs.js` `THEME_MODES` (currently exactly `light`, `gray`, `dark`) and the picker in `src/popup/components/color-panel.js:255-277` (`.tone-segments`/`.tone-segment`, no chevron today — the `.chevron` hits elsewhere are the unrelated accordion disclosure triangle).
   7a. Add a slim right-pointing arrow affordance to each Tone list item.

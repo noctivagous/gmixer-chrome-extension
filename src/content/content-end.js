@@ -39,6 +39,8 @@ import {
   MUTATION_DEBOUNCE_MS,
   SPA_ROUTE_DEBOUNCE_MS,
   isDocumentNavigation,
+  markThemePhase,
+  scheduleFirstAdaptivePass,
 } from './adaptive-timing.js';
 
 async function main() {
@@ -76,6 +78,7 @@ async function main() {
       return;
     }
 
+    markThemePhase('gmixer:adaptive-pass-start');
     const adaptive = runAdaptivePass(resolved);
     sample = adaptive.sample;
     if (isTopFrame) {
@@ -84,6 +87,7 @@ async function main() {
     }
     const css = buildCss(resolved, sample);
     injectStyle(css);
+    markThemePhase('gmixer:adaptive-pass-done');
     if (isTopFrame) {
       nav?.sync();
       syncLinkShimmer(resolved);
@@ -103,17 +107,16 @@ async function main() {
     }
   };
 
+  markThemePhase('gmixer:document-end');
   await waitForPageSettle();
+  markThemePhase('gmixer:page-settled');
   const startAdaptive = () => {
     if (!active) return;
+    markThemePhase('gmixer:idle-callback');
     reapply();
     delayedShadowTimer = window.setTimeout(rescanOpenShadows, 500);
   };
-  if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(startAdaptive, { timeout: 1500 });
-  } else {
-    window.setTimeout(startAdaptive, 0);
-  }
+  scheduleFirstAdaptivePass(startAdaptive);
 
   const layoutAndSpa = isTopFrame
     ? watchLayoutAndSpa(reapply, {

@@ -12,6 +12,52 @@ export const SPA_ROUTE_DEBOUNCE_MS = 100;
 export const LAYOUT_RESAMPLE_DEBOUNCE_MS = 400;
 
 /**
+ * Cap for the first post-document_end settle. Double-rAF usually wins first;
+ * this only matters when rAF is missing or a frame is stalled.
+ */
+export const PAGE_SETTLE_TIMEOUT_MS = 80;
+
+/**
+ * requestIdleCallback timeout for the first adaptive pass. The previous
+ * 1500ms ceiling left whitespot/classification unpainted on busy pages.
+ * Double-rAF already waited for a static-theme paint, so a short idle
+ * window is enough to yield once without a visible flash.
+ */
+export const ADAPTIVE_IDLE_TIMEOUT_MS = 120;
+
+/**
+ * Yield once after settle, but never wait the old 1500ms flash window.
+ *
+ * @param {() => void} callback
+ * @param {{ requestIdleCallback?: Function, setTimeout?: Function }} [clock]
+ * @returns {number}
+ */
+export function scheduleFirstAdaptivePass(callback, clock = globalThis) {
+  if (typeof clock.requestIdleCallback === 'function') {
+    return clock.requestIdleCallback(callback, { timeout: ADAPTIVE_IDLE_TIMEOUT_MS });
+  }
+  return clock.setTimeout(callback, 0);
+}
+
+/**
+ * Named timeline breadcrumb for the static→adaptive paint gap.
+ * Marks always land on the content-script performance timeline; console
+ * lines are debug-build only so production stays quiet.
+ *
+ * @param {string} name
+ */
+export function markThemePhase(name) {
+  try {
+    performance.mark(name);
+  } catch {
+    /* performance.mark can throw in some worker/test shims */
+  }
+  if (typeof __GMIXER_DEBUG__ !== 'undefined' && __GMIXER_DEBUG__) {
+    console.info('[gmixer-timing]', name, `${Math.round(performance.now())}ms`);
+  }
+}
+
+/**
  * Coalesce MutationObserver subtree work. Heavy SPAs inject many sibling
  * batches per turn; a microtask flush per batch restyles the tab.
  */
