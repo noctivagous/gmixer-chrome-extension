@@ -69,6 +69,12 @@ const entries = [
     format: 'iife',
     ...shared,
   },
+  {
+    entryPoints: ['src/debug/surfaces-page.js'],
+    outfile: `${OUT_DIR}/debug-surfaces.js`,
+    format: 'iife',
+    ...shared,
+  },
 ];
 
 async function run() {

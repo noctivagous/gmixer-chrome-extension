@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gMixer live surfaces</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #121018;
+        --panel: #1c1826;
+        --line: #3a3348;
+        --text: #f2eefc;
+        --muted: #b8b0c8;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+      }
+      body { padding: 20px 24px 48px; }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      h1 { font-size: 1.35rem; font-weight: 650; margin: 0 0 4px; }
+      .meta, .status { color: var(--muted); font-size: 12px; }
+      .status[data-kind="error"] { color: #ff8a8a; }
+      button {
+        background: #3b2f55;
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      button:hover { background: #4a3c68; }
+      h2 {
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 28px 0 10px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .swatch {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .chip {
+        height: 52px;
+        display: flex;
+        align-items: flex-end;
+        padding: 6px 8px;
+        font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .swatch .info { padding: 8px 10px 10px; }
+      .swatch .label { font-weight: 600; }
+      .swatch .sub { color: var(--muted); font-size: 11px; word-break: break-all; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
+      .mini {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 1px solid var(--line);
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      .warn {
+        background: #3a2418;
+        border: 1px solid #8a4b2a;
+        color: #ffd2b8;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin: 12px 0;
+      }
+      .empty { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="debug-surfaces.js"></script>
+  </body>
+</html>

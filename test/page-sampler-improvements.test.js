@@ -102,6 +102,60 @@ describe('page sampler confidence and style reuse', () => {
   });
 });
 
+describe('page sampler BG:Secondary -> BG:Primary reclassification', () => {
+  it('promotes a viewport-filling surface to background when html/body never paint one', () => {
+    const previous = {
+      document: globalThis.document,
+      window: globalThis.window,
+      getComputedStyle: globalThis.getComputedStyle,
+    };
+    const makeNode = (tagName, backgroundColor, parentElement = null, rect = null) => ({
+      tagName,
+      id: '',
+      parentElement,
+      getAttribute: () => null,
+      getBoundingClientRect: () =>
+        rect || { top: 0, bottom: 0, right: 0, width: 0, height: 0 },
+      __backgroundColor: backgroundColor,
+    });
+    const html = makeNode('HTML', 'transparent');
+    const body = makeNode('BODY', 'transparent', html);
+    const card = makeNode('DIV', 'rgb(30 60 120)', body, {
+      top: 0,
+      bottom: 600,
+      right: 800,
+      width: 800,
+      height: 600,
+    });
+    const styles = new Map([
+      [html, { backgroundColor: 'transparent', color: 'rgb(20 20 20)', fontSize: '16px' }],
+      [body, { backgroundColor: 'transparent', color: 'rgb(20 20 20)', fontSize: '16px' }],
+      [card, { backgroundColor: 'rgb(30 60 120)', color: 'rgb(255 255 255)', fontSize: '16px' }],
+    ]);
+    globalThis.window = { innerWidth: 800, innerHeight: 600 };
+    globalThis.document = {
+      documentElement: html,
+      body,
+      querySelectorAll: (selector) =>
+        selector.includes('.card') || selector.includes('[role="complementary"]')
+          ? [card]
+          : [],
+    };
+    globalThis.getComputedStyle = (element) => styles.get(element);
+
+    try {
+      const sample = samplePageRoles();
+      assert.equal(sample.background, '#1e3c78');
+      assert.equal(sample.sampling.provenance.background, 'promoted-secondary-surface');
+      assert.notEqual(sample.backgroundSecondary, sample.background);
+    } finally {
+      globalThis.document = previous.document;
+      globalThis.window = previous.window;
+      globalThis.getComputedStyle = previous.getComputedStyle;
+    }
+  });
+});
+
 describe('page sampler post-blend contrast', () => {
   const theme = {
     background: '#151515',

@@ -14,10 +14,12 @@ import {
   closeSettingsPopover,
   SETTINGS_POPOVER_ID,
 } from '../content/settings-host.js';
+import { MSG_DEBUG_INSPECT_SURFACES } from '../messaging/messages.js';
 
 const REQUEST_TYPE = 'GMIXER_DEBUG_REQUEST';
 const RESPONSE_TYPE = 'GMIXER_DEBUG_RESPONSE';
 const BRIDGE_SRC = 'debug-bridge.js';
+let runtimeListenerInstalled = false;
 
 function isDebugEnabled() {
   try {
@@ -53,7 +55,30 @@ export function installDebugApi(store, reapply) {
   globalThis.gmixerDebug = api;
 
   installMainWorldBridge(api);
+  installRuntimeInspectListener(api);
   return api;
+}
+
+/**
+ * @param {ReturnType<typeof createDebugApi>} api
+ */
+function installRuntimeInspectListener(api) {
+  if (runtimeListenerInstalled) return;
+  if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+  runtimeListenerInstalled = true;
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== MSG_DEBUG_INSPECT_SURFACES) return undefined;
+    if (window !== window.top) return undefined;
+    try {
+      sendResponse({ ok: true, surfaces: api.inspectLiveSurfaces() });
+    } catch (err) {
+      sendResponse({
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return false;
+  });
 }
 
 /**

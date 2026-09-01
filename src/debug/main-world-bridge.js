@@ -56,6 +56,8 @@
     'samplePage',
     'findPrimaryBackground',
     'inspectRoles',
+    'inspectLiveSurfaces',
+    'openSurfaceInspector',
     'rebuildCss',
     'dumpDiagnostics',
   ];

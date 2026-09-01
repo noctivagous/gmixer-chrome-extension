@@ -89,6 +89,11 @@ describe('debug-api', () => {
     assert.equal(dump.debugEnabled, true);
     assert.equal(dump.openSection, null);
 
+    const live = api.inspectLiveSurfaces();
+    assert.ok(Array.isArray(live.palette.tokens));
+    assert.ok(Array.isArray(live.classified));
+    assert.ok(Array.isArray(live.texture));
+
     await api.setThemeMode('light');
     assert.equal(store.getState().global.themeMode, 'light');
 

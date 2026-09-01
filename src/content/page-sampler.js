@@ -493,6 +493,11 @@ function collectScored(elements, prop, opts = {}, styleCache) {
   return scored;
 }
 
+/** Below this, the nominal primary background isn't backed by meaningful area. */
+const PRIMARY_BACKGROUND_MIN_AREA_RATIO = 0.35;
+/** A surface must cover at least this much of the viewport to be promoted to BG:Primary. */
+const SECONDARY_PROMOTION_MIN_AREA_RATIO = 0.45;
+
 /**
  * Sample the live page's role colors with region scoring + structural/identity split.
  * Safe to call only after DOM is available (document_end+).
@@ -562,9 +567,14 @@ export function samplePageRoles() {
         ? 1
         : 0,
   }, styleCache);
-  const primaryBackground = findPrimaryBackground(document, styleCache);
+  const primaryCandidates = findPrimaryBackgroundCandidates(document, styleCache);
+  const primaryBackground = primaryCandidates[0]?.color || null;
   const scoredBackground = pickBestScoredColor(bgScored);
-  const background = primaryBackground || scoredBackground || '#ffffff';
+  let background = primaryBackground || scoredBackground || '#ffffff';
+  // Area actually backing `background`. A page whose html/body/main are
+  // transparent falls through to the '#ffffff' default above, which isn't
+  // backed by any real element - treat that as zero coverage.
+  let backgroundAreaRatio = primaryBackground ? primaryCandidates[0].areaRatio : 0;
 
   const textScored = collectScored([...roots, ...headings], 'color', {}, styleCache);
   const sampledText = pickBestScoredColor(textScored);
@@ -600,6 +610,31 @@ export function samplePageRoles() {
   const border = sampledBorder || text;
 
   const surfaceScored = collectScored(surfaces, 'backgroundColor', {}, styleCache);
+
+  // Many app shells never paint a real primary background (html/body stay
+  // transparent) while a large content wrapper - a `.card`/aside/complementary
+  // surface that would otherwise become BG:Secondary - visually IS the page
+  // background. When the nominal primary barely covers the viewport and one
+  // of those surfaces dominates it instead, promote the surface to BG:Primary
+  // and let backgroundSecondary/surfaceGui/surfaceContainers re-derive from
+  // the new primary below rather than leaving the stale assignment in place.
+  const dominantSurface = surfaceScored.reduce(
+    (best, sample) =>
+      sample.color !== background && (!best || sample.areaRatio > best.areaRatio)
+        ? sample
+        : best,
+    null
+  );
+  const promotedSecondary =
+    Boolean(dominantSurface) &&
+    backgroundAreaRatio < PRIMARY_BACKGROUND_MIN_AREA_RATIO &&
+    dominantSurface.areaRatio >= SECONDARY_PROMOTION_MIN_AREA_RATIO &&
+    dominantSurface.areaRatio > backgroundAreaRatio;
+  if (promotedSecondary) {
+    background = dominantSurface.color;
+    backgroundAreaRatio = dominantSurface.areaRatio;
+  }
+
   const sampledSecondary = pickBestScoredColor(
     surfaceScored.filter((sample) => sample.color !== background)
   );
@@ -643,11 +678,13 @@ export function samplePageRoles() {
     nav: nav || accent,
   };
   const provenance = {
-    background: primaryBackground
-      ? 'primary-background'
-      : scoredBackground
-        ? 'scored-root'
-        : 'fallback',
+    background: promotedSecondary
+      ? 'promoted-secondary-surface'
+      : primaryBackground
+        ? 'primary-background'
+        : scoredBackground
+          ? 'scored-root'
+          : 'fallback',
     backgroundSecondary: sampledSecondary ? 'scored-surface' : 'derived',
     text: sampledText ? 'scored-content' : 'fallback',
     muted: sampledMuted ? 'scored-muted' : 'text-fallback',

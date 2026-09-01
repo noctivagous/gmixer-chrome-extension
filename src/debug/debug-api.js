@@ -10,6 +10,8 @@ import {
 import { getOpenTreeDiagnostics } from '../content/open-trees.js';
 import { STYLE_ELEMENT_ID } from '../content/style-injector.js';
 import { patchForSettingsFocus } from '../settings/settings-focus.js';
+import { collectLiveSurfaces } from './live-surfaces.js';
+import { MSG_DEBUG_OPEN_SURFACES } from '../messaging/messages.js';
 
 const SETTINGS_POPOVER_ID = 'gmixer-settings';
 const THEME_MODES = new Set(['light', 'gray', 'dark']);
@@ -183,6 +185,17 @@ export function createDebugApi(deps) {
         roleCount: document.querySelectorAll(`[${ROLE_ATTR}]`).length,
         mediaCount: document.querySelectorAll(`[${MEDIA_ATTR}]`).length,
       };
+    },
+
+    inspectLiveSurfaces() {
+      return collectLiveSurfaces();
+    },
+
+    async openSurfaceInspector() {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+        throw new Error('chrome.runtime is unavailable');
+      }
+      return chrome.runtime.sendMessage({ type: MSG_DEBUG_OPEN_SURFACES });
     },
 
     rebuildCss() {

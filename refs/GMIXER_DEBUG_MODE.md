@@ -28,6 +28,8 @@ window.gmixerDebug = {
   samplePage(),
   findPrimaryBackground(),
   inspectRoles(),
+  inspectLiveSurfaces(),
+  openSurfaceInspector(),
   rebuildCss(),
   dumpDiagnostics()
 };
@@ -48,7 +50,25 @@ await window.gmixerDebug.dumpDiagnostics();
 await window.gmixerDebug.openSettings();
 await window.gmixerDebug.setSectionEnabled('filter', true);
 await window.gmixerDebug.toggleSection('tone');
+await window.gmixerDebug.inspectLiveSurfaces();
+await window.gmixerDebug.openSurfaceInspector();
 ```
+
+## Live surface inspector
+
+Debug builds add a dedicated page that lists **palette tokens**, **classified
+`data-gmixer-role` surfaces**, and **texture-catalog roles** with the swatches
+actually computed on the current tab (not the synthetic Settings preview).
+
+Open it from:
+
+- Right-click a page → **Inspect live gMixer surfaces**
+- `await window.gmixerDebug.openSurfaceInspector()`
+- `chrome-extension://<id>/debug-surfaces.html?tab=<tabId>`
+
+The page asks the service worker for a snapshot of that tab’s content-script
+debug API (`inspectLiveSurfaces`). Production builds compile the inspector
+disabled and omit the context menu.
 
 ## Diagnostics covered
 
@@ -78,9 +98,12 @@ paths (including cross-tab sync).
 | File | Role |
 | --- | --- |
 | `src/debug/debug-api.js` | Pure API factory (dependency-injected) |
+| `src/debug/live-surfaces.js` | Live palette / classifier / texture snapshot |
 | `src/debug/install-debug.js` | Content-script installer + message bridge |
 | `src/debug/main-world-bridge.js` | Page-world `window.gmixerDebug` stub |
+| `src/debug/surfaces-page.js` | Dedicated inspector UI |
 | `extension/debug-bridge.js` | Bundled bridge (web_accessible) |
+| `extension/debug-surfaces.html` | Inspector page (debug builds) |
 
 `content-end.js` calls `installDebugApi(store, reapply)` after the adaptive
 pass and settings host are wired.
