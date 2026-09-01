@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   EARLY_CANVAS_STORAGE_KEY,
   EARLY_CANVAS_STYLE_ID,
+  PROVISIONAL_STYLE_ID,
   clearEarlyCanvas,
   collectEarlySheets,
   paintEarlyCanvas,
+  paintProvisionalCanvas,
   readEarlyCanvas,
   sanitizeCanvasColor,
   sanitizeSheetSelector,
@@ -298,5 +300,62 @@ describe('early canvas persistence', () => {
       ['body > section', 'h2.firehose', '#poll-content']
     );
     assert.equal(sheets[1].color, 'rgb(47, 53, 62)');
+  });
+
+  it('paints guessed landmark/card fills on an uncached first load and skips when origin cache exists', () => {
+    globalThis.sessionStorage = memoryStorage();
+    globalThis.localStorage = memoryStorage();
+    const created = [];
+    globalThis.document = {
+      documentElement: {
+        style: { setProperty() {} },
+        appendChild(node) {
+          created.push(node);
+          return node;
+        },
+      },
+      getElementById(id) {
+        return created.find((node) => node.id === id) || null;
+      },
+      createElement() {
+        return { id: '', textContent: '' };
+      },
+    };
+    assert.equal(paintProvisionalCanvas(), true);
+    const provisional = created.find((node) => node.id === PROVISIONAL_STYLE_ID);
+    assert.ok(provisional);
+    assert.match(provisional.textContent, /color-scheme: dark/);
+    assert.match(provisional.textContent, /article/);
+    assert.match(provisional.textContent, /aside/);
+    assert.match(provisional.textContent, /section/);
+    assert.doesNotMatch(provisional.textContent, /filter:/);
+    assert.doesNotMatch(provisional.textContent, /(?:^|,\s*)div(?:\s|,|{)/);
+
+    writeEarlyCanvas({ bg: '#111316', scheme: 'dark' });
+    assert.equal(paintProvisionalCanvas(), false);
+  });
+
+  it('paints a light-tone first-load guess when given a light canvas', () => {
+    globalThis.sessionStorage = memoryStorage();
+    globalThis.localStorage = memoryStorage();
+    const created = [];
+    globalThis.document = {
+      documentElement: {
+        style: { setProperty() {} },
+        appendChild(node) {
+          created.push(node);
+          return node;
+        },
+      },
+      getElementById(id) {
+        return created.find((node) => node.id === id) || null;
+      },
+      createElement() {
+        return { id: '', textContent: '' };
+      },
+    };
+    assert.equal(paintProvisionalCanvas({ tone: 'light', bg: '#f5f5f5', secondary: '#ebebeb', surface: '#e0e0e0', text: '#1f1f1f', scheme: 'light' }), true);
+    assert.match(created[0].textContent, /color-scheme: light/);
+    assert.match(created[0].textContent, /#f5f5f5/);
   });
 });

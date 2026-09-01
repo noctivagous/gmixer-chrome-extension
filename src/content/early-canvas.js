@@ -6,8 +6,47 @@
 // and re-apply them as the first statement of a tiny document_start script.
 // That closes the white flash on same-origin navigations.
 
+import { toneCanvas } from '../lib/tone-canvas.js';
+
 export const EARLY_CANVAS_STYLE_ID = 'gmixer-early-canvas';
 export const EARLY_CANVAS_STORAGE_KEY = 'gmixer.earlyCanvas.v1';
+export const PROVISIONAL_STYLE_ID = 'gmixer-provisional-canvas';
+export const GLOBAL_TONE_STORAGE_KEY = 'gmixer_tone_canvas';
+
+/**
+ * First-load guesses that mirror the static theme's semantic targets, without
+ * `[data-gmixer-native-l]` (classification has not run). Not `div` — too many
+ * layout wrappers. Landmarks and cards are the usual opaque sheets.
+ */
+const PROVISIONAL_SECONDARY_SHEETS = [
+  'body > section',
+  'body > main',
+  'body > header',
+  'body > footer',
+  'body > nav',
+  'body > aside',
+  'main',
+  'header',
+  'footer',
+  'nav',
+  'aside',
+  '#main',
+  '[role="main"]',
+  '[role="banner"]',
+  '[role="contentinfo"]',
+  '[role="navigation"]',
+  '[role="complementary"]',
+].join(', ');
+
+const PROVISIONAL_SURFACE_SHEETS = [
+  'article',
+  'section',
+  '.card',
+  '[role="article"]',
+  'dialog',
+  '[role="dialog"]',
+  '[role="menu"]',
+].join(', ');
 const MAX_EARLY_SHEETS = 10;
 
 /**
@@ -39,6 +78,30 @@ export function sanitizeCanvasColor(value) {
  */
 export function sanitizeColorScheme(value) {
   return value === 'dark' || value === 'light' ? value : null;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {import('../lib/tone-canvas.js').ToneCanvas|null}
+ */
+export function sanitizeToneCanvas(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = /** @type {Record<string, unknown>} */ (raw);
+  const bg = sanitizeCanvasColor(data.bg);
+  if (!bg) return null;
+  const fallback = toneCanvas(typeof data.tone === 'string' ? data.tone : 'dark');
+  return {
+    tone: typeof data.tone === 'string' ? data.tone : fallback.tone,
+    intensity:
+      typeof data.intensity === 'number' && Number.isFinite(data.intensity)
+        ? Math.max(0, Math.min(1, data.intensity))
+        : null,
+    bg,
+    secondary: sanitizeCanvasColor(data.secondary) || fallback.secondary,
+    surface: sanitizeCanvasColor(data.surface) || fallback.surface,
+    text: sanitizeCanvasColor(data.text) || fallback.text,
+    scheme: sanitizeColorScheme(data.scheme) || fallback.scheme,
+  };
 }
 
 const SAFE_IDENT = /^[A-Za-z][\w-]{0,40}$/;
@@ -276,11 +339,121 @@ export function clearEarlyCanvas() {
   storageRemove(globalThis.sessionStorage);
   storageRemove(globalThis.localStorage);
   removeEarlyCanvasStyle();
+  removeProvisionalCanvas();
 }
 
 export function removeEarlyCanvasStyle() {
   if (typeof document === 'undefined') return;
   document.getElementById(EARLY_CANVAS_STYLE_ID)?.remove();
+}
+
+export function removeProvisionalCanvas() {
+  if (typeof document === 'undefined') return;
+  document.getElementById(PROVISIONAL_STYLE_ID)?.remove();
+}
+
+/**
+ * First visit to an origin (no remembered sheets): paint html/body plus
+ * semantic landmarks/cards from the last-known tone ladder (or default dark).
+ * Skipped when origin cache already painted. Removed when real theme CSS injects.
+ *
+ * @param {import('../lib/tone-canvas.js').ToneCanvas|null} [canvas]
+ * @returns {boolean}
+ */
+export function paintProvisionalCanvas(canvas = null) {
+  if (typeof document === 'undefined' || readEarlyCanvas()) return false;
+  const root = document.documentElement;
+  if (!root) return false;
+  const ladder = sanitizeToneCanvas(canvas) || toneCanvas('dark');
+  let styleEl = document.getElementById(PROVISIONAL_STYLE_ID);
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = PROVISIONAL_STYLE_ID;
+    root.appendChild(styleEl);
+  }
+  const { bg, secondary, surface, text, scheme } = ladder;
+  styleEl.textContent = `html { color-scheme: ${scheme}; }
+html, body {
+  background-color: ${bg} !important;
+  background-image: none !important;
+  color: ${text} !important;
+}
+${PROVISIONAL_SECONDARY_SHEETS} {
+  background-color: ${secondary} !important;
+  background-image: none !important;
+  color: ${text} !important;
+}
+${PROVISIONAL_SURFACE_SHEETS} {
+  background-color: ${surface} !important;
+  background-image: none !important;
+  color: ${text} !important;
+}`;
+  return true;
+}
+
+function hasChromeStorage() {
+  return typeof chrome !== 'undefined' && !!chrome.storage;
+}
+
+/**
+ * Last-known tone canvas, hostname-independent, for the next origin's first
+ * paint. Session for this browser run; local so it survives a restart.
+ *
+ * @param {object} resolved
+ */
+export function persistGlobalToneCanvas(resolved) {
+  if (!hasChromeStorage()) return;
+  try {
+    if (resolved?.enabled === false) {
+      chrome.storage.session?.remove(GLOBAL_TONE_STORAGE_KEY);
+      chrome.storage.local?.remove(GLOBAL_TONE_STORAGE_KEY);
+      return;
+    }
+    const fromTone = toneCanvas(resolved.themeMode, resolved.themeIntensity);
+    let computed = null;
+    if (typeof document !== 'undefined' && typeof getComputedStyle === 'function' && document.documentElement) {
+      const cs = getComputedStyle(document.documentElement);
+      computed = sanitizeToneCanvas({
+        tone: resolved.themeMode,
+        intensity: resolved.themeIntensity,
+        bg: cs.getPropertyValue('--gmixer-bg-primary') || cs.getPropertyValue('--gmixer-bg'),
+        secondary: cs.getPropertyValue('--gmixer-bg-secondary'),
+        surface: cs.getPropertyValue('--gmixer-surface-containers') || cs.getPropertyValue('--gmixer-surface-1'),
+        text: cs.getPropertyValue('--gmixer-text'),
+        scheme: /\bdark\b/i.test(cs.colorScheme || '') ? 'dark' : 'light',
+      });
+    }
+    const canvas = computed || fromTone;
+    const payload = { [GLOBAL_TONE_STORAGE_KEY]: canvas };
+    chrome.storage.session?.set(payload);
+    chrome.storage.local?.set(payload);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/**
+ * @param {(canvas: import('../lib/tone-canvas.js').ToneCanvas) => void} apply
+ */
+export function hydrateGlobalToneCanvas(apply) {
+  if (!hasChromeStorage() || typeof apply !== 'function') return;
+  const use = (raw) => {
+    const canvas = sanitizeToneCanvas(raw);
+    if (canvas) apply(canvas);
+  };
+  try {
+    chrome.storage.session.get(GLOBAL_TONE_STORAGE_KEY, (data) => {
+      if (data?.[GLOBAL_TONE_STORAGE_KEY]) {
+        use(data[GLOBAL_TONE_STORAGE_KEY]);
+        return;
+      }
+      chrome.storage.local.get(GLOBAL_TONE_STORAGE_KEY, (localData) => {
+        use(localData?.[GLOBAL_TONE_STORAGE_KEY]);
+      });
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 /**

@@ -157,7 +157,17 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Service workers can restart without onInstalled; recreate menus on boot.
 void ensureContextMenus();
-void enableSessionCacheForContentScripts();
+void enableSessionCacheForContentScripts().then(async () => {
+  // Warm the session bucket with the last-known tone canvas so document_start
+  // on a new origin can hydrate without waiting on local storage.
+  try {
+    const key = 'gmixer_tone_canvas';
+    const local = await chrome.storage.local.get(key);
+    if (local[key]) await chrome.storage.session.set({ [key]: local[key] });
+  } catch {
+    /* ignore */
+  }
+});
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab?.id) return;

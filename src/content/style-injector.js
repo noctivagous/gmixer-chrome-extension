@@ -27,7 +27,7 @@ import { blendWithPageSample, deriveBrandFamily } from './page-sampler.js';
 import { sectionAllowedByFocus } from '../settings/settings-focus.js';
 import { sectionAllowedByCustomizationLevel } from '../settings/customization-level.js';
 import { collectOpenShadowRoots, isGmixerUiShadowRoot } from './open-trees.js';
-import { removeEarlyCanvasStyle } from './early-canvas.js';
+import { removeEarlyCanvasStyle, removeProvisionalCanvas } from './early-canvas.js';
 import { NAV_HIT_ATTR } from './clickable-detector.js';
 
 export {
@@ -434,30 +434,34 @@ function dropGlowKeyframes(name, color) {
 }
 
 /**
- * Direct parent overflow:hidden crops drop-shadow on the child.
+ * Direct parent overflow:hidden crops box/drop-shadow on the child.
  * @param {string} selectors
- * @param {{ includeParents?: boolean }} [options]
+ * @param {{ includeParents?: boolean, includeSelf?: boolean }} [options]
  *   Parent `:has(> …)` unclip is for replaced media (img/video). Do NOT enable
  *   it for `a` / button glow — that matches collapsed dropdown panels
  *   (Opera GX `max-height:0; overflow:hidden`) and forces menus open.
+ *   Do NOT set overflow:visible on img/video themselves: Chrome's default
+ *   overflow:clip is what object-fit:cover uses to keep square/fixed crops.
  */
 function unclipGlow(selectors, options = {}) {
   const includeParents = options.includeParents !== false;
+  const includeSelf = options.includeSelf !== false;
   const items = selectors
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
   const self = items.join(', ');
-  if (!includeParents) {
-    return `${self} {
-  overflow: visible !important;
-}`;
-  }
   const parents = items.map((item) => `:has(> ${item})`).join(', ');
-  return `${self},
-${parents} {
-  overflow: visible !important;
-}
+  const targets = [
+    includeSelf ? self : '',
+    includeParents ? parents : '',
+  ]
+    .filter(Boolean)
+    .join(',\n');
+  if (!targets) return '';
+  const inheritClip =
+    includeParents && includeSelf
+      ? `
 :has(> a) > a {
   border-radius: inherit;
 }
@@ -465,7 +469,11 @@ ${parents} {
 :has(> a) > a video,
 :has(> a) > a picture {
   border-radius: inherit;
-}`;
+}`
+      : '';
+  return `${targets} {
+  overflow: visible !important;
+}${inheritClip}`;
 }
 
 function effectsRules(effects, palette) {
@@ -494,7 +502,7 @@ function effectsRules(effects, palette) {
   }
 
   if (imageEffect === 'glow') {
-    rules.push(unclipGlow(EFFECTS_IMAGE_SELECTORS));
+    rules.push(unclipGlow(EFFECTS_IMAGE_SELECTORS, { includeSelf: false }));
     // Prefer box-shadow so Media section filter: !important does not wipe glow.
     // Logos are cropped tight: outset the box 3px. Transparent logos skip the
     // box (it would halo empty corners) and pulse a drop-shadow on the glyph.
@@ -503,6 +511,9 @@ function effectsRules(effects, palette) {
       .join(', ');
     const opaqueLogo = '[data-gmixer-media="logo"]:not([data-gmixer-alpha])';
     const alphaLogo = '[data-gmixer-media="logo"][data-gmixer-alpha]';
+    // Drop-shadow on the glyph is clipped by img overflow:clip; unclip only
+    // these, not every image (object-fit:cover crops need clip).
+    rules.push(`${alphaLogo} { overflow: visible !important; }`);
     if (normalized.glow.animated) {
       rules.push(boxGlowKeyframes('gmixer-glow-logo-box-pulse', mediaGlowColor, 3));
       rules.push(dropGlowKeyframes('gmixer-glow-logo-drop-pulse', mediaGlowColor));
@@ -631,7 +642,7 @@ ${targetSel} {
   }
 
   if (videoEffect === 'glow') {
-    rules.push(unclipGlow(EFFECTS_VIDEO_SELECTORS));
+    rules.push(unclipGlow(EFFECTS_VIDEO_SELECTORS, { includeSelf: false }));
     rules.push(
       normalized.glow.animated
         ? `${EFFECTS_VIDEO_SELECTORS} { animation: gmixer-glow-box-pulse 2.4s ease-in-out infinite; }`
@@ -1699,10 +1710,12 @@ export function injectStyle(css) {
   // Re-appending moves it to the end, keeping equal-specificity precedence
   // over the page's own stylesheets even if they load after us.
   parent.appendChild(styleEl);
-  // Keep the early sheet overlay until removeStyle() (native sampling /
+  // First-load dimmer is only for uncached origins. Real theme CSS replaces it.
+  removeProvisionalCanvas();
+  // Keep the remembered-sheet overlay until removeStyle() (native sampling /
   // disable). Static CSS does not paint classified sheets until
-  // `[data-gmixer-native-l]` exists; stripping early here left native-white
-  // landmarks showing behind already-themed article text.
+  // `[data-gmixer-native-l]` exists; stripping that overlay here left
+  // native-white landmarks showing behind already-themed article text.
   adoptThemeSheet(css);
   // Theme re-append would otherwise sit after the popover host reset and
   // restyle [popover]/[role="dialog"] chrome. Keep gMixer UI last.
@@ -1724,6 +1737,7 @@ export function syncAdoptedTheme() {
 export function removeStyle() {
   clearDocumentCanvasInline();
   removeEarlyCanvasStyle();
+  removeProvisionalCanvas();
   document.getElementById(STYLE_ELEMENT_ID)?.remove();
   if (adoptedSheet && typeof document !== 'undefined') {
     adoptIntoOpenShadows({ remove: true });

@@ -1,5 +1,6 @@
 // Generates a page-role palette from ONE base color, using standard
 // color-theory relationships. See product description.txt > FEATURE 1.
+import { toneCanvasLightness } from './tone-canvas.js';
 
 /** @param {string} hex e.g. "#7c3aed" */
 export function hexToHsl(hex) {
@@ -393,7 +394,7 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark') {
   // lime pick can still be lime (not a 25% gray-green).
   let backgroundLightness;
   if (scheme === 'monochrome') {
-    const tonalBase = mode === 'light' ? 96 : mode === 'gray' ? 42 : 8;
+    const tonalBase = toneCanvasLightness(mode);
     const neutralOffset = (base.l - 50) * 0.24;
     backgroundLightness = Math.max(
       mode === 'light' ? 80 : 3,

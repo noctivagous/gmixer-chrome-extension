@@ -196,7 +196,7 @@ describe('effectsRules category paint', () => {
     assert.doesNotMatch(css, /gmixer-glow-pulse-nav/);
   });
 
-  it('unclips image glow parents but not link/nav glow parents', () => {
+  it('unclips image glow parents but not the images themselves', () => {
     const imageCss = buildCss(
       withEffects({
         categories: { images: { effect: 'glow' } },
@@ -204,8 +204,18 @@ describe('effectsRules category paint', () => {
       }),
       null
     );
-    assert.match(imageCss, /:has\(> img\)/);
-    assert.match(imageCss, /overflow: visible !important/);
+    assert.match(imageCss, /:has\(> img\), :has\(> picture img\) \{\s*overflow: visible !important;/);
+    assert.doesNotMatch(imageCss, /(?:^|\n)\s*img, picture img,/);
+
+    const videoCss = buildCss(
+      withEffects({
+        categories: { videos: { effect: 'glow' } },
+        glow: { animated: true, color: '' },
+      }),
+      null
+    );
+    assert.match(videoCss, /:has\(> video\) \{\s*overflow: visible !important;/);
+    assert.doesNotMatch(videoCss, /(?:^|\n)\s*video \{\s*overflow: visible !important;/);
 
     const navCss = buildCss(
       withEffects({

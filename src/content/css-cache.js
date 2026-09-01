@@ -6,7 +6,7 @@
 // keep concurrent routes and same-host frames from replacing one another.
 
 const CACHE_PREFIX = 'gmixer_css:';
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 function hasSessionStorage() {
   return typeof chrome !== 'undefined' && !!chrome.storage?.session;

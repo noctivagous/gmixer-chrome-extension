@@ -6,7 +6,7 @@
 export const SCHEMA_VERSION = 1;
 
 /** @typedef {'analog' | 'complement' | 'splitComplement' | 'triadic' | 'tetradic' | 'monochrome'} ColorScheme */
-/** @typedef {'light' | 'gray' | 'dark'} ThemeMode */
+/** @typedef {'light' | 'light-gray' | 'gray' | 'dark-gray' | 'dark'} ThemeMode */
 /** @typedef {'theme' | 'tone' | 'media'} SettingsFocus */
 /** @typedef {'preserve' | 'harmonize' | 'restyle'} IdentityMode */
 /** @typedef {'side-panel' | 'walkthrough-modal'} PreferredShell */

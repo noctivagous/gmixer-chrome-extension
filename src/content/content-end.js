@@ -16,7 +16,7 @@ import { store } from '../state/store.js';
 import { buildCss, injectStyle, removeStyle, syncAdoptedTheme } from './style-injector.js';
 import { startMutationObserver } from './mutation-observer.js';
 import { clearCssCache } from './css-cache.js';
-import { clearEarlyCanvas, persistEarlyCanvasFromDocument } from './early-canvas.js';
+import { clearEarlyCanvas, persistEarlyCanvasFromDocument, persistGlobalToneCanvas } from './early-canvas.js';
 import { NavigationController } from './navigation-controller.js';
 import { initSettingsHost } from './settings-host.js';
 import {
@@ -76,6 +76,7 @@ async function main() {
       removeStyle();
       clearCssCache(hostname);
       clearEarlyCanvas();
+      persistGlobalToneCanvas(resolved);
       clearAdaptivePass();
       return;
     }
@@ -90,6 +91,7 @@ async function main() {
     const css = buildCss(resolved, sample);
     injectStyle(css);
     persistEarlyCanvasFromDocument();
+    persistGlobalToneCanvas(resolved);
     markThemePhase('gmixer:adaptive-pass-done');
     if (isTopFrame) {
       nav?.sync();
@@ -171,12 +173,14 @@ async function main() {
       if (resolved.enabled === false) {
         removeStyle();
         clearEarlyCanvas();
+        persistGlobalToneCanvas(resolved);
         clearAdaptivePass();
         stopLinkShimmer();
         return;
       }
       injectStyle(buildCss(resolved, sample));
       persistEarlyCanvasFromDocument();
+      persistGlobalToneCanvas(resolved);
     },
     // Covers routers that mutate the route without invoking the History APIs
     // patched below. Run a full pass after its new DOM has had a chance to

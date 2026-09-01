@@ -27,7 +27,7 @@ import {
 } from './css-cache.js';
 import { installEarlyMessageQueue } from '../messaging/early-message-queue.js';
 import { markThemePhase } from './adaptive-timing.js';
-import { clearEarlyCanvas, persistEarlyCanvasFromDocument } from './early-canvas.js';
+import { clearEarlyCanvas, persistEarlyCanvasFromDocument, persistGlobalToneCanvas } from './early-canvas.js';
 
 async function applyStaticTheme() {
   markThemePhase('gmixer:static-start');
@@ -55,6 +55,7 @@ async function applyStaticTheme() {
   if (resolved.enabled === false) {
     removeStyle();
     clearEarlyCanvas();
+    persistGlobalToneCanvas(resolved);
     await clearCssCache(hostname);
     return;
   }
@@ -70,6 +71,7 @@ async function applyStaticTheme() {
   if (cacheMatches && cached.css && initialScope === scope) {
     markThemePhase('gmixer:static-cache-hit');
     persistEarlyCanvasFromDocument();
+    persistGlobalToneCanvas(resolved);
     return;
   }
 
@@ -78,6 +80,7 @@ async function applyStaticTheme() {
   injectStyle(css);
   markThemePhase('gmixer:static-rebuild-paint');
   persistEarlyCanvasFromDocument();
+  persistGlobalToneCanvas(resolved);
   await writeCssCache(hostname, scope, resolved, css);
 }
 
