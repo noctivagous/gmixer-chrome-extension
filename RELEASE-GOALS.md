@@ -69,3 +69,6 @@ to be placed in sequence.
  
  
  
+[ ] 10. Add a View Transitions API animation to the accordion item open/close in the in-page Settings shell (`gmixer-settings.js:1039`, `.accordion` CSS at `gmixer-settings.js:464`, toggled via `_toggleExpanded()` at `gmixer-settings.js:1125-1128`). No View Transitions usage exists in the codebase today — this is a net-new addition, using `document.startViewTransition` (with a feature check / fallback for browsers without support) to animate the expand/collapse instead of the current instant mount/unmount (the ternary at lines 1088-1095 has no transition at all; `.section-panel`'s existing CSS transitions at lines 507-519 only cover `border-color`/`box-shadow`/`background`/`opacity`, not the content swap).
+  Note: `extension/settings-frame.js` and `extension/walkthrough-frame.js` are generated build output (via `node build.js` from `src/`), not separate sources — edit `src/settings/components/gmixer-settings.js` and rebuild, don't edit the `extension/` copies directly.
+  Unrelated secondary collapsible worth knowing about but out of scope here: native `<details>/<summary>` in `src/popup/components/image-filter-panel.js:225-287` ("Detailed Media Categories").
