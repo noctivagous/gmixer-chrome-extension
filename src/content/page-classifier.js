@@ -836,6 +836,7 @@ const OPAQUE_PAINT_TARGET_SELECTORS = [
   'body [role="textbox"]',
   'body [role="searchbox"]',
   'body [role="combobox"]',
+  'body [role="search"]',
   'body [role="button"]',
   'body [role="tab"]',
   'body [contenteditable="true"]',
@@ -1251,6 +1252,23 @@ export function seedPageSheets(root) {
 
   let budget = SHEET_WALK_BUDGET;
   /**
+   * Previous-route SPA shells stay in the tree as `display:none`. Recursing
+   * into them burns the walk budget before a later visible sibling (Google
+   * News `c-wiz` topic pages) is considered.
+   * @param {Element} el
+   */
+  function isCollapsedPaintShell(el) {
+    if (typeof getComputedStyle === 'function') {
+      const display = String(getComputedStyle(el).display || '');
+      if (display === 'none') return true;
+    }
+    if (typeof el.getBoundingClientRect === 'function') {
+      const rect = el.getBoundingClientRect();
+      if ((rect.width || 0) < 1 && (rect.height || 0) < 1) return true;
+    }
+    return false;
+  }
+  /**
    * @param {Element} el
    * @param {number} depth
    */
@@ -1263,6 +1281,7 @@ export function seedPageSheets(root) {
       const child = children[i];
       if (SHEET_SKIP_TAGS.has(child.tagName) || isOwnedByGmixer(child)) continue;
       budget -= 1;
+      if (isCollapsedPaintShell(child)) continue;
       consider(child);
       walk(child, depth + 1);
     }
@@ -1276,6 +1295,14 @@ export function seedPageSheets(root) {
     if (el.hasAttribute?.(ROLE_ATTR) || el.hasAttribute?.(MEDIA_ATTR)) continue;
     if (typeof el.getBoundingClientRect === 'function' && !isLargePaintedSheet(el)) continue;
     consider(el);
+  }
+  // Direct children again: custom-element page shells (`c-wiz`) are not in
+  // the extras selector, and a hidden previous sibling can exhaust DFS.
+  const kids = start.children;
+  if (kids) {
+    for (let i = 0; i < kids.length; i += 1) {
+      consider(kids[i]);
+    }
   }
 
   return stamped;

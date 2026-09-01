@@ -603,7 +603,7 @@ describe('buildCss page paint', () => {
     assert.match(css, /background-color: transparent !important;/);
     assert.match(
       css,
-      /:not\(\[role="menu"\]\):not\(\[role="listbox"\]\):not\(\[role="dialog"\]\):not\(\[popover\]\):not\(\[data-gmixer-role="surface"\]\)/
+      /:not\(\[role="search"\]\):not\(\[role="menu"\]\):not\(\[role="listbox"\]\):not\(\[role="dialog"\]\):not\(\[popover\]\):not\(\[data-gmixer-role="surface"\]\)/
     );
     assert.match(
       css,
@@ -614,6 +614,19 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(
       css,
       /:is\(li, div\):is\(:hover, :focus-within\) > :is\(ul, ol, div, menu, section\)/
+    );
+  });
+
+  it('paints [role="search"] landmarks as GUI field shells, including in header chrome', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    assert.match(css, /body \[role="search"\]\[data-gmixer-native-l\]/);
+    assert.match(
+      css,
+      /body \[role="search"\]\[data-gmixer-native-l\],[\s\S]*\[role="search"\]\[data-gmixer-native-l\] \{[\s\S]*background-color: var\(--gmixer-surface-gui\)/
+    );
+    assert.match(
+      css,
+      /body \[role="search"\] :is\(input, textarea, select, \[role="textbox"\], \[role="searchbox"\], \[role="combobox"\]\) \{[\s\S]*background-color: transparent !important;/
     );
   });
 

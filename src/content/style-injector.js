@@ -1071,7 +1071,7 @@ function roleCss(
       [role="searchbox"],
       [role="combobox"],
       [role="menuitem"]
-    ):not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not([data-gmixer-role="surface"]) {
+    ):not([role="search"]):not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not([data-gmixer-role="surface"]) {
       background-color: transparent !important;
     }
 
@@ -1131,6 +1131,20 @@ function roleCss(
     ${chromeHostScope} :is(button, [role="button"], [role="menuitem"]):active {
       background-color: color-mix(in srgb, var(--gmixer-text) 18%, transparent) !important;
       color: inherit !important;
+    }
+
+    /* Search landmarks are field shells, not flushed header chrome. The
+       visible pill is often the [role="search"] host; the combobox inside
+       stays transparent (direct child or nested). */
+    ${maybeOpaque(`body [role="search"]`)},
+    ${chromeHostScope} ${maybeOpaque(`[role="search"]`)} {
+      background-color: var(--gmixer-surface-gui) !important;
+      border-color: var(--gmixer-border) !important;
+      background-clip: padding-box !important;
+    }
+    body [role="search"] :is(input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"]) {
+      background-color: transparent !important;
+      border-color: transparent !important;
     }
 
     /* Many sites put the visible radius on a field shell and leave the

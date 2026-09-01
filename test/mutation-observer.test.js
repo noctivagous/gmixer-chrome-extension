@@ -196,7 +196,7 @@ describe('mutation-observer', () => {
     ]);
     await Promise.resolve();
     assert.equal(navigationCount, 1);
-    assert.equal(subtreeCount, 0);
+    assert.equal(subtreeCount, 1);
   });
 
   it('classifies hash-only URL changes as same-document subtree work', async () => {

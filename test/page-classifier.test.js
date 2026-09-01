@@ -876,6 +876,31 @@ describe('page-classifier', () => {
     }
   });
 
+  it('stamps native luminance on [role="search"] field shells', () => {
+    const search = {
+      tagName: 'FORM',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ role: 'search', class: 'masthead-search' }),
+      closest: () => null,
+    };
+    const root = {
+      querySelectorAll: (selector) =>
+        String(selector).includes('[role="search"]') ? [search] : [],
+    };
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => ({
+      backgroundColor: 'rgb(240, 244, 249)',
+      backgroundImage: 'none',
+    });
+    try {
+      assert.equal(stampOpaquePaintTargets(root), 1);
+      assert.ok(search.hasAttribute(NATIVE_L_ATTR));
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
   it('stamps faint native chip fills on role=tab', () => {
     const tab = {
       tagName: 'A',
@@ -1324,6 +1349,78 @@ describe('page-classifier', () => {
     try {
       assert.equal(seedPageSheets(body), 1);
       assert.equal(late.getAttribute(ROLE_ATTR), 'surface');
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds a later visible custom-element shell after a hidden previous-route sibling', () => {
+    const dummyKids = Array.from({ length: 1300 }, () => ({
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({ width: 10, height: 10 }),
+      _bg: 'rgba(0, 0, 0, 0)',
+    }));
+    const hidden = {
+      tagName: 'C-WIZ',
+      nodeType: 1,
+      children: dummyKids,
+      ...mockAttrs({ class: 'topic-prev' }),
+      getBoundingClientRect: () => ({ width: 0, height: 0 }),
+      _bg: 'rgb(246, 248, 252)',
+      _display: 'none',
+    };
+    const visible = {
+      tagName: 'C-WIZ',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ class: 'topic-now' }),
+      getBoundingClientRect: () => ({
+        width: 1200,
+        height: 700,
+        top: 80,
+        left: 0,
+        right: 1200,
+        bottom: 780,
+      }),
+      _bg: 'rgb(246, 248, 252)',
+      _display: 'block',
+    };
+    dummyKids.forEach((kid) => {
+      kid.parentElement = hidden;
+    });
+    hidden.parentElement = null;
+    visible.parentElement = null;
+    const body = {
+      tagName: 'BODY',
+      nodeType: 1,
+      children: [hidden, visible],
+      ...mockAttrs({}),
+      querySelectorAll: (selector) =>
+        String(selector).includes('div') ? dummyKids : [],
+      getBoundingClientRect: () => ({ width: 1200, height: 800 }),
+      _bg: 'rgb(9, 10, 12)',
+    };
+    hidden.parentElement = body;
+    visible.parentElement = body;
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.document = { body, documentElement: body };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+      display: node._display || 'block',
+    });
+    try {
+      assert.equal(seedPageSheets(body), 1);
+      assert.equal(visible.getAttribute(ROLE_ATTR), 'surface');
+      assert.equal(hidden.getAttribute(ROLE_ATTR), null);
     } finally {
       globalThis.document = previousDoc;
       globalThis.window = previousWin;

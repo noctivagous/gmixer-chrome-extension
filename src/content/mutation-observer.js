@@ -79,12 +79,11 @@ export function startMutationObserver(handlers) {
     pendingRoots = new Set();
     cascadeThreat = false;
 
-    // Path/search change: skip incremental classify so we don't paint the
-    // new DOM with the previous route's identity sample. Hash-only swaps
-    // keep the same document — classify the added roots. (URL shape, not host.)
+    // Path/search change: full resample (identity) is scheduled separately.
+    // Still classify the added roots — skipping them leaves unstamped opaque
+    // shells (Google News topic `c-wiz`) white until a later lucky mutation.
     if (urlChanged && isDocumentNavigation(previousUrl, currentUrl)) {
       onNavigation();
-      return;
     }
     if (roots.length) onSubtree(roots);
     if (threatened) onCascadeThreat();
