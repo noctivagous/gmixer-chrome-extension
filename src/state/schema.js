@@ -120,6 +120,8 @@ export function createDefaultState() {
           articleImages: 'accent-tint',
           images: 'monochrome',
           bgImages: 'monochrome',
+          covers: 'grayscale',
+          avatars: 'grayscale',
           videos: 'link-wash',
           videoPlayback: 'link-wash',
         },

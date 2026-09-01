@@ -153,8 +153,9 @@ const SURFACE_SKIP_TAGS = new Set([
   'VIDEO',
 ]);
 
-const MEDIA_TAGS = new Set(['IMG', 'VIDEO']);
-const MEDIA_CHROME_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS']);
+// IMAGE = SVG <image> (Facebook/X circular profile masks).
+const MEDIA_TAGS = new Set(['IMG', 'VIDEO', 'IMAGE']);
+const MEDIA_CHROME_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS', 'IMAGE']);
 /** Class/id tokens that mark poster frames and video listing thumbs. */
 const VIDEO_THUMB_TOKENS = [
   'video',
@@ -361,10 +362,11 @@ function hasOverlayFill(style) {
 
 function firstMediaBox(node) {
   if (!node || node.nodeType !== 1) return null;
-  if (MEDIA_CHROME_TAGS.has(node.tagName)) {
+  const tag = (node.tagName || '').toUpperCase();
+  if (MEDIA_CHROME_TAGS.has(tag) || tag === 'SVG') {
     return typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
   }
-  const inner = node.querySelector?.('img, video, picture, canvas');
+  const inner = node.querySelector?.('img, video, picture, canvas, image, svg');
   if (inner && typeof inner.getBoundingClientRect === 'function') {
     return inner.getBoundingClientRect();
   }
@@ -422,7 +424,18 @@ function isEdgeChromeOverMedia(overlayRect, mediaRect) {
   const oh = overlayRect.height || 0;
   const mw = mediaRect.width || 0;
   const mh = mediaRect.height || 0;
+  const oa = ow * oh;
+  if (oa < 1) return false;
+  // Badge/control strips sit mostly on the poster. Flow sheets that only
+  // clip a cover's overflow (FB profile name/followers row) must paint.
+  if ((overlap.w * overlap.h) / oa < 0.55) return false;
   return oh < mh * 0.4 || ow < mw * 0.4;
+}
+
+function isPositionedPaintLayer(el) {
+  if (!el || typeof getComputedStyle !== 'function') return false;
+  const pos = String(getComputedStyle(el).position || '');
+  return pos === 'absolute' || pos === 'fixed' || pos === 'sticky';
 }
 
 /**
@@ -459,11 +472,16 @@ function coversOrStripsMedia(el, rect) {
   }
   const parent = el.parentElement;
   if (!parent) return false;
+  // Absolute badges over a poster are chrome. Static flow rows under a tall
+  // cover (profile identity / followers) are sheets and must stay paintable.
+  const positioned = isPositionedPaintLayer(el);
   const kids = parent.children || parent._children || [];
   for (const sib of kids) {
     if (sib === el) continue;
     const media = firstMediaBox(sib);
-    if (boxesCover(rect, media) || isEdgeChromeOverMedia(rect, media)) return true;
+    if (!media) continue;
+    if (boxesCover(rect, media)) return true;
+    if (positioned && isEdgeChromeOverMedia(rect, media)) return true;
   }
   return false;
 }
@@ -478,6 +496,27 @@ function isMediaChromeOverlay(el, style, rect) {
   const pointerEvents = String(style.pointerEvents || '').toLowerCase();
   if (pointerEvents === 'none') return true;
   return coversOrStripsMedia(el, rect);
+}
+
+/**
+ * Facebook/X profile faces are often SVG <image> under a circular mask, not <img>.
+ * @param {Element} el
+ * @param {Element|null|undefined} svgHost
+ */
+function looksLikeSvgAvatar(el, svgHost) {
+  if (!el || typeof el.getBoundingClientRect !== 'function') return false;
+  const rect = el.getBoundingClientRect();
+  const w = rect.width || 0;
+  const h = rect.height || 0;
+  if (w < 40 || h < 40 || w > 320 || h > 320) return false;
+  if (Math.abs(w - h) / Math.max(w, h) > 0.25) return false;
+  const svg = svgHost || el.closest?.('svg');
+  if (!svg) return false;
+  const role = (svg.getAttribute?.('role') || '').toLowerCase();
+  const masked =
+    !!el.closest?.('g[mask]') ||
+    !!svg.querySelector?.('mask circle, mask > circle, mask');
+  return role === 'img' || masked;
 }
 
 export function classifyElement(el) {
@@ -529,7 +568,9 @@ export function classifyElement(el) {
     }
   }
 
-  if (MEDIA_TAGS.has(tag)) {
+  // SVG <image> uses lowercase tagName in HTML documents.
+  const mediaKind = (tag || '').toUpperCase();
+  if (MEDIA_TAGS.has(mediaKind)) {
     // Video cues often live on the wrapping link/card (CNN vertical-video
     // links, Rumble thumb shells), not on the <img> class itself.
     const parentTokens = tokensFor(el.parentElement);
@@ -541,21 +582,27 @@ export function classifyElement(el) {
     const cardTokens = tokensFor(card);
     const ancestor = el.closest?.('article, [role="article"], .article, .post, .entry-content');
     const ancestorTokens = tokensFor(ancestor);
+    // Facebook/X circular faces: cues live on the svg[role=img] / button host.
+    const svgHost = mediaKind === 'IMAGE' ? el.closest?.('svg') : null;
+    const svgTokens = tokensFor(svgHost);
+    const svgControl = svgHost?.closest?.('button, [role="button"], a[href], [role="link"]');
     const allTokens = [
       ...tokens,
       ...parentTokens,
       ...linkTokens,
       ...cardTokens,
       ...ancestorTokens,
+      ...svgTokens,
+      ...tokensFor(svgControl),
     ];
     const href = link?.getAttribute?.('href') || '';
     const hrefIsVideo = VIDEO_HREF_RE.test(href);
     const namedVideoThumb = hasToken(allTokens, VIDEO_THUMB_TOKENS);
     const reasons = [];
     let confidence = 0;
-    let videoThumbCue = tag === 'VIDEO';
+    let videoThumbCue = mediaKind === 'VIDEO';
 
-    if (tag === 'VIDEO') {
+    if (mediaKind === 'VIDEO') {
       confidence = 0.96;
       reasons.push('video element');
     }
@@ -569,11 +616,44 @@ export function classifyElement(el) {
       reasons.push('video URL shape');
       videoThumbCue = true;
     }
-    if (tag === 'IMG' && ancestor) {
+    if (mediaKind === 'IMG' && ancestor) {
       confidence = Math.max(confidence, 0.86);
       reasons.push('image nested in article');
     }
-    if (hasToken(allTokens, ['avatar', 'profile', 'author', 'user'])) {
+    // Covers before avatars: "View profile cover photo" must not become avatar
+    // just because the label contains "profile".
+    const coverCue =
+      hasToken(allTokens, ['cover', 'banner', 'masthead', 'jumbotron']) ||
+      (hasToken(allTokens, ['header']) &&
+        hasToken(allTokens, ['photo', 'image', 'img', 'media', 'picture']));
+    if (coverCue && mediaKind === 'IMG') {
+      confidence = Math.max(confidence, 0.9);
+      reasons.push('cover/banner/header naming cue');
+      const value = { media: 'cover-image', confidence, reasons };
+      classificationCache.set(el, { key, value });
+      return value;
+    }
+    if (mediaKind === 'IMAGE' && looksLikeSvgAvatar(el, svgHost)) {
+      confidence = Math.max(confidence, 0.9);
+      reasons.push('circular svg profile image');
+      const value = { media: 'avatar', confidence, reasons };
+      classificationCache.set(el, { key, value });
+      return value;
+    }
+    if (hasToken(allTokens, ['avatar', 'author', 'user', 'profile'])) {
+      // Large landscape photos with a weak "profile" cue are covers, not faces.
+      const rect =
+        typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+      const w = rect?.width || 0;
+      const h = rect?.height || 0;
+      const landscapeCover = w >= 400 && h > 0 && w / h >= 1.5;
+      if (landscapeCover && !hasToken(allTokens, ['avatar', 'author', 'user'])) {
+        confidence = Math.max(confidence, 0.88);
+        reasons.push('large landscape profile media → cover');
+        const value = { media: 'cover-image', confidence, reasons };
+        classificationCache.set(el, { key, value });
+        return value;
+      }
       confidence = Math.max(confidence, 0.9);
       reasons.push('avatar/profile naming cue');
       const value = { media: 'avatar', confidence, reasons };
@@ -587,17 +667,18 @@ export function classifyElement(el) {
       classificationCache.set(el, { key, value });
       return value;
     }
-    if (confidence >= CLASSIFIER_CONFIDENCE_THRESHOLD) {
+    if (confidence >= CLASSIFIER_CONFIDENCE_THRESHOLD && mediaKind !== 'IMAGE') {
       // Video cues win over article nesting — otherwise every in-article
       // poster becomes article-image and picks up the Images filter.
-      const media = videoThumbCue || tag === 'VIDEO' ? 'video-thumbnail' : 'article-image';
+      // SVG <image> without cues stays unclassified (icons/decor).
+      const media = videoThumbCue || mediaKind === 'VIDEO' ? 'video-thumbnail' : 'article-image';
       const value = { media, confidence, reasons };
       classificationCache.set(el, { key, value });
       return value;
     }
   }
 
-  if (tag !== 'IMG' && tag !== 'VIDEO' && !PHRASING_TAGS.has(tag)) {
+  if (tag !== 'IMG' && tag !== 'VIDEO' && tag !== 'image' && tag !== 'IMAGE' && !PHRASING_TAGS.has(tag)) {
     if (typeof getComputedStyle === 'function') {
       const style = getComputedStyle(el);
       const bgImage = style.backgroundImage || '';
@@ -1229,11 +1310,12 @@ function isLargePaintedSheet(el) {
   const inShadow = isShadowRoot(el.getRootNode?.());
   const minBarHeight = inShadow ? 24 : 32;
   // Inbox/list rows and shadow ad bars are wide and short. Size-only.
+  // Profile identity rows under covers are often ~120–160px tall.
   if (
     vw > 0 &&
     rect.width >= vw * 0.6 &&
     rect.height >= minBarHeight &&
-    rect.height <= 120 &&
+    rect.height <= 168 &&
     rect.width * rect.height >= 20000
   ) {
     return true;

@@ -1222,6 +1222,8 @@ export class GmixerWalkthrough extends StoreBoundElement {
               articleImages: 'accent-tint',
               images: 'monochrome',
               bgImages: 'monochrome',
+              covers: 'grayscale',
+              avatars: 'grayscale',
               videos: 'link-wash',
               videoPlayback: 'link-wash',
             },
@@ -1241,7 +1243,7 @@ export class GmixerWalkthrough extends StoreBoundElement {
               h5: { fontId: 'outfit', customFontId: null },
               h6: { fontId: 'outfit', customFontId: null },
             },
-            paragraph: { fontId: 'dm-sans', customFontId: null },
+            paragraph: { fontId: 'source-sans-3', customFontId: null },
             captions: { fontId: 'tippa', customFontId: null },
           },
         });

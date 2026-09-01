@@ -122,6 +122,74 @@ describe('page-classifier', () => {
     assert.equal(classified?.media, 'video-thumbnail');
   });
 
+  it('stamps profile cover photos as cover-image, not avatar', () => {
+    const img = el('img', { class: 'cover-photo' });
+    const link = el(
+      'a',
+      {
+        href: 'https://www.facebook.com/photo/?fbid=1',
+        'aria-label': 'View profile cover photo',
+      },
+      [img]
+    );
+    img.parentElement = link;
+    img.closest = (selector) => {
+      if (selector.startsWith('a[href]') || selector === 'a[href]') return link;
+      if (selector.includes('article')) return null;
+      return null;
+    };
+    img.getBoundingClientRect = () => ({
+      width: 940,
+      height: 358,
+      top: 50,
+      left: 100,
+      right: 1040,
+      bottom: 408,
+    });
+    const classified = classifyElement(img);
+    assert.equal(classified?.media, 'cover-image');
+    assert.ok(classified.reasons.some((r) => /cover|banner|header/i.test(r)));
+  });
+
+  it('still stamps small profile faces as avatar', () => {
+    const img = el('img', { class: 'profile-avatar' });
+    img.getBoundingClientRect = () => ({
+      width: 168,
+      height: 168,
+      top: 400,
+      left: 40,
+      right: 208,
+      bottom: 568,
+    });
+    img.closest = () => null;
+    const classified = classifyElement(img);
+    assert.equal(classified?.media, 'avatar');
+  });
+
+  it('stamps circular SVG profile images as avatar', () => {
+    const image = el('image');
+    image.tagName = 'image';
+    const svg = el('svg', { role: 'img', 'aria-label': 'iJustine' }, [image]);
+    image.parentElement = svg;
+    image.closest = (selector) => {
+      if (selector === 'svg') return svg;
+      if (selector === 'g[mask]') return image;
+      return null;
+    };
+    image.getBoundingClientRect = () => ({
+      width: 152,
+      height: 152,
+      top: 350,
+      left: 40,
+      right: 192,
+      bottom: 502,
+    });
+    svg.querySelector = (sel) => (String(sel).includes('mask') ? el('mask') : null);
+    const classified = classifyElement(image);
+    assert.equal(classified?.media, 'avatar');
+    assert.ok(classified.reasons.some((r) => /svg profile/i.test(r)));
+  });
+
   it('stamps semantic article/main roles and article-image media', () => {
     const img = el('img');
     const article = el('article', {}, [img]);
@@ -1227,6 +1295,117 @@ describe('page-classifier', () => {
       assert.equal(sponsor.getAttribute(ROLE_ATTR), 'surface');
       assert.equal(podcasts.getAttribute(ROLE_ATTR), 'surface');
       assert.equal(stage.getAttribute(ROLE_ATTR), null);
+    } finally {
+      globalThis.document = previousDoc;
+      globalThis.window = previousWin;
+      globalThis.getComputedStyle = previousCs;
+    }
+  });
+
+  it('seeds profile identity rows that sit under a tall cover photo', () => {
+    // Facebook: full-bleed cover sibling + name/followers strip (relative, ~131px).
+    // Must not be rejected as edge chrome over the cover's overflow box.
+    const cover = {
+      tagName: 'IMG',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ 'data-gmixer-media': 'cover-image' }),
+      getBoundingClientRect: () => ({
+        width: 1905,
+        height: 725,
+        top: 56,
+        left: 0,
+        right: 1905,
+        bottom: 781,
+      }),
+    };
+    const coverWrap = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [cover],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 1905,
+        height: 348,
+        top: 56,
+        left: 0,
+        right: 1905,
+        bottom: 404,
+      }),
+      querySelector: (selector) => (String(selector).includes('img') ? cover : null),
+      _bg: 'rgba(0, 0, 0, 0)',
+    };
+    cover.parentElement = coverWrap;
+
+    const avatar = {
+      tagName: 'image',
+      nodeType: 1,
+      children: [],
+      ...mockAttrs({ 'data-gmixer-media': 'avatar' }),
+      getBoundingClientRect: () => ({
+        width: 152,
+        height: 152,
+        top: 354,
+        left: 520,
+        right: 672,
+        bottom: 506,
+      }),
+    };
+    const identity = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [avatar],
+      ...mockAttrs({ class: 'profile-identity' }),
+      getBoundingClientRect: () => ({
+        width: 1905,
+        height: 131,
+        top: 404,
+        left: 0,
+        right: 1905,
+        bottom: 535,
+      }),
+      querySelector: (selector) => (String(selector).includes('image') ? avatar : null),
+      _bg: 'rgb(255, 255, 255)',
+      _position: 'relative',
+    };
+    avatar.parentElement = identity;
+
+    const host = {
+      tagName: 'DIV',
+      nodeType: 1,
+      children: [coverWrap, identity],
+      ...mockAttrs({}),
+      getBoundingClientRect: () => ({
+        width: 1905,
+        height: 480,
+        top: 56,
+        left: 0,
+        right: 1905,
+        bottom: 536,
+      }),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      _bg: 'rgba(0, 0, 0, 0)',
+    };
+    coverWrap.parentElement = host;
+    identity.parentElement = host;
+
+    const previousDoc = globalThis.document;
+    const previousWin = globalThis.window;
+    const previousCs = globalThis.getComputedStyle;
+    globalThis.window = { innerWidth: 1905, innerHeight: 900 };
+    globalThis.document = { body: host, documentElement: host };
+    globalThis.getComputedStyle = (node) => ({
+      backgroundColor: node._bg || 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+      position: node._position || 'static',
+      display: 'block',
+    });
+
+    try {
+      const stamped = seedPageSheets(host);
+      assert.ok(stamped >= 1);
+      assert.equal(identity.getAttribute(ROLE_ATTR), 'surface');
     } finally {
       globalThis.document = previousDoc;
       globalThis.window = previousWin;

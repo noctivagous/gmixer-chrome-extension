@@ -15,6 +15,7 @@ import { effectiveCustomizationLevel } from '../../settings/customization-level.
 const MEDIA_ROLES = [
   ['articleImage', 'Article images'],
   ['videoThumbnail', 'Video thumbnails'],
+  ['coverImage', 'Covers / banners / headers'],
   ['avatar', 'Avatars'],
   ['logo', 'Logos'],
   ['ad', 'Ads'],

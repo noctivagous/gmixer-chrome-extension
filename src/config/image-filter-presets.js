@@ -39,7 +39,7 @@ export const PALETTE_FILTER_PRESETS = new Set([
 
 /**
  * @typedef {string} ImageFilterPresetId
- * @typedef {'articleImages' | 'images' | 'bgImages' | 'videos' | 'videoPlayback'} MediaFilterCategoryId
+ * @typedef {'articleImages' | 'images' | 'bgImages' | 'covers' | 'avatars' | 'videos' | 'videoPlayback'} MediaFilterCategoryId
  * @typedef {Record<MediaFilterCategoryId, ImageFilterPresetId>} MediaFilterCategories
  * @typedef {{
  *   enabled: boolean,
@@ -110,15 +110,19 @@ export const MEDIA_FILTER_CATEGORIES = [
   { id: 'articleImages', label: 'article images' },
   { id: 'images', label: 'images' },
   { id: 'bgImages', label: 'bg images' },
+  { id: 'covers', label: 'covers / banners / headers' },
+  { id: 'avatars', label: 'avatars' },
   { id: 'videos', label: 'videos' },
   { id: 'videoPlayback', label: 'video during playback' },
 ];
 
-/** Walkthrough / example defaults for the five primary rows. */
+/** Walkthrough / example defaults for the primary rows. */
 export const DEFAULT_MEDIA_FILTER_CATEGORIES = Object.freeze({
   articleImages: /** @type {ImageFilterPresetId} */ ('accent-tint'),
   images: /** @type {ImageFilterPresetId} */ ('monochrome'),
   bgImages: /** @type {ImageFilterPresetId} */ ('monochrome'),
+  covers: /** @type {ImageFilterPresetId} */ ('grayscale'),
+  avatars: /** @type {ImageFilterPresetId} */ ('grayscale'),
   videos: /** @type {ImageFilterPresetId} */ ('link-wash'),
   videoPlayback: /** @type {ImageFilterPresetId} */ ('link-wash'),
 });
@@ -163,6 +167,8 @@ export function createEmptyMediaFilterCategories() {
     articleImages: 'none',
     images: 'none',
     bgImages: 'none',
+    covers: 'none',
+    avatars: 'none',
     videos: 'none',
     videoPlayback: 'none',
   };
@@ -175,6 +181,8 @@ export function createEmptyMediaFilterCategories() {
  */
 export function primaryCategoryForMediaRole(role) {
   if (role === 'articleImage' || role === 'hero') return 'articleImages';
+  if (role === 'coverImage' || role === 'cover-image') return 'covers';
+  if (role === 'avatar') return 'avatars';
   if (role === 'videoThumbnail') return 'videos';
   return 'images';
 }
@@ -220,6 +228,8 @@ export function migrateLegacyImageFilterCategories(raw) {
     articleImages: onImages ? preset : 'none',
     images: onImages ? preset : 'none',
     bgImages: onBg ? preset : 'none',
+    covers: onImages ? preset : 'none',
+    avatars: onImages ? preset : 'none',
     videos: onImages ? preset : 'none',
     videoPlayback: onImages ? preset : 'none',
   };
@@ -275,6 +285,9 @@ export function imageFilterAppliesToBackgrounds(imageFilter) {
 export function imageFilterAppliesToReplacedMedia(imageFilter) {
   const normalized = normalizeImageFilter(imageFilter);
   if (!normalized.enabled) return false;
-  const { articleImages, images, videos, videoPlayback } = normalized.categories;
-  return [articleImages, images, videos, videoPlayback].some((preset) => preset !== 'none');
+  const { articleImages, images, covers, avatars, videos, videoPlayback } =
+    normalized.categories;
+  return [articleImages, images, covers, avatars, videos, videoPlayback].some(
+    (preset) => preset !== 'none'
+  );
 }

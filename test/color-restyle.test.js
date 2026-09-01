@@ -723,7 +723,7 @@ describe('buildCss page paint', () => {
       logo: { filter: 'none' },
     };
     const css = buildCss(global, null);
-    assert.match(css, /\[data-gmixer-media="videoThumbnail"\]/);
+    assert.match(css, /\[data-gmixer-media="video-thumbnail"\]/);
     assert.match(css, /outline: 2px solid var\(--gmixer-accent\)/);
     assert.match(css, /\[data-gmixer-media="logo"\][\s\S]*filter: none !important/);
     assert.match(css, /:hover \{ filter: none !important; \}/);

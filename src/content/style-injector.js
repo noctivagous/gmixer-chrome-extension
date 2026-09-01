@@ -203,11 +203,13 @@ function imageFilterRule(filterRaw, palette, options = {}) {
 
   const articleCss = cssFor(cats.articleImages);
   const imagesCss = cssFor(cats.images);
+  const coversCss = cssFor(cats.covers);
+  const avatarsCss = cssFor(cats.avatars);
   const videosCss = cssFor(cats.videos);
   const playbackCss = cssFor(cats.videoPlayback);
   const bgPreset = resolveImageFilterPreset(cats.bgImages, colorOn);
 
-  // Specific before general: article images override unclassified images.
+  // Specific before general: article / cover / avatar override unclassified images.
   if (articleCss && articleCss !== 'none') {
     rules.push(`[data-gmixer-media="article-image"],
 picture:has([data-gmixer-media="article-image"]) img {
@@ -215,11 +217,27 @@ picture:has([data-gmixer-media="article-image"]) img {
 }`);
   }
 
+  if (coversCss && coversCss !== 'none') {
+    rules.push(`[data-gmixer-media="cover-image"],
+picture:has([data-gmixer-media="cover-image"]) img {
+  filter: ${coversCss} !important;
+}`);
+  }
+
+  if (avatarsCss && avatarsCss !== 'none') {
+    // Include SVG <image> (circular profile masks on Facebook/X).
+    rules.push(`[data-gmixer-media="avatar"],
+picture:has([data-gmixer-media="avatar"]) img,
+svg image[data-gmixer-media="avatar"],
+image[data-gmixer-media="avatar"] {
+  filter: ${avatarsCss} !important;
+}`);
+  }
+
   if (imagesCss && imagesCss !== 'none') {
-    // Exclude stamped video thumbs / avatars so the Images row cannot beat
-    // the Videos row on specificity (img:not(...) is stronger than a bare attr).
-    rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]),
-picture:not(:has([data-gmixer-media="article-image"])):not(:has([data-gmixer-media="video-thumbnail"])) img:not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]) {
+    // Exclude stamped roles so primary Images cannot beat more specific rows.
+    rules.push(`img:not([data-gmixer-media="article-image"]):not([data-gmixer-media="cover-image"]):not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]),
+picture:not(:has([data-gmixer-media="article-image"])):not(:has([data-gmixer-media="cover-image"])):not(:has([data-gmixer-media="video-thumbnail"])) img:not([data-gmixer-media="logo"]):not([data-gmixer-media="video-thumbnail"]):not([data-gmixer-media="avatar"]):not([data-gmixer-media="cover-image"]) {
   filter: ${imagesCss} !important;
 }`);
   }
@@ -243,12 +261,19 @@ picture:has([data-gmixer-media="video-thumbnail"]) img,
 }`);
   }
 
-  if (filter.revealOnHover && (articleCss || imagesCss || videosCss || playbackCss)) {
+  if (
+    filter.revealOnHover &&
+    (articleCss || imagesCss || coversCss || avatarsCss || videosCss || playbackCss)
+  ) {
     rules.push(`img:hover, video:hover,
 picture:hover img, picture:hover video,
 a:hover img, a:hover video,
 figure:hover img, figure:hover video,
+svg image[data-gmixer-media="avatar"]:hover,
+image[data-gmixer-media="avatar"]:hover,
 [data-gmixer-media="article-image"]:hover,
+[data-gmixer-media="cover-image"]:hover,
+[data-gmixer-media="avatar"]:hover,
 [data-gmixer-media="video-thumbnail"]:hover {
   filter: none !important;
 }`);
@@ -288,6 +313,16 @@ figure:hover img, figure:hover video,
   return rules.filter(Boolean).join('\n');
 }
 
+/** Classifier stamps kebab ids; theme pack / Level 3 keys are camelCase. */
+function mediaAttrForRole(role) {
+  const map = {
+    articleImage: 'article-image',
+    videoThumbnail: 'video-thumbnail',
+    coverImage: 'cover-image',
+  };
+  return map[role] || role;
+}
+
 function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHover, options = {}) {
   const packMedia = getThemePackById(activeThemePackId)?.media;
   if (!packMedia) return '';
@@ -300,7 +335,8 @@ function themeMediaRule(activeThemePackId, mediaOverrides, palette, revealOnHove
   return Object.entries(media)
     .filter(([role]) => role !== 'defaultFilter')
     .map(([role, style]) => {
-      const selector = `[data-gmixer-media="${role}"], [data-gmixer-role="${role}"]`;
+      const attr = mediaAttrForRole(role);
+      const selector = `[data-gmixer-media="${attr}"], [data-gmixer-role="${role}"]`;
       const filterSelector = selector
         .split(',')
         .map((part) => `${part.trim()}:not([${BACKGROUND_IMAGE_ATTR}])`)

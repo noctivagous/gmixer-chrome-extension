@@ -17,10 +17,10 @@ import { createDefaultState } from '../src/state/schema.js';
 import { effectiveCustomizationLevel } from '../src/settings/customization-level.js';
 
 describe('image-filter categories', () => {
-  it('lists the five primary Chroming Media rows', () => {
+  it('lists the primary Chroming Media rows including covers and avatars', () => {
     assert.deepEqual(
       MEDIA_FILTER_CATEGORIES.map((category) => category.id),
-      ['articleImages', 'images', 'bgImages', 'videos', 'videoPlayback']
+      ['articleImages', 'images', 'bgImages', 'covers', 'avatars', 'videos', 'videoPlayback']
     );
   });
 
@@ -86,12 +86,15 @@ describe('image-filter categories', () => {
       articleImages: 'accent-tint',
       images: 'monochrome',
       bgImages: 'sepia',
+      covers: 'grayscale',
+      avatars: 'grayscale',
       videos: 'link-wash',
       videoPlayback: 'invert',
     };
     assert.equal(resolveAutoMediaRoleFilter('articleImage', cats), 'accent-tint');
     assert.equal(resolveAutoMediaRoleFilter('videoThumbnail', cats), 'link-wash');
-    assert.equal(resolveAutoMediaRoleFilter('avatar', cats), 'monochrome');
+    assert.equal(resolveAutoMediaRoleFilter('coverImage', cats), 'grayscale');
+    assert.equal(resolveAutoMediaRoleFilter('avatar', cats), 'grayscale');
   });
 
   it('detects background chroming from categories', () => {
@@ -123,15 +126,19 @@ describe('chroming media page paint', () => {
         articleImages: 'accent-tint',
         images: 'monochrome',
         bgImages: 'monochrome',
+        covers: 'grayscale',
+        avatars: 'grayscale',
         videos: 'link-wash',
         videoPlayback: 'sepia',
       },
     };
     const css = buildCss(global, null);
     assert.match(css, /data-gmixer-media="article-image"/);
+    assert.match(css, /data-gmixer-media="cover-image"/);
+    assert.match(css, /data-gmixer-media="avatar"/);
     assert.match(
       css,
-      /img:not\(\[data-gmixer-media="article-image"\]\):not\(\[data-gmixer-media="logo"\]\):not\(\[data-gmixer-media="video-thumbnail"\]\)/
+      /img:not\(\[data-gmixer-media="article-image"\]\):not\(\[data-gmixer-media="cover-image"\]\):not\(\[data-gmixer-media="logo"\]\):not\(\[data-gmixer-media="video-thumbnail"\]\):not\(\[data-gmixer-media="avatar"\]\)/
     );
     assert.match(css, /img\[data-gmixer-media="video-thumbnail"\]/);
     assert.match(css, /data-gmixer-video-state="paused"/);

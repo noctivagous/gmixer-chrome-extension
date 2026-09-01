@@ -40,6 +40,7 @@
  * @property {string} defaultFilter
  * @property {ThemeMediaStyle} articleImage
  * @property {ThemeMediaStyle} videoThumbnail
+ * @property {ThemeMediaStyle} coverImage
  * @property {ThemeMediaStyle} avatar
  * @property {ThemeMediaStyle} logo
  * @property {ThemeMediaStyle} ad
@@ -74,6 +75,7 @@ function mediaSet(defaultFilter = 'none') {
     defaultFilter,
     articleImage: { filter: categoryFilter, outline: 'none' },
     videoThumbnail: { filter: categoryFilter, outline: 'accent' },
+    coverImage: { filter: categoryFilter, outline: 'none' },
     // Noir explicitly protects identity media; other packs inherit the
     // global image filter through `auto`.
     avatar: { filter: defaultFilter === 'none' ? 'auto' : 'none', outline: 'none' },
