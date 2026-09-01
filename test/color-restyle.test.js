@@ -60,6 +60,25 @@ describe('color-theory', () => {
     assert.ok(hexToHsl(surface).l > hexToHsl(bg).l);
   });
 
+  it('keeps consecutive surface roles distinct at the lightness boundary', () => {
+    for (const [background, isDark] of [
+      ['#e0e0e0', true],
+      ['#1f1f1f', false],
+    ]) {
+      const secondary = deriveSurface(background, isDark);
+      const gui = deriveSurface(secondary, isDark);
+      const containers = deriveSurface(gui, isDark);
+      assert.notEqual(gui, secondary);
+      assert.notEqual(containers, gui);
+    }
+  });
+
+  it('uses the supplied tonal direction when deriving a surface', () => {
+    const background = '#333333';
+    assert.ok(hexToHsl(deriveSurface(background, true)).l > hexToHsl(background).l);
+    assert.ok(hexToHsl(deriveSurface(background, false)).l < hexToHsl(background).l);
+  });
+
   it('supports light, gray, and dark tonal modes', () => {
     const light = buildPalette('#7c3aed', 'monochrome', 'light');
     const gray = buildPalette('#7c3aed', 'monochrome', 'gray');

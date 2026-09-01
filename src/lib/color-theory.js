@@ -311,14 +311,27 @@ export function getColorScale(hex, type, steps = 5) {
  * Elevated surface color derived from a lower visual layer. Used first for
  * GUI controls, then once more for cards and other larger containers.
  * Keeps hue with the page bg so themed shells do not read as leftover slabs.
+ * At the lightness boundary, shifts hue/saturation instead so repeated
+ * elevation never collapses adjacent roles onto the same color.
+ *
+ * @param {string} backgroundHex
+ * @param {boolean} [isDark] Whether elevated layers should be lighter.
  */
-export function deriveSurface(backgroundHex) {
+export function deriveSurface(backgroundHex, isDark = hexToHsl(backgroundHex).l < 50) {
   const { h, s, l } = hexToHsl(backgroundHex);
-  const surfaceIsDark = l < 50;
+  const surfaceIsDark = Boolean(isDark);
+  const targetLightness = surfaceIsDark ? Math.min(l + 10, 88) : Math.max(l - 8, 12);
+  const candidate = hslToHex({ h, s, l: targetLightness });
+  const isClamped = candidate.toLowerCase() === backgroundHex.toLowerCase();
+
+  if (!isClamped) return candidate;
+
   return hslToHex({
-    h,
-    s,
-    l: surfaceIsDark ? Math.min(l + 10, 88) : Math.max(l - 8, 12),
+    // Hue shifts are ineffective on neutral colors, so also ensure a small
+    // saturation change. A hue shift keeps highly saturated colors distinct.
+    h: isClamped ? (h + (surfaceIsDark ? 8 : -8) + 360) % 360 : h,
+    s: isClamped ? (s < 90 ? Math.min(s + 10, 100) : Math.max(s - 10, 0)) : s,
+    l: targetLightness,
   });
 }
 
