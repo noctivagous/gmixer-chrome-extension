@@ -917,13 +917,23 @@ export function blendWithPageSample(
     navLink = ensureReadableColor(navLink || link, background, 4.5);
     focus = ensureReadableColor(focus || accent, derivedGui, 3);
   }
+  const resolvedBackgroundSecondary = backgroundSecondary || deriveSurface(background, isDark);
+  const textOnBackgroundSecondary = ensureReadableColor(text, resolvedBackgroundSecondary, 4.5);
+  const textOnSurfaceGui = ensureReadableColor(text, derivedGui, 4.5);
+  const textOnSurfaceContainers = ensureReadableColor(text, derivedContainers, 4.5);
+  const textOnGuiButton = ensureReadableColor(text, derivedControls.guiButton, 4.5);
+  const textOnGuiInput = ensureReadableColor(text, derivedControls.guiInput, 4.5);
+  const textOnGuiTextarea = ensureReadableColor(text, derivedControls.guiTextarea, 4.5);
+  const textOnSurface0 = ensureReadableColor(text, surfaceLadder[0], 4.5);
+  const textOnSurface1 = ensureReadableColor(text, surfaceLadder[1], 4.5);
+  const textOnSurface2 = ensureReadableColor(text, surfaceLadder[2], 4.5);
   const brandFamily = deriveBrandFamily(accent, isDark);
   const linkFamily = deriveBrandFamily(link, isDark);
   const navLinkFamily = deriveBrandFamily(navLink || link, isDark);
 
   return {
     background,
-    backgroundSecondary: backgroundSecondary || deriveSurface(background, isDark),
+    backgroundSecondary: resolvedBackgroundSecondary,
     surface: derivedGui,
     surfaceGui: derivedGui,
     surfaceContainers: derivedContainers,
@@ -945,6 +955,15 @@ export function blendWithPageSample(
     nav,
     border,
     focus,
+    textOnBackgroundSecondary,
+    textOnSurfaceGui,
+    textOnSurfaceContainers,
+    textOnGuiButton,
+    textOnGuiInput,
+    textOnGuiTextarea,
+    textOnSurface0,
+    textOnSurface1,
+    textOnSurface2,
     isDark,
     headerSizeVariance: pageSample.headerSizeVariance ?? 0.35,
     brandFamily,

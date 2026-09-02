@@ -471,6 +471,55 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /--gmixer-bg-secondary:\s*undefined/);
   });
 
+  it('pairs each independently-derived surface with its own contrast-checked ink', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    // Tokens declared for every independently-derived surface.
+    assert.match(css, /--gmixer-text-on-bg-secondary:/);
+    assert.match(css, /--gmixer-text-on-surface-gui:/);
+    assert.match(css, /--gmixer-text-on-surface-containers:/);
+    assert.match(css, /--gmixer-text-on-surface-0:/);
+    assert.match(css, /--gmixer-text-on-surface-1:/);
+    assert.match(css, /--gmixer-text-on-surface-2:/);
+    assert.match(css, /--gmixer-text-on-gui-button:/);
+    assert.match(css, /--gmixer-text-on-gui-input:/);
+    assert.match(css, /--gmixer-text-on-gui-textarea:/);
+    // Each surface's own background rule paints with its matching ink, not
+    // the flat --gmixer-text used for the page canvas.
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-gui-button\) !important;\s*color: var\(--gmixer-text-on-gui-button\) !important;/
+    );
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-gui-input\) !important;\s*color: var\(--gmixer-text-on-gui-input\) !important;/
+    );
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-gui-textarea\) !important;\s*color: var\(--gmixer-text-on-gui-textarea\) !important;/
+    );
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-surface-containers\) !important;[\s\S]*?color: var\(--gmixer-text-on-surface-containers\) !important;/
+    );
+    // Surface ladder steps now paint their own ink alongside their fill —
+    // previously they set no color at all and relied on an ancestor.
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-surface-0\) !important;\s*color: var\(--gmixer-text-on-surface-0\) !important;/
+    );
+    // Search-shell pill and field-shell wrapper now paint ink too.
+    assert.match(
+      css,
+      /background-color: var\(--gmixer-surface-gui\) !important;\s*color: var\(--gmixer-text-on-surface-gui\) !important;\s*border-color: var\(--gmixer-border\) !important;/
+    );
+    // Plain block text inherits from the nearest tagged surface instead of
+    // being force-set to the flat page-canvas ink.
+    assert.match(
+      css,
+      /p, li, td, th, blockquote, label,[\s\S]*?\{\s*color: inherit !important;\s*\}/
+    );
+  });
+
   it('paintOpaqueOnly off restores unconditional structural fills', () => {
     const global = withTonePaint(createDefaultState().global);
     global.color.paintOpaqueOnly = false;

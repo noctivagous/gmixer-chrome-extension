@@ -160,7 +160,7 @@ export function hexToOklchApprox(hex) {
  * threshold. User overrides are applied outside this function and are never
  * adjusted.
  */
-function ensureContrast(foreground, background, minimumRatio) {
+export function ensureContrast(foreground, background, minimumRatio) {
   if (contrastRatio(foreground, background) >= minimumRatio) return foreground;
 
   const source = hexToHsl(foreground);
@@ -425,7 +425,7 @@ export function deriveSurfaceLadder(backgroundHex, isDark, steps = 3) {
  * @param {'analog'|'complement'|'splitComplement'|'triadic'|'tetradic'|'monochrome'} scheme
  * @param {'light'|'light-gray'|'gray'|'dark-gray'|'dark'} [mode='dark']
  * @param {number} [intensity=0.5] 0–1 position in the tone band (0.5 = named tone)
- * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, linkHover: string, navLink: string, navLinkHover: string, border: string, focus: string, isDark: boolean }}
+ * @returns {{ background: string, backgroundSecondary: string, surface: string, surfaceGui: string, surfaceContainers: string, text: string, muted: string, accent: string, link: string, linkHover: string, navLink: string, navLinkHover: string, border: string, focus: string, textOnBackgroundSecondary: string, textOnSurfaceGui: string, textOnSurfaceContainers: string, textOnGuiButton: string, textOnGuiInput: string, textOnGuiTextarea: string, textOnSurface0: string, textOnSurface1: string, textOnSurface2: string, isDark: boolean }}
  */
 export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.5) {
   const base = hexToHsl(baseColorHex);
@@ -538,6 +538,20 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     isDark,
   });
 
+  // Each independently-derived surface can drift lighter/darker than the
+  // page's nominal isDark direction (hue-rotation escape hatches in
+  // deriveSurface/deriveDistinctFill), so body/control ink is re-checked
+  // per surface rather than assumed safe from the global `text` pick.
+  const textOnBackgroundSecondary = ensureContrast(text, backgroundSecondary, 4.5);
+  const textOnSurfaceGui = ensureContrast(text, surfaceGui, 4.5);
+  const textOnSurfaceContainers = ensureContrast(text, surfaceContainers, 4.5);
+  const textOnGuiButton = ensureContrast(text, guiButton, 4.5);
+  const textOnGuiInput = ensureContrast(text, guiInput, 4.5);
+  const textOnGuiTextarea = ensureContrast(text, guiTextarea, 4.5);
+  const textOnSurface0 = ensureContrast(text, surfaceLadder[0], 4.5);
+  const textOnSurface1 = ensureContrast(text, surfaceLadder[1], 4.5);
+  const textOnSurface2 = ensureContrast(text, surfaceLadder[2], 4.5);
+
   return {
     background,
     backgroundSecondary,
@@ -562,6 +576,15 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     navLinkActive: deriveActiveColor(navLink, isDark),
     border,
     focus,
+    textOnBackgroundSecondary,
+    textOnSurfaceGui,
+    textOnSurfaceContainers,
+    textOnGuiButton,
+    textOnGuiInput,
+    textOnGuiTextarea,
+    textOnSurface0,
+    textOnSurface1,
+    textOnSurface2,
     isDark,
   };
 }

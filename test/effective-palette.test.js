@@ -9,7 +9,7 @@ import {
   resetOverridesFromPrimary,
   resolveEffectivePalette,
 } from '../src/lib/effective-palette.js';
-import { buildPalette, deriveSurface, hexToHsl } from '../src/lib/color-theory.js';
+import { buildPalette, contrastRatio, deriveSurface, hexToHsl } from '../src/lib/color-theory.js';
 import { createDefaultState } from '../src/state/schema.js';
 
 describe('effective-palette', () => {
@@ -64,6 +64,26 @@ describe('effective-palette', () => {
       deriveSurface(applied.backgroundSecondary, isDark)
     );
     assert.equal(applied.cascadeFromPrimary, true);
+  });
+
+  it('re-checks body/control ink against a surface override, not the stale theme default', () => {
+    const palette = buildPalette('#8a8a8a', 'monochrome', 'dark');
+    // Dark theme -> flat `text` is near-white. Override surfaceContainers/
+    // guiButton to a LIGHT fill anyway (e.g. a light card on an otherwise
+    // dark theme) — before the per-surface recompute, white-on-white would
+    // have been illegible.
+    const applied = applyColorOverrides(palette, {
+      surfaceContainers: '#f0f0f0',
+      guiButton: '#e8e4da',
+    });
+    assert.equal(applied.surfaceContainers, '#f0f0f0');
+    assert.equal(applied.guiButton, '#e8e4da');
+    assert.ok(contrastRatio(applied.text, applied.surfaceContainers) < 4.5);
+    assert.ok(contrastRatio(applied.textOnSurfaceContainers, applied.surfaceContainers) >= 4.5);
+    assert.ok(contrastRatio(applied.textOnGuiButton, applied.guiButton) >= 4.5);
+    // The override deliberately conflicts with the flat theme `text` pick —
+    // proving the surface-specific ink actually diverged from it.
+    assert.notEqual(applied.textOnSurfaceContainers, applied.text);
   });
 
   it('keeps an explicit Secondary override beside Primary', () => {
