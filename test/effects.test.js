@@ -5,6 +5,10 @@ import { buildPreviewEffectsCss, previewEffectsActive } from '../src/lib/preview
 import { buildCss } from '../src/content/style-injector.js';
 import { createDefaultState } from '../src/state/schema.js';
 import { gridIndexToPercent, GRID_SIZE } from '../src/content/pan-scan.js';
+import { buildPalette, resolveGlowColor } from '../src/lib/color-theory.js';
+
+const defaultPalette = buildPalette('#8a8a8a', 'monochrome', 'dark');
+const halo = (configured, ink) => resolveGlowColor(configured, ink);
 
 describe('effects catalog', () => {
   it('clamps invalid category effects to none', () => {
@@ -199,7 +203,7 @@ describe('effectsRules category paint', () => {
     // Unclip the anchors only — parent :has(> a) breaks overflow:hidden dropdowns.
     assert.match(css, /(?:^|\n)\s*a \{\s*overflow: visible !important;/);
     assert.doesNotMatch(css, /:has\(> a\),\s*:has\(> button\)/);
-    assert.match(css, /#ff00aa/);
+    assert.match(css, new RegExp(halo('#ff00aa', defaultPalette.link)));
     assert.match(css, /footer a,[\s\S]*h1 a[\s\S]*text-shadow: none/);
     assert.doesNotMatch(css, /gmixer-glow-pulse-nav/);
   });
@@ -245,8 +249,11 @@ describe('effectsRules category paint', () => {
       }),
       null
     );
-    assert.match(css, /a \{ text-shadow: 0 0 8px #ff0000; \}/);
-    assert.match(css, /nav a[\s\S]*text-shadow: 0 0 8px #00ff00/);
+    const linkHalo = halo('#ff0000', defaultPalette.link);
+    const navHalo = halo('#00ff00', defaultPalette.navLink);
+    assert.match(css, new RegExp(`a \\{ text-shadow: 0 0 8px ${linkHalo}; \\}`));
+    assert.match(css, new RegExp(`nav a[\\s\\S]*text-shadow: 0 0 8px ${navHalo}`));
+    assert.notEqual(linkHalo, navHalo);
   });
 
   it('emits an offset drop-glow distinct from centered glow', () => {
@@ -257,7 +264,8 @@ describe('effectsRules category paint', () => {
       }),
       null
     );
-    assert.match(css, /box-shadow: 4px 10px 20px #ff00aa/);
+    const mediaHalo = halo('#ff00aa', defaultPalette.accent);
+    assert.match(css, new RegExp(`box-shadow: 4px 10px 20px ${mediaHalo}`));
     assert.match(css, /a \{ text-shadow: 2px 4px 10px /);
     assert.doesNotMatch(css, /gmixer-glow-box-pulse/);
     assert.doesNotMatch(css, /box-shadow: 0 0 12px/);
@@ -301,7 +309,7 @@ describe('preview effects css', () => {
       { accent: '#7c3aed' }
     );
     assert.match(css, /\.theme-preview \.blurb-image/);
-    assert.match(css, /#ff00aa/);
+    assert.match(css, new RegExp(halo('#ff00aa', '#7c3aed')));
     assert.doesNotMatch(css, /^img,/m);
   });
 
@@ -348,7 +356,7 @@ describe('preview effects css', () => {
       { categories: { images: { effect: 'drop-glow' } }, glow: { animated: false, color: '#ff00aa' } },
       { accent: '#7c3aed' }
     );
-    assert.match(shadow, /4px 10px 20px #ff00aa/);
+    assert.match(shadow, new RegExp(`4px 10px 20px ${halo('#ff00aa', '#7c3aed')}`));
     const marquee = buildPreviewEffectsCss(
       { categories: { images: { effect: 'marquee' } } },
       { accent: '#7c3aed' }

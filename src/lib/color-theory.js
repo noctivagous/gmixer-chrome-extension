@@ -317,43 +317,62 @@ export function deriveActiveColor(hex, isDark = true) {
 }
 
 /**
- * Halo color for text glow. Related hue, but never identical to the ink it
- * sits behind — a same-color glow just looks like a blur of the letters.
+ * Halo color for text glow. Same hue as the ink (or a configured color),
+ * but lightness is pushed until the halo contrasts with the letters — a
+ * light wash of the ink just looks like a blur. Prefers a darker halo
+ * when both sides of the ink would meet the ratio.
  * @param {string} inkHex
  */
 export function deriveGlowColor(inkHex) {
-  const { h, s, l } = hexToHsl(inkHex || '#888888');
-  const glowL = l >= 50 ? Math.max(12, l - 20) : Math.min(88, l + 20);
-  let glowS = s < 12 ? s : Math.min(100, s + 14);
-  let candidate = hslToHex({ h, s: glowS, l: glowL });
-  if (sameHex(candidate, inkHex)) {
-    candidate = hslToHex({
-      h,
-      s: glowS,
-      l: l >= 50 ? Math.max(0, l - 28) : Math.min(100, l + 28),
-    });
-  }
-  if (sameHex(candidate, inkHex)) {
-    candidate = hslToHex({
-      h: rotate(h, 12),
-      s: Math.max(glowS, 18),
-      l: glowL,
-    });
-  }
-  return candidate;
+  const ink = inkHex || '#888888';
+  const { h, s, l } = hexToHsl(ink);
+  const glowS = s < 12 ? s : Math.min(100, s + 14);
+  const seedL = l >= 50 ? Math.max(8, l - 40) : Math.min(46, l + 12);
+  return contrastHaloAgainstInk(hslToHex({ h, s: glowS, l: seedL }), ink, 3);
 }
 
 /**
- * Prefer a configured glow color, but replace it when it matches the ink.
- * Empty / missing configured values use {@link deriveGlowColor}.
+ * Preserve glow hue; move lightness only so the halo stays distinct from
+ * the ink it sits under. Scores darker passing candidates higher so glows
+ * do not wash out light text.
+ * @param {string} glowHex
+ * @param {string} inkHex
+ * @param {number} [minimumRatio=3]
+ */
+export function contrastHaloAgainstInk(glowHex, inkHex, minimumRatio = 3) {
+  const ink = inkHex || '#888888';
+  const source = hexToHsl(glowHex || '#888888');
+  const seed = hslToHex(source);
+  if (contrastRatio(seed, ink) >= minimumRatio && source.l <= 52) return seed;
+
+  let best = null;
+  let bestScore = Infinity;
+  for (let lightness = 0; lightness <= 100; lightness += 1) {
+    const candidate = hslToHex({ ...source, l: lightness });
+    if (contrastRatio(candidate, ink) < minimumRatio) continue;
+    const distance = Math.abs(lightness - source.l);
+    const lightPenalty = Math.max(0, lightness - 48) * 2.2;
+    const score = distance + lightPenalty;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  if (best) return best;
+  return contrastRatio('#111111', ink) >= contrastRatio('#2a2a2a', ink) ? '#111111' : '#2a2a2a';
+}
+
+/**
+ * Prefer a configured glow color, but never leave it as a light wash of the
+ * ink. Empty / missing configured values use {@link deriveGlowColor}.
  * @param {string|null|undefined} configured
  * @param {string} inkHex
  */
 export function resolveGlowColor(configured, inkHex) {
+  const ink = inkHex || '#888888';
   const trimmed = typeof configured === 'string' ? configured.trim() : '';
-  const candidate = trimmed || deriveGlowColor(inkHex);
-  if (sameHex(candidate, inkHex)) return deriveGlowColor(inkHex);
-  return candidate;
+  const candidate = trimmed || deriveGlowColor(ink);
+  return contrastHaloAgainstInk(candidate, ink, 3);
 }
 
 export const SCHEMES = [
@@ -471,17 +490,56 @@ export function deriveDistinctFill(fromHex, avoidHexes = [], isDark = hexToHsl(f
  */
 export function deriveGuiControlFills(layers) {
   const isDark = Boolean(layers.isDark);
+  const dir = isDark ? 1 : -1;
   const avoid = [
     layers.background,
     layers.backgroundSecondary,
     layers.surfaceGui,
     layers.surfaceContainers,
   ].filter(Boolean);
-  const guiInput = deriveDistinctFill(layers.background, avoid, isDark);
-  const guiTextarea = deriveDistinctFill(guiInput, [...avoid, guiInput], isDark);
-  const guiButton = deriveDistinctFill(layers.surfaceGui, [...avoid, guiInput, guiTextarea], isDark);
+  const guiInput = spreadFillFrom(layers.background, avoid, dir, 12);
+  let guiTextarea = spreadFillFrom(guiInput, [...avoid, guiInput], dir, 14);
+  if (guiFillsCollide(guiTextarea, guiInput)) {
+    guiTextarea = spreadFillFrom(guiInput, [...avoid, guiInput], -dir, 14);
+  }
+  let guiButton = spreadFillFrom(
+    layers.surfaceGui,
+    [...avoid, guiInput, guiTextarea],
+    dir,
+    16
+  );
+  if (guiFillsCollide(guiButton, guiInput) || guiFillsCollide(guiButton, guiTextarea)) {
+    guiButton = spreadFillFrom(
+      layers.surfaceGui,
+      [...avoid, guiInput, guiTextarea],
+      -dir,
+      16
+    );
+  }
   const guiSlider = layers.accent || guiButton;
   return { guiInput, guiTextarea, guiButton, guiSlider };
+}
+
+function guiFillsCollide(a, b) {
+  if (!a || !b) return false;
+  if (fillsTooClose(a, b)) return true;
+  return Math.abs(hexToHsl(a).l - hexToHsl(b).l) < 8;
+}
+
+/**
+ * Step lightness (and reverse at the clamp) so sibling GUI fills do not
+ * collapse onto the same gray when `deriveDistinctFill`'s 7-point gap is
+ * already satisfied or L is pinned at 6/94.
+ */
+function spreadFillFrom(fromHex, avoidHexes, dir, delta) {
+  const src = hexToHsl(fromHex);
+  let nextL = src.l + dir * delta;
+  if (nextL > 94 || nextL < 6) nextL = src.l - dir * delta;
+  const shifted = hslToHex({
+    ...src,
+    l: Math.max(6, Math.min(94, nextL)),
+  });
+  return deriveDistinctFill(shifted, avoidHexes, dir > 0);
 }
 
 const GUI_FILL_DELTA_SECONDARY = 10;
@@ -516,9 +574,20 @@ export function restyleHexAgainstParent(hex, parentHex, delta) {
  * @param {boolean} isDark
  */
 export function deriveGuiControlBorders(border, fills, isDark) {
-  const guiInputBorder = deriveDistinctFill(border, [fills.guiInput, fills.guiButton, fills.guiTextarea], isDark);
-  const guiTextareaBorder = deriveDistinctFill(guiInputBorder, [fills.guiTextarea, guiInputBorder], isDark);
-  const guiButtonBorder = deriveDistinctFill(border, [fills.guiButton, guiInputBorder, guiTextareaBorder], isDark);
+  const dir = isDark ? 1 : -1;
+  const guiInputBorder = spreadFillFrom(border, [fills.guiInput, fills.guiButton, fills.guiTextarea], dir, 10);
+  const guiTextareaBorder = spreadFillFrom(
+    guiInputBorder,
+    [fills.guiTextarea, guiInputBorder, fills.guiInput],
+    dir,
+    12
+  );
+  const guiButtonBorder = spreadFillFrom(
+    border,
+    [fills.guiButton, guiInputBorder, guiTextareaBorder],
+    -dir,
+    12
+  );
   return { guiButtonBorder, guiInputBorder, guiTextareaBorder };
 }
 

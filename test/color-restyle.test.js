@@ -50,12 +50,19 @@ describe('color-theory', () => {
     assert.match(palette.guiButton, /^#[0-9a-f]{6}$/i);
     assert.notEqual(palette.guiInput.toLowerCase(), palette.surfaceContainers.toLowerCase());
     assert.notEqual(palette.guiButton.toLowerCase(), palette.surfaceContainers.toLowerCase());
+    assert.notEqual(palette.guiInput.toLowerCase(), palette.guiTextarea.toLowerCase());
+    assert.notEqual(palette.guiButton.toLowerCase(), palette.guiInput.toLowerCase());
+    assert.ok(Math.abs(hexToHsl(palette.guiInput).l - hexToHsl(palette.guiTextarea).l) >= 8);
+    assert.ok(Math.abs(hexToHsl(palette.guiButton).l - hexToHsl(palette.guiInput).l) >= 8);
     assert.match(palette.text, /^#[0-9a-f]{6}$/i);
     assert.match(palette.accent, /^#[0-9a-f]{6}$/i);
     assert.notEqual(palette.accent, palette.link);
     assert.notEqual(palette.navLink, palette.link);
     assert.notEqual(deriveGlowColor(palette.link), palette.link);
     assert.notEqual(resolveGlowColor(palette.link, palette.link), palette.link);
+    assert.ok(contrastRatio(deriveGlowColor(palette.link), palette.link) >= 3);
+    assert.ok(hexToHsl(deriveGlowColor(palette.link)).l < hexToHsl(palette.link).l || hexToHsl(palette.link).l < 50);
+    assert.ok(hexToHsl(resolveGlowColor('#ffffff', palette.link)).l <= 55);
     // Surface sits above background for dark themes.
     assert.ok(hexToHsl(palette.surface).l > hexToHsl(palette.background).l);
   });

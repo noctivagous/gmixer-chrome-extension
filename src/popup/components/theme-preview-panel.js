@@ -336,39 +336,37 @@ export class ThemePreviewPanel extends StoreBoundElement {
       pointer-events: none;
     }
     .blurb-field,
-    .blurb-textarea {
+    .blurb-textarea,
+    .blurb-button {
+      appearance: none;
+      -webkit-appearance: none;
       width: 100%;
       margin: 0;
       padding: 6px 8px;
-      border: 1px solid transparent;
+      border: 2px solid transparent;
       border-radius: 4px;
-      background: transparent;
+      background-color: transparent;
       color: inherit;
       font-size: 11px;
       line-height: 1.3;
       box-sizing: border-box;
+      box-shadow: none;
       pointer-events: auto;
     }
     .blurb-textarea {
       min-height: 44px;
       resize: none;
     }
+    .blurb-button {
+      width: auto;
+      justify-self: start;
+      padding: 5px 10px;
+      font-weight: 600;
+    }
     .blurb-slider {
       width: 100%;
       margin: 2px 0;
       pointer-events: auto;
-    }
-    .blurb-button {
-      justify-self: start;
-      margin: 0;
-      padding: 5px 10px;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      background: transparent;
-      color: inherit;
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.3;
     }
     .blurb-heading-scale {
       display: grid;
@@ -825,8 +823,8 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.input"
           style="
             font-family: ${uiFamily};
-            background: ${fillOf('guiInput')};
-            border-color: ${borderOf('guiInput')};
+            background-color: ${fillOf('guiInput')};
+            border: 2px solid ${borderOf('guiInput')};
             color: ${textOn('guiInput')};
             outline-color: ${colors.focus};
           "
@@ -840,8 +838,8 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.textarea"
           style="
             font-family: ${uiFamily};
-            background: ${fillOf('guiTextarea')};
-            border-color: ${borderOf('guiTextarea')};
+            background-color: ${fillOf('guiTextarea')};
+            border: 2px solid ${borderOf('guiTextarea')};
             color: ${textOn('guiTextarea')};
             outline-color: ${colors.focus};
           "
@@ -868,10 +866,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.button"
           style="
             font-family: ${uiFamily};
-            background: ${fillOf('guiButton')};
-            border-color: ${borderOf('guiButton')};
+            background-color: ${fillOf('guiButton')};
+            border: 2px solid ${borderOf('guiButton')};
             color: ${textOn('guiButton')};
-            box-shadow: 0 0 0 1px ${colors.focus};
           "
         >
           Button
