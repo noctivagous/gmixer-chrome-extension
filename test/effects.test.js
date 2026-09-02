@@ -179,6 +179,8 @@ describe('effectsRules category paint', () => {
     assert.match(css, /button, \[role="button"\]/);
     assert.match(css, /\[data-gmixer-nav-hit\]/);
     assert.match(css, /nav \[aria-haspopup\]/);
+    assert.match(css, /nav summary/);
+    assert.match(css, /header summary/);
     assert.match(css, /gmixer-glow-pulse-nav/);
     assert.doesNotMatch(css, /gmixer-glow-pulse-link/);
     assert.doesNotMatch(css, /(?:^|\n)\s*a, button, \[role="button"\] \{ animation/);

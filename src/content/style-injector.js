@@ -440,7 +440,7 @@ const CHROME_HOST_SELECTORS = [
   '[data-gmixer-role="footer"]',
   '[data-gmixer-role="navigation"]',
 ];
-const NAV_GLOW_IN_CHROME = ['[role="link"]', '[role="menuitem"]', '[aria-haspopup]']
+const NAV_GLOW_IN_CHROME = ['[role="link"]', '[role="menuitem"]', '[aria-haspopup]', 'summary']
   .flatMap((extra) => CHROME_HOST_SELECTORS.map((host) => `${host} ${extra}`));
 const EFFECTS_NAV_SELECTORS = [
   ...CHROME_LINK_SELECTORS,

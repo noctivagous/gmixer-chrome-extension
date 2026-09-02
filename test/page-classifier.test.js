@@ -122,6 +122,23 @@ describe('page-classifier', () => {
     assert.equal(classified?.media, 'video-thumbnail');
   });
 
+  it('does not treat generic img.thumbnail article teasers as video-thumbnail', () => {
+    const img = el('img', { class: 'thumbnail' });
+    const article = el('article', {}, [img]);
+    img.parentElement = article;
+    img.closest = (selector) => {
+      if (selector.includes('article')) return article;
+      if (selector.startsWith('a[href]')) return null;
+      if (selector.includes('card') || selector.includes('thumb') || selector.includes('figure')) {
+        return article;
+      }
+      return null;
+    };
+    const classified = classifyElement(img);
+    assert.equal(classified?.media, 'article-image');
+    assert.ok(!classified?.reasons.some((r) => /video\/thumbnail/i.test(r)));
+  });
+
   it('stamps profile cover photos as cover-image, not avatar', () => {
     const img = el('img', { class: 'cover-photo' });
     const link = el(
@@ -509,6 +526,43 @@ describe('page-classifier', () => {
     });
     try {
       assert.equal(isOverlayPanel(menu), true);
+    } finally {
+      globalThis.getComputedStyle = previousCs;
+      globalThis.window = previousWin;
+    }
+  });
+
+  it('paints transparent mega-menu groups with several links as overlay panels', () => {
+    const links = [el('a', { href: '/mac' }), el('a', { href: '/ipad' }), el('a', { href: '/iphone' })];
+    const panel = el('div', { role: 'group', class: 'sub-menu', 'aria-label': 'Mac Submenu' }, links);
+    panel.getBoundingClientRect = () => ({
+      width: 900,
+      height: 360,
+      top: 68,
+      left: 0,
+      right: 900,
+      bottom: 428,
+    });
+    const previousCs = globalThis.getComputedStyle;
+    const previousWin = globalThis.window;
+    globalThis.window = { innerWidth: 1200, innerHeight: 800 };
+    globalThis.getComputedStyle = () => ({
+      position: 'fixed',
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      zIndex: 'auto',
+      transform: 'none',
+      pointerEvents: 'auto',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      backgroundImage: 'none',
+      backdropFilter: 'none',
+      webkitBackdropFilter: 'none',
+    });
+    try {
+      assert.equal(isOverlayPanel(panel), true);
+      assert.equal(classifyElement(panel)?.role, 'surface');
+      assert.equal(classifyElement(panel)?.overlay, true);
     } finally {
       globalThis.getComputedStyle = previousCs;
       globalThis.window = previousWin;

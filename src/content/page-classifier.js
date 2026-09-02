@@ -156,18 +156,16 @@ const SURFACE_SKIP_TAGS = new Set([
 // IMAGE = SVG <image> (Facebook/X circular profile masks).
 const MEDIA_TAGS = new Set(['IMG', 'VIDEO', 'IMAGE']);
 const MEDIA_CHROME_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS', 'IMAGE']);
-/** Class/id tokens that mark poster frames and video listing thumbs. */
+/**
+ * Class/id tokens that mark video listing thumbs / player posters.
+ * Do not include generic teaser words (`thumbnail`, `thumb`, `poster`, `play`)
+ * — news homepages use `img.thumbnail` on ordinary article photos.
+ */
 const VIDEO_THUMB_TOKENS = [
   'video',
   'videos',
-  'thumbnail',
-  'thumb',
-  'poster',
-  'play',
   'player',
-  'clip',
   'watch',
-  'duration',
   'videoresource',
 ];
 /** Href shapes that usually mean “this media opens a video”. */
@@ -334,16 +332,67 @@ export function isOverlayPanel(el) {
     analysisDiagnostics.flyoutRejectedMediaChrome += 1;
     return false;
   }
-  // Unfilled list containers are commonly CSS-only dropdowns: their visible
-  // sheet is supplied by the extension. Other transparent floaters are
-  // decorative/parallax content and must remain unpainted.
-  const isListPanel = el.tagName === 'UL' || el.tagName === 'OL' || el.tagName === 'MENU';
-  if (!semantic && !isListPanel && !hasOverlayFill(style)) {
+  // Unfilled list/menu containers are commonly CSS-only dropdowns: their
+  // visible sheet is supplied by the extension. Other transparent floaters
+  // (parallax, decorative) must remain unpainted.
+  if (!semantic && !isMenuLikeOverlay(el) && !hasOverlayFill(style)) {
     analysisDiagnostics.flyoutRejectedTransparent =
       (analysisDiagnostics.flyoutRejectedTransparent || 0) + 1;
     return false;
   }
   return true;
+}
+
+/**
+ * Transparent positioned sheets that still behave like menus: native lists,
+ * ARIA groups with several links, or the panel of an open <details> disclosure.
+ * @param {Element} el
+ */
+function isMenuLikeOverlay(el) {
+  const tag = el.tagName;
+  if (tag === 'UL' || tag === 'OL' || tag === 'MENU') return true;
+  const role = (el.getAttribute?.('role') || '').toLowerCase();
+  const links = descendantInteractiveCount(el, 4);
+  if ((role === 'group' || role === 'menu' || role === 'listbox') && links >= 3) {
+    return true;
+  }
+  const parent = el.parentElement;
+  if (parent && parent.tagName === 'DETAILS' && tag !== 'SUMMARY') {
+    const open = parent.open === true || parent.hasAttribute?.('open');
+    if (open && links >= 2) return true;
+  }
+  const label = `${el.getAttribute?.('aria-label') || ''} ${el.getAttribute?.('class') || ''} ${el.id || ''}`;
+  if (/\b(sub-?menu|dropdown|mega-?menu|flyout)\b/i.test(label) && links >= 2) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @param {Element} el
+ * @param {number} max
+ */
+function descendantInteractiveCount(el, max = 8) {
+  if (typeof el.querySelectorAll === 'function') {
+    try {
+      const list = el.querySelectorAll('a[href], [role="menuitem"]');
+      if (list && typeof list.length === 'number' && list.length > 0) {
+        return Math.min(list.length, max);
+      }
+    } catch {
+      /* test stubs with partial querySelectorAll */
+    }
+  }
+  let n = 0;
+  const walk = (node) => {
+    if (!node || n >= max) return;
+    const nodeTag = node.tagName;
+    const nodeRole = (node.getAttribute?.('role') || '').toLowerCase();
+    if (nodeTag === 'A' || nodeRole === 'menuitem') n += 1;
+    for (const kid of node.children || node._children || []) walk(kid);
+  };
+  for (const kid of el.children || el._children || []) walk(kid);
+  return n;
 }
 
 function hasBackdropFilter(style) {
