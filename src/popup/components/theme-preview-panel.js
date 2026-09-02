@@ -320,6 +320,13 @@ export class ThemePreviewPanel extends StoreBoundElement {
       border-radius: 6px;
       box-sizing: border-box;
     }
+    .blurb-gui-on-body {
+      margin-top: 8px;
+    }
+    .blurb-gui-cluster {
+      display: grid;
+      gap: 8px;
+    }
     .blurb-gui-label {
       margin: 0;
       font-size: 9px;
@@ -790,6 +797,76 @@ export class ThemePreviewPanel extends StoreBoundElement {
    * Combine hover + pin highlight for a leaf's annotation identity.
    * @param {{ roleId?: string|null, fontSlot?: string|null, media?: string|null }} leaf
    */
+  _guiControlCluster(colors, uiFamily) {
+    const hl = (leaf) => this._leafHighlightClass(leaf);
+    return html`
+      <div class="blurb-gui-cluster">
+        <input
+          class=${`blurb-field ${hl({ roleId: 'guiInput', fontSlot: 'ui' })}`.trim()}
+          type="text"
+          readonly
+          tabindex="-1"
+          value="Text input"
+          data-gmixer-preview-role="guiInput"
+          data-gmixer-preview-font="ui"
+          data-gmixer-texture="gui.input"
+          style="
+            font-family: ${uiFamily};
+            background: ${colors.guiInput};
+            border-color: ${colors.border};
+            color: ${colors.text};
+            outline-color: ${colors.focus};
+          "
+        />
+        <textarea
+          class=${`blurb-textarea ${hl({ roleId: 'guiTextarea', fontSlot: 'ui' })}`.trim()}
+          readonly
+          tabindex="-1"
+          data-gmixer-preview-role="guiTextarea"
+          data-gmixer-preview-font="ui"
+          data-gmixer-texture="gui.textarea"
+          style="
+            font-family: ${uiFamily};
+            background: ${colors.guiTextarea};
+            border-color: ${colors.border};
+            color: ${colors.text};
+            outline-color: ${colors.focus};
+          "
+        >Text area</textarea>
+        <input
+          class=${`blurb-slider ${hl({ roleId: 'guiSlider' })}`.trim()}
+          type="range"
+          readonly
+          tabindex="-1"
+          value="60"
+          data-gmixer-preview-role="guiSlider"
+          data-gmixer-texture="gui.slider"
+          style="
+            accent-color: ${colors.guiSlider};
+            outline-color: ${colors.focus};
+          "
+        />
+        <button
+          type="button"
+          class=${`blurb-button ${hl({ roleId: 'guiButton', fontSlot: 'ui' })}`.trim()}
+          tabindex="-1"
+          data-gmixer-preview-role="guiButton"
+          data-gmixer-preview-font="ui"
+          data-gmixer-texture="gui.button"
+          style="
+            font-family: ${uiFamily};
+            background: ${colors.guiButton};
+            border-color: ${colors.border};
+            color: ${colors.text};
+            box-shadow: 0 0 0 1px ${colors.focus};
+          "
+        >
+          Button
+        </button>
+      </div>
+    `;
+  }
+
   _leafHighlightClass(leaf) {
     const asTarget = {
       roleId: leaf.roleId ?? null,
@@ -1275,6 +1352,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
               >
                 Larger regions like cards and dialogs.
               </p>
+              ${this._guiControlCluster(colors, uiFamily)}
             </div>
             <div
               class=${`blurb-gui ${hl({ roleId: 'backgroundSecondary' })}`.trim()}
@@ -1288,69 +1366,22 @@ export class ThemePreviewPanel extends StoreBoundElement {
               <p class="blurb-gui-label" style="font-family: ${uiFamily}">
                 BG:Secondary
               </p>
-              <input
-                class=${`blurb-field ${hl({ roleId: 'guiInput', fontSlot: 'ui' })}`.trim()}
-                type="text"
-                readonly
-                tabindex="-1"
-                value="Text input"
-                data-gmixer-preview-role="guiInput"
-                data-gmixer-preview-font="ui"
-                data-gmixer-texture="gui.input"
-                style="
-                  font-family: ${uiFamily};
-                  background: ${colors.guiInput};
-                  border-color: ${colors.border};
-                  color: ${colors.text};
-                  outline-color: ${colors.focus};
-                "
-              />
-              <textarea
-                class=${`blurb-textarea ${hl({ roleId: 'guiTextarea', fontSlot: 'ui' })}`.trim()}
-                readonly
-                tabindex="-1"
-                data-gmixer-preview-role="guiTextarea"
-                data-gmixer-preview-font="ui"
-                data-gmixer-texture="gui.textarea"
-                style="
-                  font-family: ${uiFamily};
-                  background: ${colors.guiTextarea};
-                  border-color: ${colors.border};
-                  color: ${colors.text};
-                  outline-color: ${colors.focus};
-                "
-              >Text area</textarea>
-              <input
-                class=${`blurb-slider ${hl({ roleId: 'guiSlider' })}`.trim()}
-                type="range"
-                readonly
-                tabindex="-1"
-                value="60"
-                data-gmixer-preview-role="guiSlider"
-                data-gmixer-texture="gui.slider"
-                style="
-                  accent-color: ${colors.guiSlider};
-                  outline-color: ${colors.focus};
-                "
-              />
-              <button
-                type="button"
-                class=${`blurb-button ${hl({ roleId: 'guiButton', fontSlot: 'ui' })}`.trim()}
-                tabindex="-1"
-                data-gmixer-preview-role="guiButton"
-                data-gmixer-preview-font="ui"
-                data-gmixer-texture="gui.button"
-                style="
-                  font-family: ${uiFamily};
-                  background: ${colors.guiButton};
-                  border-color: ${colors.border};
-                  color: ${colors.text};
-                  box-shadow: 0 0 0 1px ${colors.focus};
-                "
-              >
-                Button
-              </button>
+              ${this._guiControlCluster(colors, uiFamily)}
             </div>
+          </div>
+          <div
+            class=${`blurb-gui blurb-gui-on-body ${hl({ roleId: 'background' })}`.trim()}
+            data-gmixer-preview-role="background"
+            style="
+              background: transparent;
+              border-color: ${colors.border};
+              color: ${colors.text};
+            "
+          >
+            <p class="blurb-gui-label" style="font-family: ${uiFamily}">
+              BG:Primary · body
+            </p>
+            ${this._guiControlCluster(colors, uiFamily)}
           </div>
           <div
             class="blurb-heading-scale"

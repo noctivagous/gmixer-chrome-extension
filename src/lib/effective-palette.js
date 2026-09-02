@@ -2,6 +2,7 @@
 // Keeps Only: Tone / Color Off / override cascade rules in one place.
 import {
   buildPalette,
+  deriveGuiControlFills,
   deriveSurface,
   deriveSurfaceLadder,
   hexToHsl,
@@ -189,10 +190,23 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
   // whichever heading-tier color applies, same as the heading it sits in.
   const pickSub = (key, fallback) =>
     hasOverride(o, key) ? o[key].trim() : baseRoles?.[key] || fallback;
-  const guiButton = pickSub('guiButton', surfaceGui);
-  const guiInput = pickSub('guiInput', surfaceGui);
-  const guiTextarea = pickSub('guiTextarea', surfaceGui);
-  const guiSlider = pickSub('guiSlider', surfaceGui);
+  const autoGui = deriveGuiControlFills({
+    background,
+    backgroundSecondary,
+    surfaceGui,
+    surfaceContainers,
+    accent,
+    isDark,
+  });
+  const pickGui = (key) => {
+    if (hasOverride(o, key)) return o[key].trim();
+    if (cascadeFromPrimary) return autoGui[key];
+    return baseRoles?.[key] || autoGui[key];
+  };
+  const guiButton = pickGui('guiButton');
+  const guiInput = pickGui('guiInput');
+  const guiTextarea = pickGui('guiTextarea');
+  const guiSlider = pickGui('guiSlider');
   const headingLarge = pickSub('headingLarge', accent);
   const headingMedium = pickSub('headingMedium', accent);
   const headingSmall = pickSub('headingSmall', accent);

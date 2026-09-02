@@ -21,6 +21,11 @@ export const TEXTURE_PAGE_TARGETS = {
       'body input[type="button"]',
       'body input[type="submit"]',
       'body input[type="reset"]',
+      'body a.button',
+      'body a.btn',
+      'body a[class~="button"]',
+      'body a[class*="mdc-button"]:not([class*="icon-button"])',
+      'body a[role="button"]',
     ].join(', '),
   },
   'gui.input': {

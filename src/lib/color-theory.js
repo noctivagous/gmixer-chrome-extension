@@ -324,6 +324,62 @@ export function getColorScale(hex, type, steps = 5) {
  * @param {string} backgroundHex
  * @param {boolean} [isDark] Whether elevated layers should be lighter.
  */
+function fillsTooClose(a, b) {
+  if (!a || !b) return false;
+  if (a.toLowerCase() === b.toLowerCase()) return true;
+  const left = hexToHsl(a);
+  const right = hexToHsl(b);
+  let dh = Math.abs(left.h - right.h);
+  if (dh > 180) dh = 360 - dh;
+  return dh < 18 && Math.abs(left.s - right.s) < 14 && Math.abs(left.l - right.l) < 7;
+}
+
+/**
+ * Nudge a fill until it is visually distinct from parent/sibling surfaces.
+ * Used so GUI controls do not disappear into Surface:Containers or BG:Secondary.
+ *
+ * @param {string} fromHex
+ * @param {string[]} [avoidHexes]
+ * @param {boolean} [isDark]
+ * @returns {string}
+ */
+export function deriveDistinctFill(fromHex, avoidHexes = [], isDark = hexToHsl(fromHex).l < 50) {
+  const base = hexToHsl(fromHex);
+  const dir = isDark ? 1 : -1;
+  let { h, s, l } = base;
+  let candidate = fromHex;
+  for (let step = 0; step < 5; step += 1) {
+    const clash = avoidHexes.some((hex) => fillsTooClose(candidate, hex));
+    if (!clash) return candidate;
+    l = Math.max(6, Math.min(92, l + dir * (8 + step * 3)));
+    if (step >= 2) h = (h + (isDark ? 10 : -10) + 360) % 360;
+    if (step >= 3 && s < 18) s = Math.min(28, s + 10);
+    candidate = hslToHex({ h, s, l });
+  }
+  return candidate;
+}
+
+/**
+ * Auto GUI control fills that stay on the Color Scheme ladder but do not
+ * copy Surface:GUI / Surface:Containers (those are the usual parent sheets).
+ *
+ * @param {{ background: string, backgroundSecondary: string, surfaceGui: string, surfaceContainers: string, accent?: string, isDark: boolean }} layers
+ */
+export function deriveGuiControlFills(layers) {
+  const isDark = Boolean(layers.isDark);
+  const avoid = [
+    layers.background,
+    layers.backgroundSecondary,
+    layers.surfaceGui,
+    layers.surfaceContainers,
+  ].filter(Boolean);
+  const guiInput = deriveDistinctFill(layers.background, avoid, isDark);
+  const guiTextarea = deriveDistinctFill(guiInput, [...avoid, guiInput], isDark);
+  const guiButton = deriveDistinctFill(layers.surfaceGui, [...avoid, guiInput, guiTextarea], isDark);
+  const guiSlider = layers.accent || guiButton;
+  return { guiInput, guiTextarea, guiButton, guiSlider };
+}
+
 export function deriveSurface(backgroundHex, isDark = hexToHsl(backgroundHex).l < 50) {
   const { h, s, l } = hexToHsl(backgroundHex);
   const surfaceIsDark = Boolean(isDark);
@@ -468,6 +524,19 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     surfaceGui,
     3
   );
+  const {
+    guiButton,
+    guiInput,
+    guiTextarea,
+    guiSlider,
+  } = deriveGuiControlFills({
+    background,
+    backgroundSecondary,
+    surfaceGui,
+    surfaceContainers,
+    accent,
+    isDark,
+  });
 
   return {
     background,
@@ -477,6 +546,10 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     surface: surfaceGui,
     surfaceGui,
     surfaceContainers,
+    guiButton,
+    guiInput,
+    guiTextarea,
+    guiSlider,
     surfaceLadder,
     text,
     muted,

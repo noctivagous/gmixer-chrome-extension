@@ -1238,18 +1238,19 @@ function roleCss(
       color: var(--gmixer-text) !important;
     }
 
-    /* Surface:GUI:Button/Input/TextArea/Slider — narrower, more specific than
-       the shared GUI fill above, so a per-control override wins on the exact
-       control type while everything else still falls back to Surface:GUI. */
-    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.button'].selectors)} {
+    /* Surface:GUI:Button/Input/TextArea — always paint, even when the native
+       control had no fill. paintOpaqueOnly would skip them and they blend into
+       Surface:Containers / BG:Secondary. Header/nav flush below still keeps
+       in-bar chrome transparent. */
+    ${TEXTURE_PAGE_TARGETS['gui.button'].selectors} {
       background-color: var(--gmixer-gui-button) !important;
       color: var(--gmixer-text) !important;
     }
-    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.input'].selectors)} {
+    ${TEXTURE_PAGE_TARGETS['gui.input'].selectors} {
       background-color: var(--gmixer-gui-input) !important;
       color: var(--gmixer-text) !important;
     }
-    ${maybeOpaque(TEXTURE_PAGE_TARGETS['gui.textarea'].selectors)} {
+    ${TEXTURE_PAGE_TARGETS['gui.textarea'].selectors} {
       background-color: var(--gmixer-gui-textarea) !important;
       color: var(--gmixer-text) !important;
     }
@@ -1257,9 +1258,18 @@ function roleCss(
       accent-color: var(--gmixer-gui-slider) !important;
     }
 
-    /* Header/nav in-bar items share one chrome fill. Do not elevate buttons,
-       fields, or inline slabs into spaced darker blocks (Opera GX mastheads).
-       Overlay flyouts are excluded — they need a solid sheet. */
+    /* Header/nav in-bar items share one chrome fill. Do not elevate bare
+       icon toggles or inline slabs into spaced darker blocks (Opera GX
+       mastheads). Overlay flyouts are excluded too — they need a solid
+       sheet. Real text-entry fields (input/textarea/select and their ARIA
+       equivalents) are dropped from this list entirely — they are never
+       decorative chrome, so they fall through to the sitewide gui.input /
+       gui.textarea paint (and the field-shell / search-pill carve-outs)
+       below exactly like out-of-bar fields. [data-gmixer-native-l] carves
+       out the remaining action triggers (buttons, menu items) that already
+       rendered an opaque native fill — a real CTA/icon chip, not a flat
+       toggle — so they keep the GUI fill painted above instead of losing
+       their background entirely. */
     ${chromeHostScope} :is(
       ul,
       ol,
@@ -1268,14 +1278,8 @@ function roleCss(
       menu,
       button,
       [role="button"],
-      input,
-      textarea,
-      select,
-      [role="textbox"],
-      [role="searchbox"],
-      [role="combobox"],
       [role="menuitem"]
-    ):not([role="search"]):not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not([data-gmixer-role="surface"]) {
+    ):not([role="search"]):not([role="menu"]):not([role="listbox"]):not([role="dialog"]):not([popover]):not([data-gmixer-role="surface"]):not([data-gmixer-native-l]) {
       background-color: transparent !important;
     }
 
@@ -1528,11 +1532,15 @@ function roleCss(
       color: var(--gmixer-text) !important;
     }
 
-    /* CTA / button-styled anchors keep a GUI surface (Opera GX Download). */
+    /* CTA / button-styled anchors keep a GUI button fill (later than the
+       generic transparent-anchor wipe). Includes Material mdc-button FABs
+       such as Google Messages Start chat. */
     body a.button,
     body a.btn,
-    body a[class~="button"] {
-      background-color: var(--gmixer-surface-gui) !important;
+    body a[class~="button"],
+    body a[class*="mdc-button"]:not([class*="icon-button"]),
+    body a[role="button"] {
+      background-color: var(--gmixer-gui-button) !important;
       color: var(--gmixer-text) !important;
     }
 
@@ -1547,9 +1555,13 @@ function roleCss(
     body a.button:hover,
     body a.btn:hover,
     body a[class~="button"]:hover,
+    body a[class*="mdc-button"]:not([class*="icon-button"]):hover,
+    body a[role="button"]:hover,
     body a.button:focus-visible,
     body a.btn:focus-visible,
-    body a[class~="button"]:focus-visible {
+    body a[class~="button"]:focus-visible,
+    body a[class*="mdc-button"]:not([class*="icon-button"]):focus-visible,
+    body a[role="button"]:focus-visible {
       background-color: var(--gmixer-brand-hover) !important;
       color: var(--gmixer-brand-text) !important;
     }

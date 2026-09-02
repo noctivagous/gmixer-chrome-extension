@@ -44,6 +44,10 @@ describe('color-theory', () => {
     assert.match(palette.surface, /^#[0-9a-f]{6}$/i);
     assert.match(palette.surfaceGui, /^#[0-9a-f]{6}$/i);
     assert.match(palette.surfaceContainers, /^#[0-9a-f]{6}$/i);
+    assert.match(palette.guiInput, /^#[0-9a-f]{6}$/i);
+    assert.match(palette.guiButton, /^#[0-9a-f]{6}$/i);
+    assert.notEqual(palette.guiInput.toLowerCase(), palette.surfaceContainers.toLowerCase());
+    assert.notEqual(palette.guiButton.toLowerCase(), palette.surfaceContainers.toLowerCase());
     assert.match(palette.text, /^#[0-9a-f]{6}$/i);
     assert.match(palette.accent, /^#[0-9a-f]{6}$/i);
     assert.notEqual(palette.accent, palette.link);
@@ -441,6 +445,10 @@ describe('buildCss page paint', () => {
     assert.doesNotMatch(css, /trending__wrapper/);
     assert.match(css, /body input\[data-gmixer-native-l\]/);
     assert.match(css, /\[role="searchbox"\]\[data-gmixer-native-l\]/);
+    assert.match(css, /background-color: var\(--gmixer-gui-input\)/);
+    assert.match(css, /background-color: var\(--gmixer-gui-button\)/);
+    assert.match(css, /background-color: var\(--gmixer-gui-textarea\)/);
+    assert.match(css, /a\[class\*="mdc-button"\]:not\(\[class\*="icon-button"\]\)/);
     assert.match(css, /:has\(> input, > textarea, > select/);
     assert.match(css, /border-radius: inherit !important/);
     assert.match(css, /corner-shape: inherit !important/);
@@ -615,6 +623,30 @@ describe('buildCss page paint', () => {
       css,
       /:is\(li, div\):is\(:hover, :focus-within\) > :is\(ul, ol, div, menu, section\)/
     );
+  });
+
+  it('does not flush real text-entry fields transparent inside header/nav chrome', () => {
+    const css = buildCss(withTonePaint(createDefaultState().global), null);
+    const flushRule = css.match(
+      /:is\(\s*ul,\s*ol,\s*li,\s*div,\s*menu,\s*button[\s\S]*?background-color: transparent !important;\s*\}/
+    )[0];
+    // input/textarea/select and their ARIA text-field equivalents are gone
+    // from the flush selector entirely, so they fall through to the
+    // sitewide gui.input/gui.textarea paint (and field-shell/search-pill
+    // carve-outs) instead of losing their background inside chrome.
+    assert.doesNotMatch(flushRule, /\binput\b/);
+    assert.doesNotMatch(flushRule, /\btextarea\b/);
+    assert.doesNotMatch(flushRule, /\bselect\b/);
+    assert.doesNotMatch(flushRule, /\[role="textbox"\]/);
+    assert.doesNotMatch(flushRule, /\[role="searchbox"\]/);
+    assert.doesNotMatch(flushRule, /\[role="combobox"\]/);
+    // Action-trigger tags stay in the flush list, but a real button that
+    // already rendered an opaque native fill (CTA, sign-in) is carved out
+    // via [data-gmixer-native-l] so it keeps its GUI fill instead of a
+    // bare icon toggle's flat transparency.
+    assert.match(flushRule, /\bbutton\b/);
+    assert.match(flushRule, /\[role="button"\]/);
+    assert.match(flushRule, /:not\(\[data-gmixer-native-l\]\)/);
   });
 
   it('restyles covering ::before/::after fills on stamped hosts', () => {

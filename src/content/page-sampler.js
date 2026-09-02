@@ -5,6 +5,7 @@
 
 import {
   contrastRatio,
+  deriveGuiControlFills,
   deriveSurface,
   deriveSurfaceLadder,
   hexToHsl,
@@ -892,6 +893,14 @@ export function blendWithPageSample(
   const bg = backgroundSecondary || background;
   const derivedGui = deriveSurface(bg, isDark);
   const derivedContainers = deriveSurface(derivedGui, isDark);
+  const derivedControls = deriveGuiControlFills({
+    background,
+    backgroundSecondary: backgroundSecondary || deriveSurface(background, isDark),
+    surfaceGui: derivedGui,
+    surfaceContainers: derivedContainers,
+    accent,
+    isDark,
+  });
   const surfaceLadder = deriveSurfaceLadder(background, isDark, 3);
   let muted = mixHex(themePalette.muted, structural.muted || pageSample.muted);
   let focus = mixHex(themePalette.focus, structural.focus || pageSample.focus);
@@ -918,6 +927,10 @@ export function blendWithPageSample(
     surface: derivedGui,
     surfaceGui: derivedGui,
     surfaceContainers: derivedContainers,
+    guiButton: derivedControls.guiButton,
+    guiInput: derivedControls.guiInput,
+    guiTextarea: derivedControls.guiTextarea,
+    guiSlider: derivedControls.guiSlider,
     surfaceLadder,
     text,
     muted,

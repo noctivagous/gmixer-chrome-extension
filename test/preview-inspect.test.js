@@ -30,6 +30,8 @@ describe('preview-inspect', () => {
     assert.equal(previewRoleLabel('background'), 'BG:Primary');
     assert.equal(previewRoleLabel('backgroundSecondary'), 'BG:Secondary');
     assert.equal(previewRoleLabel('surfaceGui'), 'Surface: GUI');
+    assert.equal(previewRoleLabel('guiInput'), 'Surface:GUI:Input');
+    assert.equal(previewRoleLabel('guiButton'), 'Surface:GUI:Button');
     assert.equal(previewRoleLabel('headingMedium'), 'Accent:Heading-Medium');
     assert.equal(previewRoleLabel('headingSmall'), 'Accent:Heading-Small');
     assert.ok(PREVIEW_COLOR_ROLES.some((role) => role.id === 'accent'));
