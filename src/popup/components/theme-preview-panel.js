@@ -797,8 +797,21 @@ export class ThemePreviewPanel extends StoreBoundElement {
    * Combine hover + pin highlight for a leaf's annotation identity.
    * @param {{ roleId?: string|null, fontSlot?: string|null, media?: string|null }} leaf
    */
-  _guiControlCluster(colors, uiFamily) {
+  _guiControlCluster(colors, uiFamily, parent = 'background') {
     const hl = (leaf) => this._leafHighlightClass(leaf);
+    const suffix =
+      parent === 'backgroundSecondary'
+        ? 'OnBackgroundSecondary'
+        : parent === 'surfaceContainers'
+          ? 'OnSurfaceContainers'
+          : '';
+    const fillOf = (role) => colors[`${role}${suffix}`] || colors[role];
+    const borderOf = (role) =>
+      colors[`${role}Border${suffix}`] || colors[`${role}Border`] || colors.border;
+    const textOn = (role) => {
+      const pascal = role.charAt(0).toUpperCase() + role.slice(1);
+      return colors[`textOn${pascal}${suffix}`] || colors[`textOn${pascal}`] || colors.text;
+    };
     return html`
       <div class="blurb-gui-cluster">
         <input
@@ -812,9 +825,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.input"
           style="
             font-family: ${uiFamily};
-            background: ${colors.guiInput};
-            border-color: ${colors.border};
-            color: ${colors.text};
+            background: ${fillOf('guiInput')};
+            border-color: ${borderOf('guiInput')};
+            color: ${textOn('guiInput')};
             outline-color: ${colors.focus};
           "
         />
@@ -827,9 +840,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.textarea"
           style="
             font-family: ${uiFamily};
-            background: ${colors.guiTextarea};
-            border-color: ${colors.border};
-            color: ${colors.text};
+            background: ${fillOf('guiTextarea')};
+            border-color: ${borderOf('guiTextarea')};
+            color: ${textOn('guiTextarea')};
             outline-color: ${colors.focus};
           "
         >Text area</textarea>
@@ -855,9 +868,9 @@ export class ThemePreviewPanel extends StoreBoundElement {
           data-gmixer-texture="gui.button"
           style="
             font-family: ${uiFamily};
-            background: ${colors.guiButton};
-            border-color: ${colors.border};
-            color: ${colors.text};
+            background: ${fillOf('guiButton')};
+            border-color: ${borderOf('guiButton')};
+            color: ${textOn('guiButton')};
             box-shadow: 0 0 0 1px ${colors.focus};
           "
         >
@@ -1270,7 +1283,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
                     font-family: ${codeFamily};
                     background: ${colors.surfaceContainers};
                     border: 1px solid ${colors.border};
-                    color: ${colors.text};
+                    color: ${colors.textOnSurfaceContainers};
                   "
                   >code.sample()</code
                 >
@@ -1323,7 +1336,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
               style="
                 background: ${colors.surfaceContainers};
                 border-color: ${colors.border};
-                color: ${colors.text};
+                color: ${colors.textOnSurfaceContainers};
               "
             >
               <p class="blurb-card-label" style="font-family: ${uiFamily}">
@@ -1334,13 +1347,13 @@ export class ThemePreviewPanel extends StoreBoundElement {
                 data-gmixer-preview-role="headingMedium"
                 data-gmixer-preview-font="headings.h1"
                 data-gmixer-texture="accent.headingMedium"
-                style="font-family: ${headerFamily}; color: ${colors.headingMedium}"
+                style="font-family: ${headerFamily}; color: ${colors.headingMediumOnSurfaceContainers}"
               >
                 <span
                   class=${`blurb-article-link ${hl({ roleId: 'linkArticle' })}`.trim()}
                   data-gmixer-preview-role="linkArticle"
                   data-gmixer-texture="link.article"
-                  style="color: ${colors.linkArticle}"
+                  style="color: ${colors.linkArticleOnSurfaceContainers}"
                   >Card title</span
                 >
               </p>
@@ -1352,7 +1365,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
               >
                 Larger regions like cards and dialogs.
               </p>
-              ${this._guiControlCluster(colors, uiFamily)}
+              ${this._guiControlCluster(colors, uiFamily, 'surfaceContainers')}
             </div>
             <div
               class=${`blurb-gui ${hl({ roleId: 'backgroundSecondary' })}`.trim()}
@@ -1360,13 +1373,13 @@ export class ThemePreviewPanel extends StoreBoundElement {
               style="
                 background: ${colors.backgroundSecondary};
                 border-color: ${colors.border};
-                color: ${colors.text};
+                color: ${colors.textOnBackgroundSecondary};
               "
             >
               <p class="blurb-gui-label" style="font-family: ${uiFamily}">
                 BG:Secondary
               </p>
-              ${this._guiControlCluster(colors, uiFamily)}
+              ${this._guiControlCluster(colors, uiFamily, 'backgroundSecondary')}
             </div>
           </div>
           <div
@@ -1381,7 +1394,7 @@ export class ThemePreviewPanel extends StoreBoundElement {
             <p class="blurb-gui-label" style="font-family: ${uiFamily}">
               BG:Primary · body
             </p>
-            ${this._guiControlCluster(colors, uiFamily)}
+            ${this._guiControlCluster(colors, uiFamily, 'background')}
           </div>
           <div
             class="blurb-heading-scale"

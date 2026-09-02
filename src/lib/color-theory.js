@@ -181,6 +181,110 @@ export function ensureContrast(foreground, background, minimumRatio) {
     : '#000000';
 }
 
+/** Fill keys that receive per-surface ink (body, headings, links, muted, nav). */
+export const SURFACE_INK_FILL_KEYS = [
+  'backgroundSecondary',
+  'surfaceGui',
+  'surfaceContainers',
+  'guiButton',
+  'guiInput',
+  'guiTextarea',
+  'guiButtonOnBackgroundSecondary',
+  'guiInputOnBackgroundSecondary',
+  'guiTextareaOnBackgroundSecondary',
+  'guiButtonOnSurfaceContainers',
+  'guiInputOnSurfaceContainers',
+  'guiTextareaOnSurfaceContainers',
+  'surface0',
+  'surface1',
+  'surface2',
+];
+
+/** CSS custom-property suffix after `--gmixer-link-` etc. */
+export const SURFACE_INK_CSS_SUFFIX = {
+  backgroundSecondary: 'on-bg-secondary',
+  surfaceGui: 'on-surface-gui',
+  surfaceContainers: 'on-surface-containers',
+  guiButton: 'on-gui-button',
+  guiInput: 'on-gui-input',
+  guiTextarea: 'on-gui-textarea',
+  guiButtonOnBackgroundSecondary: 'on-gui-button-on-bg-secondary',
+  guiInputOnBackgroundSecondary: 'on-gui-input-on-bg-secondary',
+  guiTextareaOnBackgroundSecondary: 'on-gui-textarea-on-bg-secondary',
+  guiButtonOnSurfaceContainers: 'on-gui-button-on-surface-containers',
+  guiInputOnSurfaceContainers: 'on-gui-input-on-surface-containers',
+  guiTextareaOnSurfaceContainers: 'on-gui-textarea-on-surface-containers',
+  surface0: 'on-surface-0',
+  surface1: 'on-surface-1',
+  surface2: 'on-surface-2',
+};
+
+function fillKeyToPascal(fillKey) {
+  return fillKey.charAt(0).toUpperCase() + fillKey.slice(1);
+}
+
+/** Flat palette key, e.g. headingLarge + surfaceContainers → headingLargeOnSurfaceContainers. */
+export function inkOnRoleKey(roleId, fillKey) {
+  return `${roleId}On${fillKeyToPascal(fillKey)}`;
+}
+
+/**
+ * @param {{ backgroundSecondary: string, surfaceGui: string, surfaceContainers: string, guiButton: string, guiInput: string, guiTextarea: string, surfaceLadder: string[] }} palette
+ */
+export function paletteSurfaceFills(palette) {
+  const ladder = palette.surfaceLadder || [];
+  return {
+    backgroundSecondary: palette.backgroundSecondary,
+    surfaceGui: palette.surfaceGui,
+    surfaceContainers: palette.surfaceContainers,
+    guiButton: palette.guiButton,
+    guiInput: palette.guiInput,
+    guiTextarea: palette.guiTextarea,
+    guiButtonOnBackgroundSecondary: palette.guiButtonOnBackgroundSecondary,
+    guiInputOnBackgroundSecondary: palette.guiInputOnBackgroundSecondary,
+    guiTextareaOnBackgroundSecondary: palette.guiTextareaOnBackgroundSecondary,
+    guiButtonOnSurfaceContainers: palette.guiButtonOnSurfaceContainers,
+    guiInputOnSurfaceContainers: palette.guiInputOnSurfaceContainers,
+    guiTextareaOnSurfaceContainers: palette.guiTextareaOnSurfaceContainers,
+    surface0: ladder[0],
+    surface1: ladder[1],
+    surface2: ladder[2],
+  };
+}
+
+/**
+ * Lightness-only contrast check of one ink against each independently-derived fill.
+ * @param {string} ink
+ * @param {Record<string, string>} fills
+ * @param {number} [minimumRatio=4.5]
+ */
+export function contrastInkOnSurfaces(ink, fills, minimumRatio = 4.5) {
+  /** @type {Record<string, string>} */
+  const on = {};
+  for (const fillKey of SURFACE_INK_FILL_KEYS) {
+    on[fillKey] = ensureContrast(ink, fills[fillKey], minimumRatio);
+  }
+  return on;
+}
+
+/**
+ * Flatten contrastInkOnSurfaces for every role into textOnSurfaceGui-style keys.
+ * @param {Record<string, string>} roleInks
+ * @param {Record<string, string>} fills
+ * @param {number} [minimumRatio=4.5]
+ */
+export function inkOnTokens(roleInks, fills, minimumRatio = 4.5) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [roleId, ink] of Object.entries(roleInks)) {
+    const on = contrastInkOnSurfaces(ink, fills, minimumRatio);
+    for (const fillKey of SURFACE_INK_FILL_KEYS) {
+      out[inkOnRoleKey(roleId, fillKey)] = on[fillKey];
+    }
+  }
+  return out;
+}
+
 function rotate(h, degrees) {
   return (h + degrees + 360) % 360;
 }
@@ -380,6 +484,95 @@ export function deriveGuiControlFills(layers) {
   return { guiInput, guiTextarea, guiButton, guiSlider };
 }
 
+const GUI_FILL_DELTA_SECONDARY = 10;
+const GUI_FILL_DELTA_CONTAINERS = 14;
+const GUI_BORDER_DELTA = 8;
+
+/**
+ * Same hue/saturation; step lightness away from the parent fill
+ * (darker on lighter, lighter on darker).
+ * @param {string} hex
+ * @param {string} parentHex
+ * @param {number} delta
+ */
+export function restyleHexAgainstParent(hex, parentHex, delta) {
+  const src = hexToHsl(hex);
+  const parent = hexToHsl(parentHex);
+  const dir = parent.l >= src.l ? -1 : 1;
+  let next = hslToHex({
+    ...src,
+    l: Math.max(6, Math.min(94, src.l + dir * delta)),
+  });
+  if (fillsTooClose(next, parentHex)) {
+    next = deriveDistinctFill(next, [parentHex], parent.l < 50);
+  }
+  return next;
+}
+
+/**
+ * Per-control outlines on BG:Primary, distinct from each other and the fill.
+ * @param {string} border
+ * @param {{ guiButton: string, guiInput: string, guiTextarea: string }} fills
+ * @param {boolean} isDark
+ */
+export function deriveGuiControlBorders(border, fills, isDark) {
+  const guiInputBorder = deriveDistinctFill(border, [fills.guiInput, fills.guiButton, fills.guiTextarea], isDark);
+  const guiTextareaBorder = deriveDistinctFill(guiInputBorder, [fills.guiTextarea, guiInputBorder], isDark);
+  const guiButtonBorder = deriveDistinctFill(border, [fills.guiButton, guiInputBorder, guiTextareaBorder], isDark);
+  return { guiButtonBorder, guiInputBorder, guiTextareaBorder };
+}
+
+/**
+ * Assigned fill/border is the BG:Primary look. Secondary and Containers are
+ * hardcoded restyles of that assignment — not extra swatch chips.
+ * @param {string} assignedFill
+ * @param {string} assignedBorder
+ * @param {{ backgroundSecondary: string, surfaceContainers: string }} parents
+ */
+export function guiControlOnParents(assignedFill, assignedBorder, parents) {
+  const secondaryFill = restyleHexAgainstParent(
+    assignedFill,
+    parents.backgroundSecondary,
+    GUI_FILL_DELTA_SECONDARY
+  );
+  const containersFill = restyleHexAgainstParent(
+    assignedFill,
+    parents.surfaceContainers,
+    GUI_FILL_DELTA_CONTAINERS
+  );
+  const secondaryBorder = ensureContrast(
+    restyleHexAgainstParent(assignedBorder, parents.backgroundSecondary, GUI_BORDER_DELTA),
+    secondaryFill,
+    3
+  );
+  const containersBorder = ensureContrast(
+    restyleHexAgainstParent(assignedBorder, parents.surfaceContainers, GUI_BORDER_DELTA),
+    containersFill,
+    3
+  );
+  return {
+    background: { fill: assignedFill, border: assignedBorder },
+    backgroundSecondary: { fill: secondaryFill, border: secondaryBorder },
+    surfaceContainers: { fill: containersFill, border: containersBorder },
+  };
+}
+
+/**
+ * Flatten one control's parent variants onto palette keys
+ * (guiButtonOnBackgroundSecondary, guiButtonBorder, …).
+ * @param {'guiButton'|'guiInput'|'guiTextarea'} role
+ * @param {ReturnType<typeof guiControlOnParents>} onParents
+ */
+export function flattenGuiControlOnParents(role, onParents) {
+  return {
+    [`${role}OnBackgroundSecondary`]: onParents.backgroundSecondary.fill,
+    [`${role}OnSurfaceContainers`]: onParents.surfaceContainers.fill,
+    [`${role}Border`]: onParents.background.border,
+    [`${role}BorderOnBackgroundSecondary`]: onParents.backgroundSecondary.border,
+    [`${role}BorderOnSurfaceContainers`]: onParents.surfaceContainers.border,
+  };
+}
+
 export function deriveSurface(backgroundHex, isDark = hexToHsl(backgroundHex).l < 50) {
   const { h, s, l } = hexToHsl(backgroundHex);
   const surfaceIsDark = Boolean(isDark);
@@ -537,20 +730,70 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     accent,
     isDark,
   });
+  const primaryBorders = deriveGuiControlBorders(border, { guiButton, guiInput, guiTextarea }, isDark);
+  const guiParents = { backgroundSecondary, surfaceContainers };
+  const guiOn = {
+    ...flattenGuiControlOnParents(
+      'guiButton',
+      guiControlOnParents(guiButton, primaryBorders.guiButtonBorder, guiParents)
+    ),
+    ...flattenGuiControlOnParents(
+      'guiInput',
+      guiControlOnParents(guiInput, primaryBorders.guiInputBorder, guiParents)
+    ),
+    ...flattenGuiControlOnParents(
+      'guiTextarea',
+      guiControlOnParents(guiTextarea, primaryBorders.guiTextareaBorder, guiParents)
+    ),
+  };
 
   // Each independently-derived surface can drift lighter/darker than the
   // page's nominal isDark direction (hue-rotation escape hatches in
-  // deriveSurface/deriveDistinctFill), so body/control ink is re-checked
-  // per surface rather than assumed safe from the global `text` pick.
-  const textOnBackgroundSecondary = ensureContrast(text, backgroundSecondary, 4.5);
-  const textOnSurfaceGui = ensureContrast(text, surfaceGui, 4.5);
-  const textOnSurfaceContainers = ensureContrast(text, surfaceContainers, 4.5);
-  const textOnGuiButton = ensureContrast(text, guiButton, 4.5);
-  const textOnGuiInput = ensureContrast(text, guiInput, 4.5);
-  const textOnGuiTextarea = ensureContrast(text, guiTextarea, 4.5);
-  const textOnSurface0 = ensureContrast(text, surfaceLadder[0], 4.5);
-  const textOnSurface1 = ensureContrast(text, surfaceLadder[1], 4.5);
-  const textOnSurface2 = ensureContrast(text, surfaceLadder[2], 4.5);
+  // deriveSurface/deriveDistinctFill), so ink is re-checked per surface
+  // rather than assumed safe from the global pick against `background`.
+  const linkHover = deriveHoverColor(link, isDark);
+  const linkActive = deriveActiveColor(link, isDark);
+  const navLinkHover = deriveHoverColor(navLink, isDark);
+  const navLinkActive = deriveActiveColor(navLink, isDark);
+  const headingLarge = accent;
+  const headingMedium = accent;
+  const headingSmall = accent;
+  const linkBare = link;
+  const linkArticle = link;
+  const mutedKicker = muted;
+  const mutedPhotoCaption = muted;
+  const mutedAsideNotes = muted;
+  const inkOn = inkOnTokens(
+    {
+      text,
+      accent,
+      headingLarge,
+      headingMedium,
+      headingSmall,
+      link,
+      linkHover,
+      linkActive,
+      linkBare,
+      linkArticle,
+      muted,
+      mutedKicker,
+      mutedPhotoCaption,
+      mutedAsideNotes,
+      navLink,
+      navLinkHover,
+      navLinkActive,
+    },
+    paletteSurfaceFills({
+      backgroundSecondary,
+      surfaceGui,
+      surfaceContainers,
+      guiButton,
+      guiInput,
+      guiTextarea,
+      surfaceLadder,
+      ...guiOn,
+    })
+  );
 
   return {
     background,
@@ -569,22 +812,23 @@ export function buildPalette(baseColorHex, scheme, mode = 'dark', intensity = 0.
     muted,
     accent,
     link,
-    linkHover: deriveHoverColor(link, isDark),
-    linkActive: deriveActiveColor(link, isDark),
+    linkHover,
+    linkActive,
     navLink,
-    navLinkHover: deriveHoverColor(navLink, isDark),
-    navLinkActive: deriveActiveColor(navLink, isDark),
+    navLinkHover,
+    navLinkActive,
     border,
     focus,
-    textOnBackgroundSecondary,
-    textOnSurfaceGui,
-    textOnSurfaceContainers,
-    textOnGuiButton,
-    textOnGuiInput,
-    textOnGuiTextarea,
-    textOnSurface0,
-    textOnSurface1,
-    textOnSurface2,
+    headingLarge,
+    headingMedium,
+    headingSmall,
+    linkBare,
+    linkArticle,
+    mutedKicker,
+    mutedPhotoCaption,
+    mutedAsideNotes,
+    ...guiOn,
+    ...inkOn,
     isDark,
   };
 }

@@ -9,7 +9,9 @@ import {
   hexToHsl,
   HUE_RING,
   hueRingHex,
+  inkOnRoleKey,
   resolveGlowColor,
+  SURFACE_INK_FILL_KEYS,
 } from '../src/lib/color-theory.js';
 import {
   blendWithPageSample,
@@ -216,6 +218,68 @@ describe('color-theory', () => {
         assert.ok(contrastRatio(palette.focus, palette.surfaceGui) >= 3);
       }
     }
+  });
+
+  it('contrast-checks heading, link, and muted ink against each derived surface', () => {
+    for (const mode of ['light', 'gray', 'dark']) {
+      const palette = buildPalette('#7c3aed', 'analog', mode);
+      const fills = {
+        backgroundSecondary: palette.backgroundSecondary,
+        surfaceGui: palette.surfaceGui,
+        surfaceContainers: palette.surfaceContainers,
+        guiButton: palette.guiButton,
+        guiInput: palette.guiInput,
+        guiTextarea: palette.guiTextarea,
+        guiButtonOnBackgroundSecondary: palette.guiButtonOnBackgroundSecondary,
+        guiInputOnBackgroundSecondary: palette.guiInputOnBackgroundSecondary,
+        guiTextareaOnBackgroundSecondary: palette.guiTextareaOnBackgroundSecondary,
+        guiButtonOnSurfaceContainers: palette.guiButtonOnSurfaceContainers,
+        guiInputOnSurfaceContainers: palette.guiInputOnSurfaceContainers,
+        guiTextareaOnSurfaceContainers: palette.guiTextareaOnSurfaceContainers,
+        surface0: palette.surfaceLadder[0],
+        surface1: palette.surfaceLadder[1],
+        surface2: palette.surfaceLadder[2],
+      };
+      for (const fillKey of SURFACE_INK_FILL_KEYS) {
+        const fill = fills[fillKey];
+        for (const roleId of ['headingLarge', 'link', 'muted', 'navLink', 'accent']) {
+          const ink = palette[inkOnRoleKey(roleId, fillKey)];
+          assert.match(ink, /^#[0-9a-f]{6}$/i, `${mode} ${roleId} on ${fillKey}`);
+          assert.ok(
+            contrastRatio(ink, fill) >= 4.5,
+            `${mode} ${roleId} on ${fillKey} must meet 4.5`
+          );
+        }
+      }
+    }
+  });
+
+  it('restyles GUI control fills darker on lighter parents and lighter on darker parents', () => {
+    const palette = buildPalette('#7c3aed', 'analog', 'dark');
+    for (const role of ['guiButton', 'guiInput', 'guiTextarea']) {
+      const assigned = palette[role];
+      const onSecondary = palette[`${role}OnBackgroundSecondary`];
+      const onContainers = palette[`${role}OnSurfaceContainers`];
+      assert.match(onSecondary, /^#[0-9a-f]{6}$/i);
+      assert.match(onContainers, /^#[0-9a-f]{6}$/i);
+      assert.notEqual(onSecondary.toLowerCase(), assigned.toLowerCase());
+      assert.notEqual(onContainers.toLowerCase(), assigned.toLowerCase());
+      assert.notEqual(onSecondary.toLowerCase(), palette.backgroundSecondary.toLowerCase());
+      assert.notEqual(onContainers.toLowerCase(), palette.surfaceContainers.toLowerCase());
+      const assignedL = hexToHsl(assigned).l;
+      const secondaryDir = hexToHsl(palette.backgroundSecondary).l >= assignedL ? -1 : 1;
+      const containersDir = hexToHsl(palette.surfaceContainers).l >= assignedL ? -1 : 1;
+      assert.ok(
+        (hexToHsl(onSecondary).l - assignedL) * secondaryDir > 0,
+        `${role} on secondary should move away from parent lightness`
+      );
+      assert.ok(
+        (hexToHsl(onContainers).l - assignedL) * containersDir > 0,
+        `${role} on containers should move away from parent lightness`
+      );
+      assert.match(palette[`${role}Border`], /^#[0-9a-f]{6}$/i);
+    }
+    assert.notEqual(palette.guiButtonBorder, palette.guiInputBorder);
   });
 
   it('leaves explicit role overrides unchanged', () => {
@@ -518,6 +582,19 @@ describe('buildCss page paint', () => {
       css,
       /p, li, td, th, blockquote, label,[\s\S]*?\{\s*color: inherit !important;\s*\}/
     );
+    assert.match(css, /--gmixer-heading-large-on-surface-containers:/);
+    assert.match(css, /--gmixer-link-on-bg-secondary:/);
+    assert.match(css, /--gmixer-muted-on-surface-gui:/);
+    assert.match(css, /--gmixer-heading-large: var\(--gmixer-heading-large-on-surface-containers\)/);
+    assert.match(css, /--gmixer-link: var\(--gmixer-link-on-bg-secondary\)/);
+    assert.match(css, /--gmixer-muted: var\(--gmixer-muted-on-surface-gui\)/);
+    assert.match(css, /--gmixer-gui-button-on-surface-containers:/);
+    assert.match(css, /--gmixer-gui-button-border:/);
+    assert.match(
+      css,
+      /--gmixer-gui-button: var\(--gmixer-gui-button-on-surface-containers\)/
+    );
+    assert.match(css, /border-color: var\(--gmixer-gui-button-border\) !important;/);
   });
 
   it('paintOpaqueOnly off restores unconditional structural fills', () => {

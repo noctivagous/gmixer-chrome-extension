@@ -5,7 +5,10 @@
 import {
   deriveSurfaceLadder,
   hexToHsl,
+  inkOnRoleKey,
   resolveGlowColor,
+  SURFACE_INK_CSS_SUFFIX,
+  SURFACE_INK_FILL_KEYS,
 } from '../lib/color-theory.js';
 import {
   applyColorOverrides,
@@ -942,6 +945,85 @@ const NAV_CHROME_SELECTORS = [
   'body [data-gmixer-role="navigation"]',
 ].join(',\n    ');
 
+/** Roles remapped on each painted surface so nested heading/link/muted rules inherit. */
+const INK_CSS_VARS = [
+  ['text', '--gmixer-text', null],
+  ['accent', '--gmixer-accent', null],
+  ['headingLarge', '--gmixer-heading-large', 'accent'],
+  ['headingMedium', '--gmixer-heading-medium', 'accent'],
+  ['headingSmall', '--gmixer-heading-small', 'accent'],
+  ['link', '--gmixer-link', null],
+  ['linkHover', '--gmixer-link-hover', 'link'],
+  ['linkActive', '--gmixer-link-active', 'link'],
+  ['linkBare', '--gmixer-link-bare', 'link'],
+  ['linkArticle', '--gmixer-link-article', 'link'],
+  ['muted', '--gmixer-muted', null],
+  ['mutedKicker', '--gmixer-muted-kicker', 'muted'],
+  ['mutedPhotoCaption', '--gmixer-muted-photo-caption', 'muted'],
+  ['mutedAsideNotes', '--gmixer-muted-aside-notes', 'muted'],
+  ['navLink', '--gmixer-nav-link', 'link'],
+  ['navLinkHover', '--gmixer-nav-link-hover', 'navLink'],
+  ['navLinkActive', '--gmixer-nav-link-active', 'navLink'],
+];
+
+function inkRoleHex(role, roleId, fallback) {
+  return role(roleId) || (fallback ? role(fallback) : '') || role('text');
+}
+
+function inkOnTokenCss(role) {
+  return SURFACE_INK_FILL_KEYS.flatMap((fillKey) => {
+    const suffix = SURFACE_INK_CSS_SUFFIX[fillKey];
+    return INK_CSS_VARS.map(([roleId, cssVar, fallback]) => {
+      const hex =
+        role(inkOnRoleKey(roleId, fillKey)) || inkRoleHex(role, roleId, fallback);
+      return `${cssVar}-${suffix}: ${hex};`;
+    });
+  }).join('\n      ');
+}
+
+function remapInkVars(onSuffix) {
+  return INK_CSS_VARS.map(([, cssVar]) => `${cssVar}: var(${cssVar}-${onSuffix});`).join(
+    '\n      '
+  );
+}
+
+const GUI_CONTROL_CSS = [
+  ['guiButton', '--gmixer-gui-button'],
+  ['guiInput', '--gmixer-gui-input'],
+  ['guiTextarea', '--gmixer-gui-textarea'],
+];
+
+function guiFillBorderTokenCss(role) {
+  return GUI_CONTROL_CSS.flatMap(([id, cssVar]) => {
+    const borderVar = `${cssVar}-border`;
+    return [
+      `${borderVar}: ${role(`${id}Border`) || role('border')};`,
+      `${cssVar}-on-bg-secondary: ${role(`${id}OnBackgroundSecondary`) || role(id)};`,
+      `${cssVar}-on-surface-containers: ${role(`${id}OnSurfaceContainers`) || role(id)};`,
+      `${borderVar}-on-bg-secondary: ${
+        role(`${id}BorderOnBackgroundSecondary`) || role(`${id}Border`) || role('border')
+      };`,
+      `${borderVar}-on-surface-containers: ${
+        role(`${id}BorderOnSurfaceContainers`) || role(`${id}Border`) || role('border')
+      };`,
+    ];
+  }).join('\n      ');
+}
+
+/** Restyle Button/Input/TextArea fill, outline, and on-gui-* ink for a parent surface. */
+function remapGuiForParent(parentSuffix) {
+  const fillRemap = GUI_CONTROL_CSS.flatMap(([, cssVar]) => [
+    `${cssVar}: var(${cssVar}-${parentSuffix});`,
+    `${cssVar}-border: var(${cssVar}-border-${parentSuffix});`,
+  ]);
+  const inkRemap = ['button', 'input', 'textarea'].flatMap((kind) =>
+    INK_CSS_VARS.map(
+      ([, cssVar]) => `${cssVar}-on-gui-${kind}: var(${cssVar}-on-gui-${kind}-${parentSuffix});`
+    )
+  );
+  return [...fillRemap, ...inkRemap].join('\n      ');
+}
+
 function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, brandFamily) {
   return `
     :root {
@@ -954,12 +1036,6 @@ function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, bran
       --gmixer-surface-1: ${ladder[1]};
       --gmixer-surface-2: ${ladder[2]};
       --gmixer-text: ${role('text')};
-      --gmixer-text-on-bg-secondary: ${role('textOnBackgroundSecondary') || role('text')};
-      --gmixer-text-on-surface-gui: ${role('textOnSurfaceGui') || role('text')};
-      --gmixer-text-on-surface-containers: ${role('textOnSurfaceContainers') || role('text')};
-      --gmixer-text-on-surface-0: ${role('textOnSurface0') || role('text')};
-      --gmixer-text-on-surface-1: ${role('textOnSurface1') || role('text')};
-      --gmixer-text-on-surface-2: ${role('textOnSurface2') || role('text')};
       --gmixer-muted: ${role('muted')};
       --gmixer-accent: ${role('accent')};
       --gmixer-link: ${role('link')};
@@ -974,9 +1050,7 @@ function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, bran
       --gmixer-gui-input: ${role('guiInput') || surfaceGui};
       --gmixer-gui-textarea: ${role('guiTextarea') || surfaceGui};
       --gmixer-gui-slider: ${role('guiSlider') || surfaceGui};
-      --gmixer-text-on-gui-button: ${role('textOnGuiButton') || role('text')};
-      --gmixer-text-on-gui-input: ${role('textOnGuiInput') || role('text')};
-      --gmixer-text-on-gui-textarea: ${role('textOnGuiTextarea') || role('text')};
+      ${guiFillBorderTokenCss(role)}
       --gmixer-heading-large: ${role('headingLarge') || role('accent')};
       --gmixer-heading-medium: ${role('headingMedium') || role('accent')};
       --gmixer-heading-small: ${role('headingSmall') || role('accent')};
@@ -985,6 +1059,7 @@ function themeTokenCss(role, surfaceGui, surfaceContainers, ladder, isDark, bran
       --gmixer-muted-kicker: ${role('mutedKicker') || role('muted')};
       --gmixer-muted-photo-caption: ${role('mutedPhotoCaption') || role('muted')};
       --gmixer-muted-aside-notes: ${role('mutedAsideNotes') || role('muted')};
+      ${inkOnTokenCss(role)}
       --gmixer-brand: ${brandFamily.brand};
       --gmixer-brand-tint: ${brandFamily.tint};
       --gmixer-brand-shade: ${brandFamily.shade};
@@ -1108,6 +1183,21 @@ function roleCss(
     : 'var(--gmixer-text)';
   const navFill = identityRegions.nav ? 'var(--gmixer-nav)' : 'var(--gmixer-bg-secondary)';
   const navText = identityRegions.nav ? 'var(--gmixer-nav-text)' : 'var(--gmixer-text)';
+  const headerInkRemap = identityRegions.masthead
+    ? ''
+    : `${remapInkVars('on-bg-secondary')}\n      ${remapGuiForParent('on-bg-secondary')}`;
+  const navInkRemap = identityRegions.nav
+    ? ''
+    : `${remapInkVars('on-bg-secondary')}\n      ${remapGuiForParent('on-bg-secondary')}`;
+  const inkOnSecondary = `${remapInkVars('on-bg-secondary')}\n      ${remapGuiForParent('on-bg-secondary')}`;
+  const inkOnGui = remapInkVars('on-surface-gui');
+  const inkOnContainers = `${remapInkVars('on-surface-containers')}\n      ${remapGuiForParent('on-surface-containers')}`;
+  const inkOnGuiButton = remapInkVars('on-gui-button');
+  const inkOnGuiInput = remapInkVars('on-gui-input');
+  const inkOnGuiTextarea = remapInkVars('on-gui-textarea');
+  const inkOnSurface0 = remapInkVars('on-surface-0');
+  const inkOnSurface1 = remapInkVars('on-surface-1');
+  const inkOnSurface2 = remapInkVars('on-surface-2');
   const chromeHostScope = `:is(
       body :is(
         header,
@@ -1137,12 +1227,14 @@ function roleCss(
       /* Gradients paint above background-color (NTD/Epoch-style mastheads). */
       background-image: none !important;
       color: ${headerText} !important;
+      ${headerInkRemap}
     }
 
     ${eachSelector(maybeOpaque(NAV_CHROME_SELECTORS), ':not([data-gmixer-glaze])')} {
       background-color: ${navFill} !important;
       background-image: none !important;
       color: ${navText} !important;
+      ${navInkRemap}
     }
 
     /* Adopted sheets have no body ancestor. Classifier stamps provide the
@@ -1156,12 +1248,14 @@ function roleCss(
       background-color: ${headerFill} !important;
       background-image: none !important;
       color: ${headerText} !important;
+      ${headerInkRemap}
     }
 
     ${eachSelector(maybeOpaque(`[data-gmixer-role="navigation"]`), ':not([data-gmixer-glaze])')} {
       background-color: ${navFill} !important;
       background-image: none !important;
       color: ${navText} !important;
+      ${navInkRemap}
     }
 
     /* Frosted / semi-transparent chrome: keep the glaze, swap in theme color.
@@ -1176,12 +1270,14 @@ function roleCss(
       background-color: color-mix(in srgb, ${headerFill} 50%, transparent) !important;
       background-image: none !important;
       color: ${headerText} !important;
+      ${headerInkRemap}
     }
     ${eachSelector(maybeOpaque(NAV_CHROME_SELECTORS), '[data-gmixer-glaze]')},
     ${eachSelector(maybeOpaque(`[data-gmixer-role="navigation"]`), '[data-gmixer-glaze]')} {
       background-color: color-mix(in srgb, ${navFill} 50%, transparent) !important;
       background-image: none !important;
       color: ${navText} !important;
+      ${navInkRemap}
     }
   `;
 
@@ -1224,6 +1320,7 @@ function roleCss(
       background-color: var(--gmixer-bg-secondary) !important;
       background-image: none !important;
       color: var(--gmixer-text-on-bg-secondary) !important;
+      ${inkOnSecondary}
     }
 
     /* Main content sheet: opaque-aware (layout-only mains stay transparent). */
@@ -1234,6 +1331,7 @@ function roleCss(
       /* Gradients paint above background-color (HF Tailwind rails/cards). */
       background-image: none !important;
       color: var(--gmixer-text-on-bg-secondary) !important;
+      ${inkOnSecondary}
     }
 
     /* Compact controls use the GUI surface. Include a.button CTAs (Opera GX
@@ -1245,6 +1343,7 @@ function roleCss(
     body [role="button"], body [role="tab"], body [contenteditable="true"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
       color: var(--gmixer-text-on-surface-gui) !important;
+      ${inkOnGui}
     }
 
     /* Surface:GUI:Button/Input/TextArea — always paint, even when the native
@@ -1254,14 +1353,20 @@ function roleCss(
     ${TEXTURE_PAGE_TARGETS['gui.button'].selectors} {
       background-color: var(--gmixer-gui-button) !important;
       color: var(--gmixer-text-on-gui-button) !important;
+      border-color: var(--gmixer-gui-button-border) !important;
+      ${inkOnGuiButton}
     }
     ${TEXTURE_PAGE_TARGETS['gui.input'].selectors} {
       background-color: var(--gmixer-gui-input) !important;
       color: var(--gmixer-text-on-gui-input) !important;
+      border-color: var(--gmixer-gui-input-border) !important;
+      ${inkOnGuiInput}
     }
     ${TEXTURE_PAGE_TARGETS['gui.textarea'].selectors} {
       background-color: var(--gmixer-gui-textarea) !important;
       color: var(--gmixer-text-on-gui-textarea) !important;
+      border-color: var(--gmixer-gui-textarea-border) !important;
+      ${inkOnGuiTextarea}
     }
     ${TEXTURE_PAGE_TARGETS['gui.slider'].selectors} {
       accent-color: var(--gmixer-gui-slider) !important;
@@ -1305,6 +1410,7 @@ function roleCss(
       background-color: var(--gmixer-surface-gui) !important;
       background-image: none !important;
       color: var(--gmixer-text-on-surface-gui) !important;
+      ${inkOnGui}
     }
 
     /* Explicit and stamped panels may be portaled to body or live in an
@@ -1328,6 +1434,7 @@ function roleCss(
       background-color: var(--gmixer-surface-gui) !important;
       background-image: none !important;
       color: var(--gmixer-text-on-surface-gui) !important;
+      ${inkOnGui}
     }
 
     /* Poster chrome is a full-size sibling of the image. Do not sheet-paint
@@ -1359,6 +1466,7 @@ function roleCss(
       color: var(--gmixer-text-on-surface-gui) !important;
       border-color: var(--gmixer-border) !important;
       background-clip: padding-box !important;
+      ${inkOnGui}
     }
     body [role="search"] :is(input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"]) {
       background-color: transparent !important;
@@ -1379,6 +1487,7 @@ function roleCss(
       color: var(--gmixer-text-on-surface-gui) !important;
       border-color: var(--gmixer-border) !important;
       background-clip: padding-box !important;
+      ${inkOnGui}
     }
 
     body :is(
@@ -1447,6 +1556,7 @@ function roleCss(
       /* Gradients paint above background-color (HF Tailwind rails/cards). */
       background-image: none !important;
       color: var(--gmixer-text-on-surface-containers) !important;
+      ${inkOnContainers}
     }
 
     /* Open shadow trees have no body ancestor, so the rules above miss
@@ -1464,12 +1574,14 @@ function roleCss(
       background-color: var(--gmixer-surface-containers) !important;
       background-image: none !important;
       color: var(--gmixer-text-on-surface-containers) !important;
+      ${inkOnContainers}
     }
 
     ${solidPaint(maybeOpaque(`[data-gmixer-role="main"]`))} {
       background-color: var(--gmixer-bg-secondary) !important;
       background-image: none !important;
       color: var(--gmixer-text-on-bg-secondary) !important;
+      ${inkOnSecondary}
     }
 
     /* Keep text coverage semantic, but surface-aware: never force a single
@@ -1546,6 +1658,7 @@ function roleCss(
     ${maybeOpaque(`body a[role="tab"], body [role="tab"]`)} {
       background-color: var(--gmixer-surface-gui) !important;
       color: var(--gmixer-text-on-surface-gui) !important;
+      ${inkOnGui}
     }
 
     /* CTA / button-styled anchors keep a GUI button fill (later than the
@@ -1558,6 +1671,8 @@ function roleCss(
     body a[role="button"] {
       background-color: var(--gmixer-gui-button) !important;
       color: var(--gmixer-text-on-gui-button) !important;
+      border-color: var(--gmixer-gui-button-border) !important;
+      ${inkOnGuiButton}
     }
 
     a:hover, a:focus-visible {
@@ -1711,6 +1826,7 @@ function roleCss(
     )[data-gmixer-tone-step="0"] {
       background-color: var(--gmixer-surface-0) !important;
       color: var(--gmixer-text-on-surface-0) !important;
+      ${inkOnSurface0}
     }
     body :is(
       [data-gmixer-role="surface"],
@@ -1723,6 +1839,7 @@ function roleCss(
     )[data-gmixer-tone-step="1"] {
       background-color: var(--gmixer-surface-1) !important;
       color: var(--gmixer-text-on-surface-1) !important;
+      ${inkOnSurface1}
     }
     body :is(
       [data-gmixer-role="surface"],
@@ -1735,6 +1852,7 @@ function roleCss(
     )[data-gmixer-tone-step="2"] {
       background-color: var(--gmixer-surface-2) !important;
       color: var(--gmixer-text-on-surface-2) !important;
+      ${inkOnSurface2}
     }
 
     ${chromeRules}
@@ -1748,18 +1866,21 @@ function roleCss(
       [data-gmixer-role="navigation"]
     )[data-gmixer-tone-step="0"] {
       background-color: var(--gmixer-surface-0) !important;
+      ${inkOnSurface0}
     }
     body :is(
       [data-gmixer-role="header"],
       [data-gmixer-role="navigation"]
     )[data-gmixer-tone-step="1"] {
       background-color: var(--gmixer-surface-1) !important;
+      ${inkOnSurface1}
     }
     body :is(
       [data-gmixer-role="header"],
       [data-gmixer-role="navigation"]
     )[data-gmixer-tone-step="2"] {
       background-color: var(--gmixer-surface-2) !important;
+      ${inkOnSurface2}
     }`
         : ''
     }

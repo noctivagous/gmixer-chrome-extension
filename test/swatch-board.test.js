@@ -41,6 +41,17 @@ describe('swatch-board', () => {
     assert.ok(Math.abs(bg.l - expected.l) < 25);
   });
 
+  it('assigns Button Input and TextArea once, as BG:Primary looks', () => {
+    const gui = SWATCH_ASSIGN_ROLES.filter((role) =>
+      ['guiButton', 'guiInput', 'guiTextarea'].includes(role.id)
+    );
+    assert.equal(gui.length, 3);
+    assert.equal(
+      SWATCH_ASSIGN_ROLES.filter((role) => role.id.includes('OnBackground') || role.id.includes('OnSurface')).length,
+      0
+    );
+  });
+
   it('keeps assignment coordinates when lightness changes', () => {
     const start = autoAssignSwatches('#7c3aed', 'triadic', 'dark');
     const darker = '#2c1a5c';

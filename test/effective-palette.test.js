@@ -84,6 +84,28 @@ describe('effective-palette', () => {
     // The override deliberately conflicts with the flat theme `text` pick —
     // proving the surface-specific ink actually diverged from it.
     assert.notEqual(applied.textOnSurfaceContainers, applied.text);
+    assert.ok(contrastRatio(applied.headingLarge, applied.surfaceContainers) < 4.5);
+    assert.ok(contrastRatio(applied.link, applied.surfaceContainers) < 4.5);
+    assert.ok(contrastRatio(applied.muted, applied.surfaceContainers) < 4.5);
+    assert.ok(
+      contrastRatio(applied.headingLargeOnSurfaceContainers, applied.surfaceContainers) >= 4.5
+    );
+    assert.ok(contrastRatio(applied.linkOnSurfaceContainers, applied.surfaceContainers) >= 4.5);
+    assert.ok(contrastRatio(applied.mutedOnSurfaceContainers, applied.surfaceContainers) >= 4.5);
+    assert.notEqual(applied.headingLargeOnSurfaceContainers, applied.headingLarge);
+    assert.notEqual(applied.linkOnSurfaceContainers, applied.link);
+    assert.notEqual(applied.mutedOnSurfaceContainers, applied.muted);
+  });
+
+  it('seeds GUI parent restyles from the assigned Button fill, not the auto default', () => {
+    const palette = buildPalette('#8a8a8a', 'monochrome', 'dark');
+    const applied = applyColorOverrides(palette, { guiButton: '#334455' });
+    assert.equal(applied.guiButton, '#334455');
+    assert.notEqual(applied.guiButtonOnSurfaceContainers.toLowerCase(), palette.guiButtonOnSurfaceContainers.toLowerCase());
+    assert.notEqual(applied.guiButtonOnSurfaceContainers.toLowerCase(), '#334455');
+    const assignedL = hexToHsl('#334455').l;
+    const dir = hexToHsl(applied.surfaceContainers).l >= assignedL ? -1 : 1;
+    assert.ok((hexToHsl(applied.guiButtonOnSurfaceContainers).l - assignedL) * dir > 0);
   });
 
   it('keeps an explicit Secondary override beside Primary', () => {

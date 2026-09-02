@@ -13,7 +13,7 @@ deferred sections: Texture, Clipping/Corners,
 Font Size Clamping, Side Panel, Theme Packs.
 
 0.1.1 - Texturing of page, Clipping/Corners,
-Minimum/maximum values for font size in
+(Font Size Clamping, Minimum/maximum values for font size in
 Typography groups.
 
 [ ] Font Size Clamping - 

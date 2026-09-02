@@ -2,11 +2,15 @@
 // Keeps Only: Tone / Color Off / override cascade rules in one place.
 import {
   buildPalette,
+  deriveGuiControlBorders,
   deriveGuiControlFills,
   deriveSurface,
   deriveSurfaceLadder,
-  ensureContrast,
+  flattenGuiControlOnParents,
+  guiControlOnParents,
   hexToHsl,
+  inkOnTokens,
+  paletteSurfaceFills,
 } from './color-theory.js';
 import {
   applySwatchAssignments,
@@ -208,20 +212,27 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
   const guiInput = pickGui('guiInput');
   const guiTextarea = pickGui('guiTextarea');
   const guiSlider = pickGui('guiSlider');
-
-  // Re-check body/control ink against each surface's FINAL fill (post
-  // override) — a manually-overridden bright surface still needs legible
-  // text, not the stale contrast check from the un-overridden theme default.
-  const text = pick('text');
-  const textOnBackgroundSecondary = ensureContrast(text, backgroundSecondary, 4.5);
-  const textOnSurfaceGui = ensureContrast(text, surfaceGui, 4.5);
-  const textOnSurfaceContainers = ensureContrast(text, surfaceContainers, 4.5);
-  const textOnGuiButton = ensureContrast(text, guiButton, 4.5);
-  const textOnGuiInput = ensureContrast(text, guiInput, 4.5);
-  const textOnGuiTextarea = ensureContrast(text, guiTextarea, 4.5);
-  const textOnSurface0 = ensureContrast(text, surfaceLadder[0], 4.5);
-  const textOnSurface1 = ensureContrast(text, surfaceLadder[1], 4.5);
-  const textOnSurface2 = ensureContrast(text, surfaceLadder[2], 4.5);
+  const border = pick('border');
+  const primaryBorders = deriveGuiControlBorders(
+    border,
+    { guiButton, guiInput, guiTextarea },
+    isDark
+  );
+  const guiParents = { backgroundSecondary, surfaceContainers };
+  const guiOn = {
+    ...flattenGuiControlOnParents(
+      'guiButton',
+      guiControlOnParents(guiButton, primaryBorders.guiButtonBorder, guiParents)
+    ),
+    ...flattenGuiControlOnParents(
+      'guiInput',
+      guiControlOnParents(guiInput, primaryBorders.guiInputBorder, guiParents)
+    ),
+    ...flattenGuiControlOnParents(
+      'guiTextarea',
+      guiControlOnParents(guiTextarea, primaryBorders.guiTextareaBorder, guiParents)
+    ),
+  };
 
   const headingLarge = pickSub('headingLarge', accent);
   const headingMedium = pickSub('headingMedium', accent);
@@ -232,6 +243,55 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
   const mutedPhotoCaption = pickSub('mutedPhotoCaption', muted);
   const mutedAsideNotes = pickSub('mutedAsideNotes', muted);
 
+  const text = pick('text');
+  const linkHover = hasOverride(o, 'linkHover')
+    ? o.linkHover.trim()
+    : baseRoles?.linkHover || link;
+  const linkActive = hasOverride(o, 'linkActive')
+    ? o.linkActive.trim()
+    : baseRoles?.linkActive || link;
+  const navLinkHover = hasOverride(o, 'navLinkHover')
+    ? o.navLinkHover.trim()
+    : baseRoles?.navLinkHover || navLink;
+  const navLinkActive = hasOverride(o, 'navLinkActive')
+    ? o.navLinkActive.trim()
+    : baseRoles?.navLinkActive || navLink;
+
+  // Re-check ink against each surface's FINAL fill (post override) — a
+  // manually-overridden bright surface still needs legible headings/links/
+  // muted captions, not the stale contrast check from the theme default.
+  const inkOn = inkOnTokens(
+    {
+      text,
+      accent,
+      headingLarge,
+      headingMedium,
+      headingSmall,
+      link,
+      linkHover,
+      linkActive,
+      linkBare,
+      linkArticle,
+      muted,
+      mutedKicker,
+      mutedPhotoCaption,
+      mutedAsideNotes,
+      navLink,
+      navLinkHover,
+      navLinkActive,
+    },
+    paletteSurfaceFills({
+      backgroundSecondary,
+      surfaceGui,
+      surfaceContainers,
+      guiButton,
+      guiInput,
+      guiTextarea,
+      surfaceLadder,
+      ...guiOn,
+    })
+  );
+
   const colors = {
     background,
     backgroundSecondary,
@@ -241,14 +301,12 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
     muted,
     accent,
     link,
-    linkHover: hasOverride(o, 'linkHover')
-      ? o.linkHover.trim()
-      : baseRoles?.linkHover || link,
+    linkHover,
+    linkActive,
     navLink,
-    navLinkHover: hasOverride(o, 'navLinkHover')
-      ? o.navLinkHover.trim()
-      : baseRoles?.navLinkHover || navLink,
-    border: pick('border'),
+    navLinkHover,
+    navLinkActive,
+    border,
     focus: pick('focus'),
     guiButton,
     guiInput,
@@ -262,15 +320,8 @@ export function applyColorOverrides(baseRoles, overrides = {}, opts = {}) {
     mutedKicker,
     mutedPhotoCaption,
     mutedAsideNotes,
-    textOnBackgroundSecondary,
-    textOnSurfaceGui,
-    textOnSurfaceContainers,
-    textOnGuiButton,
-    textOnGuiInput,
-    textOnGuiTextarea,
-    textOnSurface0,
-    textOnSurface1,
-    textOnSurface2,
+    ...guiOn,
+    ...inkOn,
   };
 
   /** @param {string} key */
